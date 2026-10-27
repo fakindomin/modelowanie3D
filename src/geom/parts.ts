@@ -1,0 +1,97 @@
+import * as THREE from 'three';
+import type { Manifold } from 'manifold-3d';
+import { DEFS } from '../catalog';
+import type { Part } from '../types';
+import { M, matrixToMat4, toGeometry } from './manifold';
+
+interface Built {
+  manifold: Manifold;
+  geometry: THREE.BufferGeometry;
+  box: THREE.Box3;
+}
+
+const cache = new Map<string, Built>();
+
+function key(part: Part) {
+  return part.type + JSON.stringify(part.params);
+}
+
+/** Local geometry of a part (centred in X/Y, resting on Z = 0), cached per type + params. */
+export function built(part: Part): Built {
+  const k = key(part);
+  let b = cache.get(k);
+  if (!b) {
+    let manifold: Manifold;
+    try {
+      manifold = DEFS[part.type].build(part.params);
+      if (manifold.isEmpty()) throw new Error('empty');
+    } catch {
+      // Invalid parameter combination: fall back to a small marker cube so the scene keeps working.
+      manifold = M().Manifold.cube([1, 1, 1], true);
+    }
+    const geometry = toGeometry(manifold);
+    b = { manifold, geometry, box: geometry.boundingBox!.clone() };
+    cache.set(k, b);
+    if (cache.size > 400) {
+      const first = cache.keys().next().value!;
+      cache.get(first)!.geometry.dispose();
+      cache.delete(first);
+    }
+  }
+  return b;
+}
+
+const DEG = Math.PI / 180;
+
+export function partMatrix(position: [number, number, number], rotation: [number, number, number]) {
+  const m = new THREE.Matrix4();
+  m.compose(
+    new THREE.Vector3(...position),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(rotation[0] * DEG, rotation[1] * DEG, rotation[2] * DEG)),
+    new THREE.Vector3(1, 1, 1),
+  );
+  return m;
+}
+
+export function worldBox(part: Part, position = part.position, rotation = part.rotation): THREE.Box3 {
+  return built(part).box.clone().applyMatrix4(partMatrix(position, rotation));
+}
+
+/** World-space solid of a part (caller owns the returned Manifold). */
+export function worldManifold(part: Part): Manifold {
+  return built(part).manifold.transform(matrixToMat4(partMatrix(part.position, part.rotation)));
+}
+
+export interface BodyResult {
+  body: number;
+  manifold: Manifold;
+  geometry: THREE.BufferGeometry;
+  color: string;
+}
+
+/** Combines parts into printable bodies: solids of a body are united, then that body's holes are cut. */
+export function buildBodies(parts: Part[]): BodyResult[] {
+  const bodies = [...new Set(parts.map((p) => p.body))].sort((a, b) => a - b);
+  const out: BodyResult[] = [];
+  for (const body of bodies) {
+    const members = parts.filter((p) => p.body === body);
+    const solids = members.filter((p) => !p.hole);
+    if (!solids.length) continue;
+    const holes = members.filter((p) => p.hole);
+    const solidMs = solids.map(worldManifold);
+    let result = M().Manifold.union(solidMs);
+    solidMs.forEach((m) => m.delete());
+    if (holes.length) {
+      const holeMs = holes.map(worldManifold);
+      const cut = M().Manifold.union(holeMs);
+      const next = result.subtract(cut);
+      holeMs.forEach((m) => m.delete());
+      cut.delete();
+      result.delete();
+      result = next;
+    }
+    if (result.isEmpty()) continue;
+    out.push({ body, manifold: result, geometry: toGeometry(result), color: solids[0].color });
+  }
+  return out;
+}

@@ -1,0 +1,571 @@
+import type { Manifold, CrossSection } from 'manifold-3d';
+import { M, settle } from './geom/manifold';
+
+export type ParamValue = number | string | boolean;
+export type Params = Record<string, ParamValue>;
+
+export type ParamDef =
+  | { key: string; label: string; type: 'number'; def: number; min: number; max: number; step?: number; unit?: string; hint?: string }
+  | { key: string; label: string; type: 'select'; def: string; options: { value: string; label: string }[] }
+  | { key: string; label: string; type: 'bool'; def: boolean };
+
+export type Category = 'profile' | 'basic' | 'ready' | 'joints';
+
+export const CATEGORIES: { id: Category; label: string }[] = [
+  { id: 'ready', label: 'Gotowe elementy' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'basic', label: 'Bryły podstawowe' },
+  { id: 'joints', label: 'Otwory i połączenia' },
+];
+
+export interface PartDef {
+  type: string;
+  label: string;
+  category: Category;
+  hole: boolean;
+  description: string;
+  params: ParamDef[];
+  build: (p: Params) => Manifold;
+}
+
+const num = (p: Params, k: string) => Number(p[k]);
+
+function poly(points: [number, number][]): CrossSection {
+  return M().CrossSection.ofPolygons([points]);
+}
+
+function rect(x0: number, y0: number, x1: number, y1: number): [number, number][] {
+  return [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+  ];
+}
+
+/** Extrudes a cross-section drawn in (Y, Z) along the X axis, i.e. a bar lying on the bed. */
+function bar(cs: CrossSection, length: number): Manifold {
+  return settle(cs.extrude(length).rotate([90, 0, 90]));
+}
+
+function cube(x: number, y: number, z: number): Manifold {
+  return M().Manifold.cube([x, y, z]);
+}
+
+/** Cube centred in X/Y with its bottom at z0. */
+function block(x: number, y: number, z: number, cx = 0, cy = 0, z0 = 0): Manifold {
+  return M().Manifold.cube([x, y, z], true).translate([cx, cy, z0 + z / 2]);
+}
+
+function cyl(h: number, r: number, r2 = r, segments?: number): Manifold {
+  return M().Manifold.cylinder(h, r, r2, segments);
+}
+
+const L = (def = 100): ParamDef => ({ key: 'L', label: 'Długość', type: 'number', def, min: 1, max: 1000, unit: 'mm' });
+const T = (def = 2): ParamDef => ({ key: 'T', label: 'Grubość ścianki', type: 'number', def, min: 0.4, max: 50, step: 0.2, unit: 'mm' });
+const clearance = (def = 0.2): ParamDef => ({
+  key: 'luz',
+  label: 'Luz',
+  type: 'number',
+  def,
+  min: 0,
+  max: 2,
+  step: 0.05,
+  unit: 'mm',
+  hint: 'Dodawany do średnicy, żeby element wchodził bez siłowania.',
+});
+
+const MAGNETS: Record<string, [number, number]> = {
+  '5x2': [5, 2],
+  '6x2': [6, 2],
+  '6x3': [6, 3],
+  '8x2': [8, 2],
+  '8x3': [8, 3],
+  '10x2': [10, 2],
+  '10x3': [10, 3],
+  '12x3': [12, 3],
+};
+
+// Typical heat-set insert pocket sizes (diameter, depth).
+const INSERTS: Record<string, [number, number]> = {
+  M2: [3.2, 4],
+  M3: [4.0, 5.7],
+  M4: [5.6, 8.1],
+  M5: [6.4, 9.5],
+};
+
+// Hex nut size across flats and thickness.
+const NUTS: Record<string, [number, number]> = {
+  M2: [4, 1.6],
+  M3: [5.5, 2.4],
+  M4: [7, 3.2],
+  M5: [8, 4],
+  M6: [10, 5],
+};
+
+const metric = (keys: string[], def: string): ParamDef => ({
+  key: 'size',
+  label: 'Rozmiar',
+  type: 'select',
+  def,
+  options: keys.map((k) => ({ value: k, label: k })),
+});
+
+/** Inner opening sizes for the drawer cabinet, shared with the "add drawers" helper. */
+export function cabinetOpenings(p: Params) {
+  const w = num(p, 'w'), h = num(p, 'h'), d = num(p, 'D'), t = num(p, 'T');
+  const cols = num(p, 'cols'), rows = num(p, 'rows');
+  const W = cols * w + (cols + 1) * t;
+  const openings: { cx: number; z0: number }[] = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) openings.push({ cx: -W / 2 + t + c * (w + t) + w / 2, z0: t + r * (h + t) });
+  return { W, H: rows * h + (rows + 1) * t, D: d, depth: d - t, openings };
+}
+
+export const CATALOG: PartDef[] = [
+  // ---------------------------------------------------------------- ready
+  {
+    type: 'box',
+    label: 'Pudełko',
+    category: 'ready',
+    hole: false,
+    description: 'Otwarte pudełko z opcjonalnymi przegródkami.',
+    params: [
+      { key: 'W', label: 'Szerokość', type: 'number', def: 80, min: 5, max: 500, unit: 'mm' },
+      { key: 'D', label: 'Głębokość', type: 'number', def: 60, min: 5, max: 500, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 40, min: 3, max: 500, unit: 'mm' },
+      T(2),
+      { key: 'B', label: 'Grubość dna', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
+      { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1 },
+      { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1 },
+    ],
+    build: (p) => {
+      const W = num(p, 'W'), D = num(p, 'D'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
+      let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
+      const nx = Math.round(num(p, 'nx')), ny = Math.round(num(p, 'ny'));
+      for (let i = 1; i < nx; i++) m = m.add(block(t, D - 2 * t, H - b, -W / 2 + t + ((W - 2 * t) * i) / nx, 0, b));
+      for (let i = 1; i < ny; i++) m = m.add(block(W - 2 * t, t, H - b, 0, -D / 2 + t + ((D - 2 * t) * i) / ny, b));
+      return m;
+    },
+  },
+  {
+    type: 'lid',
+    label: 'Pokrywka',
+    category: 'ready',
+    hole: false,
+    description: 'Wciskana pokrywka do pudełka (rant od spodu, drukuj rantem do góry).',
+    params: [
+      { key: 'W', label: 'Szerokość pudełka', type: 'number', def: 80, min: 5, max: 500, unit: 'mm' },
+      { key: 'D', label: 'Głębokość pudełka', type: 'number', def: 60, min: 5, max: 500, unit: 'mm' },
+      { key: 'T', label: 'Grubość pokrywki', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
+      { key: 'wall', label: 'Ścianka pudełka', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
+      { key: 'R', label: 'Wysokość rantu', type: 'number', def: 4, min: 0, max: 50, unit: 'mm' },
+      clearance(0.3),
+    ],
+    build: (p) => {
+      const W = num(p, 'W'), D = num(p, 'D'), t = num(p, 'T'), wall = num(p, 'wall'), R = num(p, 'R'), c = num(p, 'luz');
+      let m = block(W, D, t);
+      if (R > 0) {
+        const ow = W - 2 * wall - c, od = D - 2 * wall - c, lip = 1.6;
+        m = m.add(block(ow, od, R, 0, 0, t).subtract(block(ow - 2 * lip, od - 2 * lip, R + 1, 0, 0, t)));
+      }
+      return m;
+    },
+  },
+  {
+    type: 'drawer',
+    label: 'Szuflada',
+    category: 'ready',
+    hole: false,
+    description: 'Szuflada z wycięciem na palec lub gałką z przodu.',
+    params: [
+      { key: 'W', label: 'Szerokość', type: 'number', def: 60, min: 10, max: 500, unit: 'mm' },
+      { key: 'D', label: 'Głębokość', type: 'number', def: 80, min: 10, max: 500, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 30, min: 5, max: 300, unit: 'mm' },
+      T(1.6),
+      { key: 'B', label: 'Grubość dna', type: 'number', def: 1.6, min: 0.4, max: 10, step: 0.2, unit: 'mm' },
+      {
+        key: 'handle',
+        label: 'Uchwyt',
+        type: 'select',
+        def: 'notch',
+        options: [
+          { value: 'notch', label: 'Wycięcie na palec' },
+          { value: 'knob', label: 'Gałka' },
+          { value: 'none', label: 'Brak' },
+        ],
+      },
+    ],
+    build: (p) => {
+      const W = num(p, 'W'), D = num(p, 'D'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
+      let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
+      if (p.handle === 'notch') {
+        const r = Math.min(12, H / 2.5, W / 4);
+        m = m.subtract(cyl(4 * t, r).rotate([90, 0, 0]).translate([0, -D / 2 + 2 * t, H]));
+      } else if (p.handle === 'knob') {
+        const r = Math.min(6, H / 4);
+        m = m.add(cyl(8, r, r * 0.8).rotate([90, 0, 0]).translate([0, -D / 2 + 0.01, H / 2]));
+      }
+      return m;
+    },
+  },
+  {
+    type: 'cabinet',
+    label: 'Obudowa na szuflady',
+    category: 'ready',
+    hole: false,
+    description: 'Regał z otworami na szuflady. Przycisk „Dodaj szuflady” sam je dopasuje.',
+    params: [
+      { key: 'w', label: 'Szerokość otworu', type: 'number', def: 60, min: 10, max: 400, unit: 'mm' },
+      { key: 'h', label: 'Wysokość otworu', type: 'number', def: 30, min: 5, max: 300, unit: 'mm' },
+      { key: 'D', label: 'Głębokość', type: 'number', def: 85, min: 10, max: 500, unit: 'mm' },
+      { key: 'cols', label: 'Kolumny', type: 'number', def: 2, min: 1, max: 10, step: 1 },
+      { key: 'rows', label: 'Rzędy', type: 'number', def: 3, min: 1, max: 20, step: 1 },
+      T(2),
+    ],
+    build: (p) => {
+      const o = cabinetOpenings(p);
+      const w = num(p, 'w'), h = num(p, 'h'), t = num(p, 'T');
+      const cut = o.openings.map((op) => block(w, o.depth + 1, h, op.cx, -o.D / 2 + (o.depth + 1) / 2 - 1, op.z0));
+      return block(o.W, o.D, o.H).subtract(M().Manifold.union(cut));
+    },
+  },
+  {
+    type: 'plate',
+    label: 'Płytka montażowa',
+    category: 'ready',
+    hole: false,
+    description: 'Płaska płytka z otworami w narożnikach.',
+    params: [
+      { key: 'W', label: 'Szerokość', type: 'number', def: 60, min: 5, max: 500, unit: 'mm' },
+      { key: 'D', label: 'Głębokość', type: 'number', def: 40, min: 5, max: 500, unit: 'mm' },
+      { key: 'T', label: 'Grubość', type: 'number', def: 3, min: 0.4, max: 50, step: 0.2, unit: 'mm' },
+      { key: 'hole', label: 'Średnica otworów', type: 'number', def: 3.4, min: 0, max: 20, step: 0.1, unit: 'mm' },
+      { key: 'inset', label: 'Odsunięcie od krawędzi', type: 'number', def: 5, min: 1, max: 100, unit: 'mm' },
+    ],
+    build: (p) => {
+      const W = num(p, 'W'), D = num(p, 'D'), t = num(p, 'T'), d = num(p, 'hole'), e = num(p, 'inset');
+      let m = block(W, D, t);
+      if (d > 0)
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) m = m.subtract(cyl(t + 2, d / 2).translate([sx * (W / 2 - e), sy * (D / 2 - e), -1]));
+      return m;
+    },
+  },
+  // -------------------------------------------------------------- profiles
+  {
+    type: 'flat',
+    label: 'Płaskownik',
+    category: 'profile',
+    hole: false,
+    description: 'Płaska listwa.',
+    params: [
+      L(100),
+      { key: 'W', label: 'Szerokość', type: 'number', def: 20, min: 1, max: 500, unit: 'mm' },
+      { key: 'T', label: 'Grubość', type: 'number', def: 3, min: 0.4, max: 100, step: 0.2, unit: 'mm' },
+    ],
+    build: (p) => settle(cube(num(p, 'L'), num(p, 'W'), num(p, 'T'))),
+  },
+  {
+    type: 'angle',
+    label: 'Kątownik',
+    category: 'profile',
+    hole: false,
+    description: 'Profil L.',
+    params: [
+      L(100),
+      { key: 'A', label: 'Ramię poziome', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
+      { key: 'B', label: 'Ramię pionowe', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
+      T(2),
+    ],
+    build: (p) => {
+      const a = num(p, 'A'), b = num(p, 'B'), t = num(p, 'T');
+      return bar(poly([[0, 0], [a, 0], [a, t], [t, t], [t, b], [0, b]]), num(p, 'L'));
+    },
+  },
+  {
+    type: 'tee',
+    label: 'Teownik',
+    category: 'profile',
+    hole: false,
+    description: 'Profil T (półka na dole, żebro do góry).',
+    params: [
+      L(100),
+      { key: 'W', label: 'Szerokość półki', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
+      T(2),
+    ],
+    build: (p) => {
+      const w = num(p, 'W'), h = num(p, 'H'), t = num(p, 'T');
+      const cs = M().CrossSection.union([poly(rect(-w / 2, 0, w / 2, t)), poly(rect(-t / 2, 0, t / 2, h))]);
+      return bar(cs, num(p, 'L'));
+    },
+  },
+  {
+    type: 'channel',
+    label: 'Ceownik',
+    category: 'profile',
+    hole: false,
+    description: 'Profil U.',
+    params: [
+      L(100),
+      { key: 'W', label: 'Szerokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
+      { key: 'H', label: 'Wysokość ścianek', type: 'number', def: 15, min: 1, max: 300, unit: 'mm' },
+      T(2),
+    ],
+    build: (p) => {
+      const w = num(p, 'W'), h = num(p, 'H'), t = num(p, 'T');
+      const cs = M().CrossSection.union([
+        poly(rect(-w / 2, 0, w / 2, t)),
+        poly(rect(-w / 2, 0, -w / 2 + t, h)),
+        poly(rect(w / 2 - t, 0, w / 2, h)),
+      ]);
+      return bar(cs, num(p, 'L'));
+    },
+  },
+  {
+    type: 'rhs',
+    label: 'Profil zamknięty',
+    category: 'profile',
+    hole: false,
+    description: 'Prostokątna rura (profil zamknięty).',
+    params: [
+      L(100),
+      { key: 'W', label: 'Szerokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
+      T(2),
+    ],
+    build: (p) => {
+      const w = num(p, 'W'), h = num(p, 'H'), t = num(p, 'T');
+      const cs = poly(rect(-w / 2, 0, w / 2, h)).subtract(poly(rect(-w / 2 + t, t, w / 2 - t, h - t)));
+      return bar(cs, num(p, 'L'));
+    },
+  },
+  {
+    type: 'tube',
+    label: 'Rura',
+    category: 'profile',
+    hole: false,
+    description: 'Okrągła rura (stoi pionowo).',
+    params: [
+      { key: 'D', label: 'Średnica zewn.', type: 'number', def: 20, min: 1, max: 500, unit: 'mm' },
+      T(2),
+      { key: 'H', label: 'Wysokość', type: 'number', def: 50, min: 1, max: 1000, unit: 'mm' },
+    ],
+    build: (p) => {
+      const r = num(p, 'D') / 2, t = num(p, 'T'), h = num(p, 'H');
+      const inner = Math.max(r - t, 0.1);
+      return cyl(h, r).subtract(cyl(h + 2, inner).translate([0, 0, -1]));
+    },
+  },
+  {
+    type: 'rod',
+    label: 'Pręt',
+    category: 'profile',
+    hole: false,
+    description: 'Pełny okrągły pręt (leży wzdłuż osi X).',
+    params: [L(100), { key: 'D', label: 'Średnica', type: 'number', def: 8, min: 0.5, max: 300, step: 0.5, unit: 'mm' }],
+    build: (p) => bar(M().CrossSection.circle(num(p, 'D') / 2), num(p, 'L')),
+  },
+  // ----------------------------------------------------------------- basic
+  {
+    type: 'cube',
+    label: 'Prostopadłościan',
+    category: 'basic',
+    hole: false,
+    description: 'Klocek o dowolnych wymiarach.',
+    params: [
+      { key: 'W', label: 'Szerokość (X)', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'D', label: 'Głębokość (Y)', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'H', label: 'Wysokość (Z)', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+    ],
+    build: (p) => block(num(p, 'W'), num(p, 'D'), num(p, 'H')),
+  },
+  {
+    type: 'cylinder',
+    label: 'Walec',
+    category: 'basic',
+    hole: false,
+    description: 'Walec stojący pionowo.',
+    params: [
+      { key: 'D', label: 'Średnica', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+    ],
+    build: (p) => cyl(num(p, 'H'), num(p, 'D') / 2),
+  },
+  {
+    type: 'cone',
+    label: 'Stożek',
+    category: 'basic',
+    hole: false,
+    description: 'Stożek lub stożek ścięty.',
+    params: [
+      { key: 'D1', label: 'Średnica dołu', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'D2', label: 'Średnica góry', type: 'number', def: 0, min: 0, max: 1000, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+    ],
+    build: (p) => cyl(num(p, 'H'), num(p, 'D1') / 2, num(p, 'D2') / 2),
+  },
+  {
+    type: 'wedge',
+    label: 'Klin',
+    category: 'basic',
+    hole: false,
+    description: 'Klin / podpórka trójkątna.',
+    params: [
+      { key: 'W', label: 'Szerokość (X)', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'D', label: 'Głębokość (Y)', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'H', label: 'Wysokość (Z)', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' },
+    ],
+    build: (p) => {
+      const d = num(p, 'D'), h = num(p, 'H');
+      return bar(poly([[0, 0], [d, 0], [0, h]]), num(p, 'W'));
+    },
+  },
+  {
+    type: 'sphere',
+    label: 'Kula',
+    category: 'basic',
+    hole: false,
+    description: 'Kula.',
+    params: [{ key: 'D', label: 'Średnica', type: 'number', def: 20, min: 0.2, max: 1000, unit: 'mm' }],
+    build: (p) => settle(M().Manifold.sphere(num(p, 'D') / 2)),
+  },
+  // ---------------------------------------------------------------- joints
+  {
+    type: 'hole',
+    label: 'Otwór okrągły',
+    category: 'joints',
+    hole: true,
+    description: 'Wycina okrągły otwór w bryle, w której się znajduje.',
+    params: [
+      { key: 'D', label: 'Średnica', type: 'number', def: 5, min: 0.2, max: 500, step: 0.1, unit: 'mm' },
+      { key: 'H', label: 'Głębokość', type: 'number', def: 10, min: 0.2, max: 1000, unit: 'mm' },
+      clearance(0),
+    ],
+    build: (p) => cyl(num(p, 'H'), (num(p, 'D') + num(p, 'luz')) / 2),
+  },
+  {
+    type: 'holeBox',
+    label: 'Otwór prostokątny',
+    category: 'joints',
+    hole: true,
+    description: 'Wycina prostokątne okno lub kieszeń.',
+    params: [
+      { key: 'W', label: 'Szerokość (X)', type: 'number', def: 10, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'D', label: 'Głębokość (Y)', type: 'number', def: 10, min: 0.2, max: 1000, unit: 'mm' },
+      { key: 'H', label: 'Wysokość (Z)', type: 'number', def: 10, min: 0.2, max: 1000, unit: 'mm' },
+      clearance(0),
+    ],
+    build: (p) => {
+      const c = num(p, 'luz');
+      return block(num(p, 'W') + c, num(p, 'D') + c, num(p, 'H'));
+    },
+  },
+  {
+    type: 'peg',
+    label: 'Czop okrągły',
+    category: 'joints',
+    hole: false,
+    description: 'Kołek do łączenia części. „Dodaj pasujący otwór” zrobi gniazdo z luzem.',
+    params: [
+      { key: 'D', label: 'Średnica', type: 'number', def: 6, min: 0.5, max: 100, step: 0.1, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 8, min: 0.5, max: 200, unit: 'mm' },
+      { key: 'F', label: 'Faza na końcu', type: 'number', def: 0.6, min: 0, max: 5, step: 0.1, unit: 'mm' },
+    ],
+    build: (p) => {
+      const r = num(p, 'D') / 2, h = num(p, 'H'), f = Math.min(num(p, 'F'), r * 0.9, h * 0.5);
+      return f > 0 ? cyl(h - f, r).add(cyl(f, r, r - f).translate([0, 0, h - f])) : cyl(h, r);
+    },
+  },
+  {
+    type: 'pegSquare',
+    label: 'Czop kwadratowy',
+    category: 'joints',
+    hole: false,
+    description: 'Kwadratowy czop, nie obraca się w gnieździe.',
+    params: [
+      { key: 'W', label: 'Bok', type: 'number', def: 6, min: 0.5, max: 100, step: 0.1, unit: 'mm' },
+      { key: 'H', label: 'Wysokość', type: 'number', def: 8, min: 0.5, max: 200, unit: 'mm' },
+    ],
+    build: (p) => block(num(p, 'W'), num(p, 'W'), num(p, 'H')),
+  },
+  {
+    type: 'magnet',
+    label: 'Gniazdo magnesu',
+    category: 'joints',
+    hole: true,
+    description: 'Kieszeń na magnes neodymowy (średnica × grubość).',
+    params: [
+      { key: 'size', label: 'Magnes', type: 'select', def: '6x3', options: Object.keys(MAGNETS).map((k) => ({ value: k, label: `${k} mm` })) },
+      clearance(0.2),
+    ],
+    build: (p) => {
+      const [d, h] = MAGNETS[String(p.size)] ?? MAGNETS['6x3'];
+      return cyl(h + 0.2, (d + num(p, 'luz')) / 2);
+    },
+  },
+  {
+    type: 'insert',
+    label: 'Otwór pod insert',
+    category: 'joints',
+    hole: true,
+    description: 'Otwór pod mosiężny insert wtapiany lutownicą.',
+    params: [metric(Object.keys(INSERTS), 'M3'), { key: 'extra', label: 'Dodatkowa głębokość', type: 'number', def: 1, min: 0, max: 50, unit: 'mm' }],
+    build: (p) => {
+      const [d, h] = INSERTS[String(p.size)] ?? INSERTS.M3;
+      return cyl(h + num(p, 'extra'), d / 2);
+    },
+  },
+  {
+    type: 'screw',
+    label: 'Otwór na śrubę',
+    category: 'joints',
+    hole: true,
+    description: 'Przelotowy otwór z pogłębieniem pod łeb (od góry).',
+    params: [
+      metric(['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6'], 'M3'),
+      { key: 'H', label: 'Głębokość', type: 'number', def: 10, min: 0.5, max: 500, unit: 'mm' },
+      {
+        key: 'head',
+        label: 'Łeb',
+        type: 'select',
+        def: 'cyl',
+        options: [
+          { value: 'cyl', label: 'Walcowy (imbus)' },
+          { value: 'cone', label: 'Stożkowy (wpuszczany)' },
+          { value: 'none', label: 'Bez pogłębienia' },
+        ],
+      },
+    ],
+    build: (p) => {
+      const m = parseFloat(String(p.size).slice(1)) || 3, h = num(p, 'H');
+      let s = cyl(h, (m + 0.4) / 2);
+      if (p.head === 'cyl') {
+        const hd = Math.min(0.6 * m + 0.6, h);
+        s = s.add(cyl(hd, (1.8 * m + 0.6) / 2).translate([0, 0, h - hd]));
+      } else if (p.head === 'cone') {
+        const D = 2 * m + 0.4, hd = Math.min((D - m) / 2, h);
+        s = s.add(cyl(hd, (m + 0.4) / 2, D / 2).translate([0, 0, h - hd]));
+      }
+      return s;
+    },
+  },
+  {
+    type: 'nut',
+    label: 'Gniazdo nakrętki',
+    category: 'joints',
+    hole: true,
+    description: 'Sześciokątna kieszeń na nakrętkę.',
+    params: [metric(Object.keys(NUTS), 'M3'), clearance(0.3)],
+    build: (p) => {
+      const [s, h] = NUTS[String(p.size)] ?? NUTS.M3;
+      return cyl(h + 0.2, (s + num(p, 'luz')) / Math.sqrt(3), undefined, 6);
+    },
+  },
+];
+
+export const DEFS: Record<string, PartDef> = Object.fromEntries(CATALOG.map((d) => [d.type, d]));
+
+export function defaultParams(def: PartDef): Params {
+  return Object.fromEntries(def.params.map((p) => [p.key, p.def]));
+}
