@@ -4,7 +4,13 @@ import { Library, Properties } from './ui/Panels';
 import { useStore } from './store';
 import { buildBodies } from './geom/parts';
 import { export3MF, exportSTL, saveJSON } from './export';
-import type { Project } from './types';
+import type { Part, Project, Tab } from './types';
+
+function projectOf(): Project {
+  const s = useStore.getState();
+  const of = (t: Tab): Part[] => (s.tab === t ? s.parts : s.stash[t].parts);
+  return { version: 2, tech: of('tech'), fig: of('fig') };
+}
 
 function Toolbar() {
   const st = useStore();
@@ -13,7 +19,7 @@ function Toolbar() {
   const exportAs = (fmt: 'stl' | '3mf') => {
     const bodies = buildBodies(st.parts);
     if (!bodies.length) return st.notify('Brak brył do eksportu. Dodaj jakiś element.');
-    (fmt === 'stl' ? exportSTL : export3MF)(bodies, 'model');
+    (fmt === 'stl' ? exportSTL : export3MF)(bodies, st.tab === 'fig' ? 'figurki' : 'model');
     bodies.forEach((b) => {
       b.geometry.dispose();
       b.manifold.delete();
@@ -26,6 +32,13 @@ function Toolbar() {
       <div className="brand">
         <span className="logo">◆</span> Modelowanie 3D
       </div>
+      <div className="tabs" role="tablist">
+        {(['tech', 'fig'] as Tab[]).map((t) => (
+          <button key={t} role="tab" aria-selected={st.tab === t} className={st.tab === t ? 'on' : ''} onClick={() => st.setTab(t)}>
+            {t === 'tech' ? 'Techniczne' : 'Figurki'}
+          </button>
+        ))}
+      </div>
       <div className="group">
         <button onClick={st.undo} disabled={!st.past.length} title="Cofnij (Ctrl+Z)">↶ Cofnij</button>
         <button onClick={st.redo} disabled={!st.future.length} title="Ponów (Ctrl+Y)">↷ Ponów</button>
@@ -33,7 +46,7 @@ function Toolbar() {
       <div className="group">
         <button onClick={() => { st.reset(); st.notify('Scena wyczyszczona. „Cofnij” przywróci poprzedni model.'); }}>Nowy</button>
         <button onClick={() => file.current?.click()}>Otwórz</button>
-        <button onClick={() => saveJSON(JSON.stringify({ version: 1, parts: st.parts } satisfies Project, null, 1), 'projekt')}>Zapisz</button>
+        <button onClick={() => saveJSON(JSON.stringify(projectOf(), null, 1), 'projekt')}>Zapisz</button>
         <input
           ref={file}
           type="file"
@@ -76,6 +89,7 @@ function Toolbar() {
         <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Pokazuje wynik po wycięciu otworów i sklejeniu brył">
           {st.preview ? '✓ Podgląd wydruku' : 'Podgląd wydruku'}
         </button>
+        <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają">Sprawdź model</button>
         <button className="primary" onClick={() => exportAs('stl')}>Eksport STL</button>
         <button className="primary" onClick={() => exportAs('3mf')}>Eksport 3MF</button>
       </div>
@@ -99,18 +113,23 @@ function useShortcuts() {
         st.redo();
       } else if (ctrl && e.key.toLowerCase() === 'd' && id) {
         e.preventDefault();
-        st.duplicate(id);
+        if (id.startsWith('g:')) st.duplicateBody(Number(id.slice(2)));
+        else st.duplicate(id);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && id) {
-        st.remove(id);
+        if (id.startsWith('g:')) st.removeBody(Number(id.slice(2)));
+        else st.remove(id);
       } else if (e.key.toLowerCase() === 'f' && !ctrl) {
         st.fit();
       } else if (e.key === 'Escape') {
         st.select(null);
       } else if (id && e.key.toLowerCase() === 'r') {
-        st.rotateBy(id, 2, e.shiftKey ? -90 : 90);
+        if (id.startsWith('g:')) st.rotateBody(Number(id.slice(2)), 2, e.shiftKey ? -90 : 90);
+        else st.rotateBy(id, 2, e.shiftKey ? -90 : 90);
       } else if (id && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(e.key)) {
         e.preventDefault();
-        const p = st.parts.find((x) => x.id === id)!;
+        const gb = id.startsWith('g:') ? Number(id.slice(2)) : null;
+        const p = gb !== null ? (st.parts.find((x) => x.body === gb && !x.hole) ?? st.parts.find((x) => x.body === gb)) : st.parts.find((x) => x.id === id);
+        if (!p) return;
         const step = (st.settings.grid || 1) * (e.shiftKey ? 10 : 1);
         const pos = [...p.position] as [number, number, number];
         if (e.key === 'ArrowLeft') pos[0] -= step;
@@ -119,7 +138,9 @@ function useShortcuts() {
         if (e.key === 'ArrowDown') pos[1] -= step;
         if (e.key === 'PageUp') pos[2] += step;
         if (e.key === 'PageDown') pos[2] -= step;
-        st.update(id, { position: pos.map((v) => Math.round(v * 1000) / 1000) as [number, number, number] });
+        const next = pos.map((v) => Math.round(v * 1000) / 1000) as [number, number, number];
+        if (gb !== null) st.moveBody(gb, next);
+        else st.update(id, { position: next });
       }
     };
     window.addEventListener('keydown', onKey);
@@ -142,7 +163,7 @@ export function App() {
       <main className="viewport">
         <Viewport />
         <div className="help">
-          Przeciągnij element, by go przesunąć · Przeciągnij tło: obrót widoku · Prawy: przesuń widok · Kółko: zoom · Strzałki/PgUp/PgDn: przesuń · R: obróć · Shift: bez kładzenia · Alt: bez przyciągania
+          Kliknij ponownie, by wybrać to, co leży pod spodem (np. otwór w bryle) · Przeciągnij: przesuń · Tło: obrót widoku · Prawy: przesuń widok · Kółko: zoom · Strzałki/PgUp/PgDn · R: obróć · Shift: bez kładzenia · Alt: bez przyciągania
         </div>
         {toast && <div className="toast">{toast}</div>}
       </main>

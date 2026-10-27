@@ -24,18 +24,45 @@ function near(aMin: number, aMax: number, bMin: number, bMax: number, d: number)
  * so blocks click together like construction pieces.
  */
 export function snapPosition(part: Part, proposed: Vec3, parts: Part[], opt: SnapOptions): { position: Vec3; targets: string[] } {
+  const group = parts.filter((p) => p.id === part.id || (part.rigid && p.rigid === part.rigid));
+  const ids = new Set(group.map((p) => p.id));
+  return snapMover(moverFor(group, part.position, part.hole), proposed, parts.filter((p) => !ids.has(p.id)), opt);
+}
+
+/** Mover for several parts dragged together, referenced by `anchor`. */
+export function moverFor(group: Part[], anchor: Vec3, hole = false): Mover {
+  return {
+    boxAt: (pos) => {
+      const b = new THREE.Box3();
+      const d = [pos[0] - anchor[0], pos[1] - anchor[1], pos[2] - anchor[2]];
+      for (const p of group) b.union(worldBox(p, [p.position[0] + d[0], p.position[1] + d[1], p.position[2] + d[2]]));
+      return b;
+    },
+    hole,
+    z: anchor[2],
+  };
+}
+
+/** Something being dragged: a part or a whole group, described by its world box at a position. */
+export interface Mover {
+  boxAt: (pos: Vec3) => THREE.Box3;
+  hole: boolean;
+  /** Current height of the reference point. */
+  z: number;
+}
+
+export function snapMover(mover: Mover, proposed: Vec3, others: Part[], opt: SnapOptions): { position: Vec3; targets: string[] } {
   const pos = new THREE.Vector3(...proposed);
   const g = opt.grid;
   if (g > 0)
     for (let i = 0; i < 3; i++) if (opt.axes[i]) pos.setComponent(i, Math.round(pos.getComponent(i) / g) * g);
 
-  const others = parts.filter((p) => p.id !== part.id);
   const boxes = others.map((p) => ({ p, b: worldBox(p) }));
   const targets = new Set<string>();
 
   if (opt.stick && opt.axes[0] && opt.axes[1] && !opt.axes[2]) {
-    const mine = worldBox(part, [pos.x, pos.y, part.position[2]]);
-    const bottomOffset = part.position[2] - mine.min.z;
+    const mine = mover.boxAt([pos.x, pos.y, mover.z]);
+    const bottomOffset = mover.z - mine.min.z;
     const height = mine.max.z - mine.min.z;
     let support = 0;
     let supportId: string | null = null;
@@ -48,12 +75,12 @@ export function snapPosition(part: Part, proposed: Vec3, parts: Part[], opt: Sna
         supportId = p.id;
       }
     }
-    pos.z = (part.hole && supportId ? support - height : support) + bottomOffset;
+    pos.z = (mover.hole && supportId ? support - height : support) + bottomOffset;
     if (supportId) targets.add(supportId);
   }
 
   if (opt.snap) {
-    const mine = worldBox(part, [pos.x, pos.y, pos.z]);
+    const mine = mover.boxAt([pos.x, pos.y, pos.z]);
     for (let i = 0; i < 3; i++) {
       if (!opt.axes[i]) continue;
       const a = AX[i];

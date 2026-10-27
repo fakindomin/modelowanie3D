@@ -1,79 +1,22 @@
-import type { Manifold, CrossSection } from 'manifold-3d';
 import { M, settle } from './geom/manifold';
+import type { Category, ParamDef, Params, PartDef } from './parts/def';
+import { L, T, bar, block, clearance, cube, cyl, metric, num, poly, rect } from './parts/util';
+import { THREAD_DEFS } from './parts/threads';
+import { JOINT_DEFS } from './parts/joints';
+import { FITTING_DEFS } from './parts/fittings';
+import { FIGURINE_DEF } from './parts/figurine';
 
-export type ParamValue = number | string | boolean;
-export type Params = Record<string, ParamValue>;
-
-export type ParamDef =
-  | { key: string; label: string; type: 'number'; def: number; min: number; max: number; step?: number; unit?: string; hint?: string }
-  | { key: string; label: string; type: 'select'; def: string; options: { value: string; label: string }[] }
-  | { key: string; label: string; type: 'bool'; def: boolean };
-
-export type Category = 'profile' | 'basic' | 'ready' | 'joints';
+export type { Category, ParamDef, ParamValue, Params, PartDef } from './parts/def';
 
 export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'ready', label: 'Gotowe elementy' },
   { id: 'profile', label: 'Profile' },
   { id: 'basic', label: 'Bryły podstawowe' },
   { id: 'joints', label: 'Otwory i połączenia' },
+  { id: 'threads', label: 'Gwinty i śruby' },
+  { id: 'hinges', label: 'Zawiasy i łączniki' },
+  { id: 'fittings', label: 'Przepusty i złączki' },
 ];
-
-export interface PartDef {
-  type: string;
-  label: string;
-  category: Category;
-  hole: boolean;
-  description: string;
-  params: ParamDef[];
-  build: (p: Params) => Manifold;
-}
-
-const num = (p: Params, k: string) => Number(p[k]);
-
-function poly(points: [number, number][]): CrossSection {
-  return M().CrossSection.ofPolygons([points]);
-}
-
-function rect(x0: number, y0: number, x1: number, y1: number): [number, number][] {
-  return [
-    [x0, y0],
-    [x1, y0],
-    [x1, y1],
-    [x0, y1],
-  ];
-}
-
-/** Extrudes a cross-section drawn in (Y, Z) along the X axis, i.e. a bar lying on the bed. */
-function bar(cs: CrossSection, length: number): Manifold {
-  return settle(cs.extrude(length).rotate([90, 0, 90]));
-}
-
-function cube(x: number, y: number, z: number): Manifold {
-  return M().Manifold.cube([x, y, z]);
-}
-
-/** Cube centred in X/Y with its bottom at z0. */
-function block(x: number, y: number, z: number, cx = 0, cy = 0, z0 = 0): Manifold {
-  return M().Manifold.cube([x, y, z], true).translate([cx, cy, z0 + z / 2]);
-}
-
-function cyl(h: number, r: number, r2 = r, segments?: number): Manifold {
-  return M().Manifold.cylinder(h, r, r2, segments);
-}
-
-const L = (def = 100): ParamDef => ({ key: 'L', label: 'Długość', type: 'number', def, min: 1, max: 1000, unit: 'mm' });
-const T = (def = 2): ParamDef => ({ key: 'T', label: 'Grubość ścianki', type: 'number', def, min: 0.4, max: 50, step: 0.2, unit: 'mm' });
-const clearance = (def = 0.2): ParamDef => ({
-  key: 'luz',
-  label: 'Luz',
-  type: 'number',
-  def,
-  min: 0,
-  max: 2,
-  step: 0.05,
-  unit: 'mm',
-  hint: 'Dodawany do średnicy, żeby element wchodził bez siłowania.',
-});
 
 const MAGNETS: Record<string, [number, number]> = {
   '5x2': [5, 2],
@@ -103,14 +46,6 @@ const NUTS: Record<string, [number, number]> = {
   M6: [10, 5],
 };
 
-const metric = (keys: string[], def: string): ParamDef => ({
-  key: 'size',
-  label: 'Rozmiar',
-  type: 'select',
-  def,
-  options: keys.map((k) => ({ value: k, label: k })),
-});
-
 /** Inner opening sizes for the drawer cabinet, shared with the "add drawers" helper. */
 export function cabinetOpenings(p: Params) {
   const w = num(p, 'w'), h = num(p, 'h'), d = num(p, 'D'), t = num(p, 'T');
@@ -122,8 +57,21 @@ export function cabinetOpenings(p: Params) {
   return { W, H: rows * h + (rows + 1) * t, D: d, depth: d - t, openings };
 }
 
-export const CATALOG: PartDef[] = [
+const BASE: PartDef[] = [
   // ---------------------------------------------------------------- ready
+  {
+    type: 'slab',
+    label: 'Płyta',
+    category: 'ready',
+    hole: false,
+    description: 'Płaska płyta z grubością. Z kilku płyt złożysz pudło, półkę albo własny profil.',
+    params: [
+      { key: 'W', label: 'Szerokość (X)', type: 'number', def: 100, min: 1, max: 1000, unit: 'mm' },
+      { key: 'D', label: 'Głębokość (Y)', type: 'number', def: 60, min: 1, max: 1000, unit: 'mm' },
+      { key: 'T', label: 'Grubość', type: 'number', def: 3, min: 0.4, max: 100, step: 0.2, unit: 'mm' },
+    ],
+    build: (p) => block(num(p, 'W'), num(p, 'D'), num(p, 'T')),
+  },
   {
     type: 'box',
     label: 'Pudełko',
@@ -564,7 +512,13 @@ export const CATALOG: PartDef[] = [
   },
 ];
 
+export const CATALOG: PartDef[] = [...BASE, ...THREAD_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, FIGURINE_DEF];
+
 export const DEFS: Record<string, PartDef> = Object.fromEntries(CATALOG.map((d) => [d.type, d]));
+
+export function paramsOf(def: PartDef, p: Params): ParamDef[] {
+  return def.paramsFor ? def.paramsFor(p) : def.params;
+}
 
 export function defaultParams(def: PartDef): Params {
   return Object.fromEntries(def.params.map((p) => [p.key, p.def]));

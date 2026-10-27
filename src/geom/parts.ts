@@ -3,17 +3,19 @@ import type { Manifold } from 'manifold-3d';
 import { DEFS } from '../catalog';
 import type { Part } from '../types';
 import { M, matrixToMat4, toGeometry } from './manifold';
+import { applyTexture } from './texture';
 
 interface Built {
   manifold: Manifold;
   geometry: THREE.BufferGeometry;
   box: THREE.Box3;
+  failed?: boolean;
 }
 
 const cache = new Map<string, Built>();
 
 function key(part: Part) {
-  return part.type + JSON.stringify(part.params);
+  return part.type + JSON.stringify(part.params) + (part.texture ? JSON.stringify(part.texture) : '');
 }
 
 /** Local geometry of a part (centred in X/Y, resting on Z = 0), cached per type + params. */
@@ -22,15 +24,25 @@ export function built(part: Part): Built {
   let b = cache.get(k);
   if (!b) {
     let manifold: Manifold;
+    let bad = false;
     try {
       manifold = DEFS[part.type].build(part.params);
+      if (part.texture && !part.hole) {
+        try {
+          manifold = applyTexture(manifold, part.texture);
+        } catch (e) {
+          console.warn('texture failed', e);
+        }
+      }
       if (manifold.isEmpty()) throw new Error('empty');
-    } catch {
+    } catch (e) {
+      console.warn('build failed', part.type, e);
       // Invalid parameter combination: fall back to a small marker cube so the scene keeps working.
       manifold = M().Manifold.cube([1, 1, 1], true);
+      bad = true;
     }
     const geometry = toGeometry(manifold);
-    b = { manifold, geometry, box: geometry.boundingBox!.clone() };
+    b = { manifold, geometry, box: geometry.boundingBox!.clone(), failed: bad };
     cache.set(k, b);
     if (cache.size > 400) {
       const first = cache.keys().next().value!;
@@ -53,6 +65,11 @@ export function partMatrix(position: [number, number, number], rotation: [number
   return m;
 }
 
+/** Did building this part fail (shown as a small marker cube)? */
+export function failed(part: Part) {
+  return built(part).failed === true;
+}
+
 export function worldBox(part: Part, position = part.position, rotation = part.rotation): THREE.Box3 {
   return built(part).box.clone().applyMatrix4(partMatrix(position, rotation));
 }
@@ -70,8 +87,8 @@ export interface BodyResult {
 }
 
 /** Combines parts into printable bodies: solids of a body are united, then that body's holes are cut. */
-export function buildBodies(parts: Part[]): BodyResult[] {
-  const bodies = [...new Set(parts.map((p) => p.body))].sort((a, b) => a - b);
+export function buildBodies(parts: Part[], only?: number[]): BodyResult[] {
+  const bodies = [...new Set(parts.map((p) => p.body))].filter((b) => !only || only.includes(b)).sort((a, b) => a - b);
   const out: BodyResult[] = [];
   for (const body of bodies) {
     const members = parts.filter((p) => p.body === body);

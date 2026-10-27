@@ -1,20 +1,48 @@
 import { useEffect, useState } from 'react';
-import { CATALOG, CATEGORIES, DEFS, type ParamDef } from '../catalog';
-import { useStore } from '../store';
-import type { Part, Vec3 } from '../types';
+import * as THREE from 'three';
+import { CATALOG, CATEGORIES, DEFS, paramsOf, type Category, type ParamDef } from '../catalog';
+import { assembly, bodyBox, groupBody, groupId, isMerged, useStore, type PatternKind } from '../store';
+import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
+import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
+import type { Part, Texture, Vec3 } from '../types';
 import { Icon } from './Icon';
+
+const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 
 export function Library() {
   const add = useStore((s) => s.add);
-  const selected = useStore((s) => s.parts.find((p) => p.id === s.selectedId));
+  const addFigurine = useStore((s) => s.addFigurine);
+  const tab = useStore((s) => s.tab);
+  const selName = useStore((s) => {
+    const gb = groupBody(s.selectedId);
+    return gb !== null ? `Bryła ${gb}` : s.parts.find((p) => p.id === s.selectedId)?.name;
+  });
+  const cats = tab === 'fig' ? FIG_TOOLS.map((id) => CATEGORIES.find((c) => c.id === id)!) : CATEGORIES;
   return (
     <aside className="library">
-      {selected && <div className="hint">Nowy element pojawi się na górze: <b>{selected.name}</b></div>}
-      {CATEGORIES.map((c) => (
-        <section key={c.id}>
-          <h3>{c.label}</h3>
+      {selName && (
+        <div className="hint">
+          Nowy element pojawi się na górze: <b>{selName}</b>
+        </div>
+      )}
+      {tab === 'fig' && (
+        <section>
+          <h3>Żebrowana kolekcja</h3>
           <div className="grid">
-            {CATALOG.filter((d) => d.category === c.id).map((d) => (
+            {FIG_ORDER.map((id) => (
+              <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => addFigurine(id)}>
+                <Icon type="figurine" hole={false} />
+                <span>{FIG_MODELS[id].n}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {cats.map((c) => (
+        <section key={c.id}>
+          <h3>{tab === 'fig' && c.id === 'joints' ? 'Narzędzia: otwory, magnesy, czopy' : c.label}</h3>
+          <div className="grid">
+            {CATALOG.filter((d) => d.category === c.id && !d.hidden).map((d) => (
               <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={d.description} onClick={() => add(d.type)}>
                 <Icon type={d.type} hole={d.hole} />
                 <span>{d.label}</span>
@@ -62,7 +90,7 @@ function NumberInput({ value, onChange, min, max, step = 1, unit }: { value: num
 
 function ParamField({ def, value, onChange }: { def: ParamDef; value: unknown; onChange: (v: number | string | boolean) => void }) {
   return (
-    <label className="field" title={'hint' in def ? def.hint : undefined}>
+    <label className="field" title={def.hint}>
       <span>{def.label}</span>
       {def.type === 'number' && <NumberInput value={Number(value)} min={def.min} max={def.max} step={def.step ?? 1} unit={def.unit} onChange={onChange} />}
       {def.type === 'select' && (
@@ -79,11 +107,173 @@ function ParamField({ def, value, onChange }: { def: ParamDef; value: unknown; o
   );
 }
 
+function XYZ({ value, onChange, step, unit }: { value: Vec3; onChange: (i: number, v: number) => void; step: number; unit?: string }) {
+  return (
+    <div className="xyz">
+      {(['X', 'Y', 'Z'] as const).map((a, i) => (
+        <label key={a}>
+          <b className={`ax ax${i}`}>{a}</b>
+          <NumberInput value={value[i]} step={step} unit={unit} onChange={(v) => onChange(i, v)} />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function Helpers({ part }: { part: Part }) {
+  const st = useStore();
+  const b = (label: string, fn: () => void) => (
+    <button key={label} className="action" onClick={fn}>
+      {label}
+    </button>
+  );
+  const out = [];
+  if (part.type === 'peg' || part.type === 'pegSquare' || part.type === 'dovetail') out.push(b('+ Dodaj pasujące gniazdo (z luzem)', () => st.matchingHole(part.id)));
+  if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id)));
+  if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id)));
+  if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id)));
+  if (part.type === 'bolt') {
+    out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id)));
+    out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id)));
+  }
+  if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
+    out.push(b(`⧉ Złącz z bryłą ${part.body} (pokaż gotowy element)`, () => st.merge(part.body)));
+  return <>{out}</>;
+}
+
+function PatternTool({ part }: { part: Part }) {
+  const pattern = useStore((s) => s.pattern);
+  const [kind, setKind] = useState<PatternKind>(part.hole ? 'corners' : 'linear');
+  const [count, setCount] = useState(4);
+  const [distance, setDistance] = useState(10);
+  const [axis, setAxis] = useState<0 | 1 | 2>(0);
+  const [inset, setInset] = useState(6);
+  const [radius, setRadius] = useState(0);
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Rodzaj</span>
+        <select value={kind} onChange={(e) => setKind(e.target.value as PatternKind)}>
+          <option value="linear">W rzędzie (co odstęp)</option>
+          <option value="circle">Po okręgu</option>
+          <option value="corners">W narożnikach bryły</option>
+          <option value="mirrorX">Lustro względem środka (X)</option>
+          <option value="mirrorY">Lustro względem środka (Y)</option>
+        </select>
+      </label>
+      {(kind === 'linear' || kind === 'circle') && (
+        <label className="field">
+          <span>Ile sztuk razem</span>
+          <NumberInput value={count} min={2} max={100} onChange={setCount} />
+        </label>
+      )}
+      {kind === 'linear' && (
+        <>
+          <label className="field">
+            <span>Odstęp</span>
+            <NumberInput value={distance} min={-1000} max={1000} unit="mm" onChange={setDistance} />
+          </label>
+          <label className="field">
+            <span>Kierunek</span>
+            <select value={axis} onChange={(e) => setAxis(Number(e.target.value) as 0 | 1 | 2)}>
+              <option value={0}>X</option>
+              <option value={1}>Y</option>
+              <option value={2}>Z</option>
+            </select>
+          </label>
+        </>
+      )}
+      {kind === 'circle' && (
+        <label className="field" title="0 = obecna odległość od środka bryły">
+          <span>Promień (0 = obecny)</span>
+          <NumberInput value={radius} min={0} max={1000} unit="mm" onChange={setRadius} />
+        </label>
+      )}
+      {kind === 'corners' && (
+        <label className="field">
+          <span>Odsunięcie od krawędzi</span>
+          <NumberInput value={inset} min={0} max={500} unit="mm" onChange={setInset} />
+        </label>
+      )}
+      <button className="action" onClick={() => pattern(part.id, kind, { count, distance, axis, inset, radius })}>
+        ⁂ Utwórz kopie
+      </button>
+    </div>
+  );
+}
+
+function TextureTool({ part }: { part: Part }) {
+  const setTexture = useStore((s) => s.setTexture);
+  const t = part.texture;
+  const set = (patch: Partial<Texture>) => setTexture(part.id, { ...(t ?? DEFAULT_TEXTURE), ...patch });
+  const n = (key: keyof Texture, label: string, min: number, max: number, step: number, unit?: string) => (
+    <label className="field">
+      <span>{label}</span>
+      <NumberInput value={Number(t![key])} min={min} max={max} step={step} unit={unit} onChange={(v) => set({ [key]: v })} />
+    </label>
+  );
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Faktura</span>
+        <select value={t ? t.pattern : 'none'} onChange={(e) => (e.target.value === 'none' ? setTexture(part.id, undefined) : set({ pattern: e.target.value as Texture['pattern'], mode: e.target.value === 'grooves' ? 'cut' : (t?.mode ?? 'add') }))}>
+          <option value="none">Gładka</option>
+          {Object.entries(TEXTURE_LABELS).map(([k, l]) => (
+            <option key={k} value={k}>
+              {l}
+            </option>
+          ))}
+        </select>
+      </label>
+      {t && (
+        <>
+          <label className="field">
+            <span>Ścianka</span>
+            <select value={t.face} onChange={(e) => set({ face: e.target.value as Texture['face'] })}>
+              {Object.entries(FACE_LABELS).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          {t.pattern !== 'grooves' && (
+            <label className="field">
+              <span>Wzór</span>
+              <select value={t.mode} onChange={(e) => set({ mode: e.target.value as Texture['mode'] })}>
+                <option value="add">Wypukły</option>
+                <option value="cut">Wklęsły (wycięty)</option>
+              </select>
+            </label>
+          )}
+          {n('depth', t.mode === 'add' && t.pattern !== 'grooves' ? 'Wysokość' : 'Głębokość', 0.2, 10, 0.1, 'mm')}
+          {n('spacing', 'Odstęp', 0.8, 50, 0.2, 'mm')}
+          {n('angle', 'Kierunek', -180, 180, 15, '°')}
+          {n('margin', 'Margines od krawędzi', 0, 50, 0.5, 'mm')}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
+  return (
+    <details className="section" open={open}>
+      <summary>{title}</summary>
+      {children}
+    </details>
+  );
+}
+
 function PartProperties({ part }: { part: Part }) {
   const st = useStore();
   const def = DEFS[part.type];
   const bodies = [...new Set(st.parts.map((p) => p.body))].sort((a, b) => a - b);
   const newBody = Math.max(0, ...bodies) + 1;
+  const linked = part.link ? st.parts.filter((p) => p.link === part.link && p.id !== part.id && (!part.rigid || p.rigid !== part.rigid)).length : 0;
+  const pieces = part.rigid ? st.parts.filter((p) => p.rigid === part.rigid).length : 1;
+  const [height, setHeight] = useState(150);
+  const fields = paramsOf(def, part.params).filter((p) => !p.show || p.show(part.params));
   const setPos = (i: number, v: number) => {
     const position = [...part.position] as Vec3;
     position[i] = v;
@@ -102,50 +292,41 @@ function PartProperties({ part }: { part: Part }) {
         <input className="name" value={part.name} onChange={(e) => st.updateLive(part.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
       </div>
       <p className="desc">{def.description}</p>
+      {linked > 0 && (
+        <div className="linkbar">
+          🔗 Powiązany z {linked} {linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.
+          <button className="small" onClick={() => st.unlink(part.id)}>
+            Odłącz
+          </button>
+        </div>
+      )}
+      {pieces > 1 && <p className="desc">Część zestawu ({pieces} elementy). Przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</p>}
 
       <h4>Wymiary</h4>
-      {def.params.map((p) => (
-        <ParamField key={p.key} def={p} value={part.params[p.key]} onChange={(v) => st.update(part.id, { params: { ...part.params, [p.key]: v } })} />
+      {fields.map((p) => (
+        <div key={p.key}>
+          {p.group && <h5>{p.group}</h5>}
+          <ParamField def={p} value={part.params[p.key]} onChange={(v) => st.update(part.id, { params: { ...part.params, [p.key]: v } })} />
+        </div>
       ))}
-
-      {part.type === 'peg' || part.type === 'pegSquare' ? (
-        <button className="action" onClick={() => st.matchingHole(part.id)}>
-          + Dodaj pasujące gniazdo (z luzem)
-        </button>
-      ) : null}
-      {part.type === 'cabinet' && (
-        <button className="action" onClick={() => st.addDrawers(part.id)}>
-          + Dodaj dopasowane szuflady
-        </button>
+      {part.type === 'figurine' && (
+        <div className="row">
+          <NumberInput value={height} min={30} max={300} unit="mm" onChange={setHeight} />
+          <button className="small" onClick={() => st.fitFigurine(part.id, height)} title="Dobiera suwak wysokości tak, by cała figurka miała podaną wysokość">
+            Całość na {height} mm
+          </button>
+        </div>
       )}
-      {part.type === 'box' && (
-        <button className="action" onClick={() => st.addLid(part.id)}>
-          + Dodaj pasującą pokrywkę
-        </button>
-      )}
+      <Helpers part={part} />
 
       <h4>Położenie</h4>
-      <div className="xyz">
-        {(['X', 'Y', 'Z'] as const).map((a, i) => (
-          <label key={a}>
-            <b className={`ax ax${i}`}>{a}</b>
-            <NumberInput value={part.position[i]} step={st.settings.grid || 1} onChange={(v) => setPos(i, v)} />
-          </label>
-        ))}
-      </div>
+      <XYZ value={part.position} step={st.settings.grid || 1} onChange={setPos} />
       <button className="small" onClick={() => st.dropToFloor(part.id)}>
         Połóż na stole
       </button>
 
       <h4>Obrót</h4>
-      <div className="xyz">
-        {(['X', 'Y', 'Z'] as const).map((a, i) => (
-          <label key={a}>
-            <b className={`ax ax${i}`}>{a}</b>
-            <NumberInput value={part.rotation[i]} step={15} unit="°" onChange={(v) => setRot(i, v)} />
-          </label>
-        ))}
-      </div>
+      <XYZ value={part.rotation} step={15} unit="°" onChange={setRot} />
       <div className="row">
         {(['X', 'Y', 'Z'] as const).map((a, i) => (
           <button key={a} className="small" title={`Obróć o 90° wokół osi ${a}`} onClick={() => st.rotateBy(part.id, i as 0 | 1 | 2, 90)}>
@@ -153,6 +334,17 @@ function PartProperties({ part }: { part: Part }) {
           </button>
         ))}
       </div>
+
+      {!part.rigid && (
+        <Section title="Szyk: kopiuj, okrąg, narożniki, lustro">
+          <PatternTool part={part} />
+        </Section>
+      )}
+      {!part.hole && part.type !== 'figurine' && (
+        <Section title="Faktura powierzchni" open={!!part.texture}>
+          <TextureTool part={part} />
+        </Section>
+      )}
 
       <h4>Wydruk</h4>
       <label className="field">
@@ -181,6 +373,9 @@ function PartProperties({ part }: { part: Part }) {
       )}
 
       <div className="row end">
+        <button className="small" onClick={() => st.select(groupId(part.body))}>
+          Zaznacz całą bryłę
+        </button>
         <button className="small" onClick={() => st.duplicate(part.id)}>
           Duplikuj
         </button>
@@ -192,43 +387,118 @@ function PartProperties({ part }: { part: Part }) {
   );
 }
 
-function BodiesOverview() {
-  const parts = useStore((s) => s.parts);
-  const select = useStore((s) => s.select);
-  const mergeAll = useStore((s) => s.mergeAll);
-  const bodies = [...new Set(parts.map((p) => p.body))].sort((a, b) => a - b);
-  if (!parts.length)
-    return (
-      <div className="props empty">
-        <h4>Jak zacząć</h4>
-        <ol>
-          <li>Kliknij element w menu po lewej, np. <b>Pudełko</b>.</li>
-          <li>Zmień wymiary w tym panelu.</li>
-          <li>Przeciągaj elementy myszką. Same się przyciągają do sąsiednich ścianek.</li>
-          <li>Zaznacz element i dodaj <b>otwór</b>, <b>czop</b> lub <b>magnes</b>: pojawi się na jego wierzchu.</li>
-          <li>Włącz <b>Podgląd wydruku</b> i pobierz <b>STL/3MF</b>.</li>
-        </ol>
-      </div>
-    );
+function GroupProperties({ body }: { body: number }) {
+  const st = useStore();
+  const members = st.parts.filter((p) => p.body === body);
+  const merged = isMerged(st.parts, body);
+  const holes = members.filter((p) => p.hole).length;
+  const tied = assembly(st.parts, body).filter((p) => p.body !== body).length;
+  const anchor = members.find((p) => !p.hole) ?? members[0];
+  if (!anchor) return null;
+  const box = bodyBox(st.parts, body);
+  const size = box.isEmpty() ? [0, 0, 0] : box.getSize(new THREE.Vector3()).toArray();
   return (
     <div className="props">
-      <h4>Bryły do druku</h4>
-      <p className="desc">Każda bryła to osobny wydruk. Elementy w jednej bryle są sklejane, a jej otwory wycinają tylko ją.</p>
-      {bodies.map((b) => (
-        <div key={b} className="body">
-          <b>Bryła {b}</b>
-          <ul>
-            {parts
-              .filter((p) => p.body === b)
-              .map((p) => (
-                <li key={p.id} className={p.hole ? 'is-hole' : ''} onClick={() => select(p.id)}>
+      <div className="props-head">
+        <Icon type="cube" hole={false} />
+        <b className="name">Bryła {body}</b>
+      </div>
+      <p className="desc">
+        {members.length} {members.length === 1 ? 'element' : 'elementów'}, w tym {holes} {holes === 1 ? 'otwór' : 'otworów'}. Wymiary: {size.map((v) => Math.round(v * 10) / 10).join(' × ')} mm.
+        {tied > 0 && ' Połączona zawiasem lub złączką z inną bryłą, przesuwa się razem z nią.'}
+      </p>
+      {holes > 0 && (
+        <button className="action" onClick={() => (merged ? st.unmerge(body) : st.merge(body))}>
+          {merged ? '⧈ Rozdziel (pokaż otwory osobno)' : '⧉ Złącz otwory z bryłą (pokaż gotowy element)'}
+        </button>
+      )}
+      {merged && <p className="desc">Złączona: widać gotowy element. Otwory nadal możesz kliknąć (na liście albo w modelu) i przesuwać w bryle.</p>}
+
+      <h4>Położenie</h4>
+      <XYZ
+        value={anchor.position}
+        step={st.settings.grid || 1}
+        onChange={(i, v) => {
+          const p = [...anchor.position] as Vec3;
+          p[i] = v;
+          st.moveBody(body, p);
+        }}
+      />
+      <button className="small" onClick={() => st.dropBody(body)}>
+        Połóż na stole
+      </button>
+      <h4>Obrót całej bryły</h4>
+      <div className="row">
+        {(['X', 'Y', 'Z'] as const).map((a, i) => (
+          <button key={a} className="small" onClick={() => st.rotateBody(body, i as 0 | 1 | 2, 90)}>
+            ⟳ {a} 90°
+          </button>
+        ))}
+      </div>
+      <div className="row end">
+        <button className="small" onClick={() => st.duplicateBody(body)}>
+          Duplikuj bryłę
+        </button>
+        <button className="small danger" onClick={() => st.removeBody(body)}>
+          Usuń bryłę
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Always-visible list of everything in the project, grouped by printed body. */
+function Outliner() {
+  const parts = useStore((s) => s.parts);
+  const selectedId = useStore((s) => s.selectedId);
+  const hoveredId = useStore((s) => s.hoveredId);
+  const select = useStore((s) => s.select);
+  const setHover = useStore((s) => s.setHover);
+  const merge = useStore((s) => s.merge);
+  const unmerge = useStore((s) => s.unmerge);
+  const mergeAll = useStore((s) => s.mergeAll);
+  const bodies = [...new Set(parts.map((p) => p.body))].sort((a, b) => a - b);
+  if (!parts.length) return null;
+  const cls = (id: string) => [id === selectedId ? 'sel' : '', id === hoveredId ? 'hov' : ''].join(' ');
+  return (
+    <div className="outliner" onMouseLeave={() => setHover(null)}>
+      <h4>Elementy projektu</h4>
+      {bodies.map((b) => {
+        const members = parts.filter((p) => p.body === b);
+        const merged = isMerged(parts, b);
+        const holes = members.some((p) => p.hole);
+        const g = groupId(b);
+        return (
+          <div key={b} className="body">
+            <div className={`body-head ${cls(g)}`} onMouseEnter={() => setHover(g)} onClick={() => select(g)}>
+              <b>Bryła {b}</b>
+              {merged && <span className="badge">złączona</span>}
+              {holes && (
+                <button
+                  className="mini"
+                  title={merged ? 'Rozdziel: pokaż otwory osobno' : 'Złącz otwory z bryłą: pokaż gotowy element'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (merged) unmerge(b);
+                    else merge(b);
+                  }}
+                >
+                  {merged ? 'Rozdziel' : 'Złącz'}
+                </button>
+              )}
+            </div>
+            <ul>
+              {members.map((p) => (
+                <li key={p.id} className={`${p.hole ? 'is-hole' : ''} ${cls(p.id)}`} onMouseEnter={() => setHover(p.id)} onClick={() => select(p.id)}>
                   <span className="dot" style={{ background: p.color }} />
-                  {p.name}
+                  <span className="label">{p.name}</span>
+                  {p.link && parts.some((q) => q.link === p.link && q.id !== p.id && (!p.rigid || q.rigid !== p.rigid)) && <span title="Powiązana kopia">🔗</span>}
                 </li>
               ))}
-          </ul>
-        </div>
-      ))}
+            </ul>
+          </div>
+        );
+      })}
       {bodies.length > 1 && (
         <button className="small" onClick={mergeAll}>
           Połącz wszystko w jedną bryłę
@@ -238,7 +508,79 @@ function BodiesOverview() {
   );
 }
 
+function CheckPanel() {
+  const check = useStore((s) => s.check);
+  const close = useStore((s) => s.closeCheck);
+  const select = useStore((s) => s.select);
+  const minWall = useStore((s) => s.settings.minWall);
+  const setSettings = useStore((s) => s.setSettings);
+  const run = useStore((s) => s.runCheck);
+  if (!check) return null;
+  const problems = check.issues.filter((i) => i.level !== 'info').length;
+  return (
+    <div className="checkres">
+      <div className="checkres-head">
+        <b>{problems ? `Do poprawy: ${problems}` : '✓ Model gotowy do druku'}</b>
+        <button className="mini" onClick={close}>
+          ✕
+        </button>
+      </div>
+      {!check.issues.length && <p className="desc">Siatki są szczelne (bez dziur i podwójnych ścianek), bryły nie nachodzą na siebie, nie ma ścianek cieńszych niż {String(minWall).replace('.', ',')} mm.</p>}
+      <ul>
+        {check.issues.map((i, k) => (
+          <li key={k} className={i.level} onClick={() => i.select && select(i.select)}>
+            {i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠️' : 'ℹ️'} {i.text}
+          </li>
+        ))}
+      </ul>
+      <label className="field" title="Najcieńsza ścianka, którą drukarka zrobi porządnie (zwykle 2 × średnica dyszy)">
+        <span>Min. ścianka</span>
+        <NumberInput value={minWall} min={0.2} max={5} step={0.1} unit="mm" onChange={(v) => setSettings({ minWall: v })} />
+      </label>
+      <button className="small" onClick={run}>
+        Sprawdź ponownie
+      </button>
+    </div>
+  );
+}
+
+function Welcome() {
+  const tab = useStore((s) => s.tab);
+  return (
+    <div className="props empty">
+      <h4>Jak zacząć</h4>
+      {tab === 'fig' ? (
+        <ol>
+          <li>Wybierz figurkę z menu po lewej, np. <b>Królik</b>.</li>
+          <li>Suwaki w tym panelu zmieniają kształt wszystkich jej części.</li>
+          <li>Zaznacz część i dodaj <b>magnes</b>, <b>otwór</b> albo <b>czop</b> z narzędzi poniżej figurek.</li>
+          <li>Pobierz <b>STL/3MF</b>: każda część jest osobnym wydrukiem.</li>
+        </ol>
+      ) : (
+        <ol>
+          <li>Kliknij element w menu po lewej, np. <b>Płyta</b> albo <b>Pudełko</b>.</li>
+          <li>Zmień wymiary w tym panelu.</li>
+          <li>Przeciągaj elementy myszką. Same się przyciągają do sąsiednich ścianek.</li>
+          <li>Zaznacz element i dodaj <b>otwór</b>, <b>gwint</b>, <b>zawias</b> albo <b>dławik</b>: pojawi się na jego wierzchu.</li>
+          <li>Kliknij <b>Sprawdź model</b>, potem pobierz <b>STL/3MF</b>.</li>
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export function Properties() {
   const part = useStore((s) => s.parts.find((p) => p.id === s.selectedId));
-  return <aside className="properties">{part ? <PartProperties key={part.id} part={part} /> : <BodiesOverview />}</aside>;
+  const body = useStore((s) => {
+    const gb = groupBody(s.selectedId);
+    return gb !== null && s.parts.some((p) => p.body === gb) ? gb : null;
+  });
+  const empty = useStore((s) => !s.parts.length);
+  return (
+    <aside className="properties">
+      <CheckPanel />
+      <Outliner />
+      {part ? <PartProperties key={part.id} part={part} /> : body !== null ? <GroupProperties key={body} body={body} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
+    </aside>
+  );
 }
