@@ -283,12 +283,13 @@ const BASE: PartDef[] = [
         }
       }
       if (R > 0) {
-        // Slots where the box dividers meet the rim (dividers are as thick as the box wall), mirrored
-        // both ways so they fit however the lid is flipped onto the box.
+        // Slots where the box dividers meet the rim (dividers are as thick as the box wall). The lid is
+        // printed rim up and turned over front to back onto the box, so the layout is mirrored in Y.
+        // (Turned over side to side it fits after a half turn, so no second set of slots is needed.)
         const sp = { ...p, T: wall };
         const { iw, id } = inside(sp);
         const slots = dividerSolid(segmentsOf(sp, iw, id), wall + 2 * c, t + 0.01, R + 1, wall + 2);
-        if (slots) m = m.subtract(M().Manifold.union([slots, slots.mirror([1, 0, 0]), slots.mirror([0, 1, 0])]));
+        if (slots) m = m.subtract(slots.mirror([0, 1, 0]));
       }
       return m;
     },
