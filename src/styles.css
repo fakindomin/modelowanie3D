@@ -312,3 +312,13 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 .variant .vname span, .variant .vname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .library .grid { grid-template-columns: minmax(0, 1fr); }
 .variant .vname { flex: 1 1 auto; }
+
+/* divider editor */
+.div-editor svg { width: 100%; max-height: 240px; display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; touch-action: none; user-select: none; }
+.div-editor .div-wall { fill: #1a1b1d; stroke: #7f8c99; }
+.div-editor .div-seg { stroke: #55595e; stroke-dasharray: 2 2; stroke-linecap: butt; }
+.div-editor .div-seg.on { stroke: var(--accent); stroke-dasharray: none; }
+.div-editor .div-hit { stroke: transparent; }
+.div-editor .div-hit:hover { stroke: rgba(91, 185, 116, 0.35); }
+.div-editor .div-front { fill: #8a8f95; text-anchor: middle; }
+.div-editor .row { flex-wrap: wrap; }

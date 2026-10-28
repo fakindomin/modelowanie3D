@@ -1,3 +1,4 @@
+import type { Manifold } from 'manifold-3d';
 import { M, settle } from './geom/manifold';
 import type { Category, ParamDef, Params, PartDef } from './parts/def';
 import { L, T, bar, block, clearance, cube, cyl, hex, metric, num, poly, rect, select } from './parts/util';
@@ -6,6 +7,7 @@ import { JOINT_DEFS } from './parts/joints';
 import { FITTING_DEFS } from './parts/fittings';
 import { CONNECTOR_DEFS } from './parts/connectors';
 import { FIGURINE_DEF } from './parts/figurine';
+import { dividerSolid, segmentsOf } from './geom/dividers';
 
 export type { Category, ParamDef, ParamValue, Params, PartDef } from './parts/def';
 
@@ -74,6 +76,57 @@ export function slideGroove(p: Params) {
   return { depth, h, z0: H - 1.2 - h, lidW: num(p, 'W') - 2 * t + 2 * depth - 0.6, lidD: num(p, 'D') - t + depth - 0.3, lidT: 2 };
 }
 
+const radial = (p: Params) => (p.shape === 'round' || p.shape === 'hex') && p.divMode === 'radial';
+const gridOn = (p: Params) => !radial(p);
+const hasDividers = (p: Params) => (radial(p) ? num(p, 'nr') >= 2 || num(p, 'ring') > 0 : num(p, 'nx') > 1 || num(p, 'ny') > 1 || (typeof p.div === 'string' && p.div.length > 0));
+
+/** Inside size of a box-like part for its divider layout (round and hex: across the inside). */
+function inside(p: Params) {
+  const t = num(p, 'T');
+  const iw = num(p, 'W') - 2 * t;
+  return { iw, id: p.shape === 'round' || p.shape === 'hex' ? iw : num(p, 'D') - 2 * t };
+}
+
+/** Dividers of a box or drawer from the floor to `top`, clipped to the inside (plus half the wall). */
+function boxDividers(p: Params, b: number, top: number): Manifold | null {
+  if (top <= b + 0.2) return null;
+  const t = num(p, 'T'), W = num(p, 'W');
+  const { iw, id } = inside(p);
+  // A hexagon's corners stick out past the grid's square, so its lines run further and get clipped.
+  let m = dividerSolid(segmentsOf(p, iw, id), t, b, top - b, p.shape === 'hex' ? iw * 0.08 + t : t / 2);
+  const ring = num(p, 'ring');
+  if (radial(p) && ring > 2 * t) {
+    // Spokes start at the ring, leaving one round compartment in the middle.
+    const hole = M().Manifold.cylinder(top - b + 2, ring / 2 - t / 2).translate([0, 0, b - 1]);
+    const rc = M().Manifold.cylinder(top - b, ring / 2 + t / 2).translate([0, 0, b]).subtract(hole);
+    m = m ? m.subtract(hole).add(rc) : rc;
+  }
+  if (!m) return null;
+  const clip = p.shape === 'round' ? cyl(top + 1, W / 2 - t / 2) : p.shape === 'hex' ? hex(W - t, top + 1) : block(W - t, num(p, 'D') - t, top + 1);
+  return m.intersect(clip);
+}
+
+const DIVIDER_PARAMS: ParamDef[] = [
+  select('divMode', 'Przegródki', 'grid', [
+    ['grid', 'Na krzyż (siatka)'],
+    ['radial', 'Promieniowe (jak tort)'],
+  ]),
+  { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: gridOn },
+  { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: gridOn },
+  { key: 'nr', label: 'Liczba komór', type: 'number', def: 4, min: 2, max: 24, step: 1, show: radial },
+  { key: 'rot', label: 'Obrót przegródek', type: 'number', def: 0, min: -180, max: 180, step: 5, unit: '°', show: radial },
+  { key: 'ring', label: 'Pierścień w środku (średnica)', type: 'number', def: 0, min: 0, max: 500, unit: 'mm', show: radial, hint: '0 = bez pierścienia.' },
+];
+DIVIDER_PARAMS[0].show = (p) => p.shape === 'round' || p.shape === 'hex';
+
+/** Plain grid fields edited by hand start a fresh even grid (the editor's layout is dropped). */
+function dropLayout(prev: Params, next: Params): Params {
+  if (typeof next.div !== 'string' || !next.div) return next;
+  if (prev.div === next.div && (prev.nx !== next.nx || prev.ny !== next.ny)) return { ...next, div: '' };
+  if (prev.shape !== next.shape || prev.divMode !== next.divMode) return { ...next, div: '' };
+  return next;
+}
+
 const BASE: PartDef[] = [
   // ---------------------------------------------------------------- ready
   {
@@ -102,8 +155,7 @@ const BASE: PartDef[] = [
       { key: 'H', label: 'Wysokość', type: 'number', def: 40, min: 3, max: 500, unit: 'mm' },
       T(2),
       { key: 'B', label: 'Grubość dna', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
-      { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: rectOnly },
-      { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: rectOnly },
+      ...DIVIDER_PARAMS,
       { key: 'slide', label: 'Rowki na wsuwaną pokrywkę', type: 'bool', def: false, show: rectOnly, hint: 'Rowki w ściankach pod górną krawędzią; pokrywka wsuwa się od przodu (ścianka min. 2 mm).' },
       {
         key: 'low',
@@ -114,23 +166,28 @@ const BASE: PartDef[] = [
         max: 200,
         step: 0.5,
         unit: 'mm',
-        show: (p) => rectOnly(p) && (num(p, 'nx') > 1 || num(p, 'ny') > 1),
+        show: hasDividers,
         hint: 'Obniża przegródki pod górną krawędzią, np. o wysokość rantu pokrywki. Przy wsuwanej pokrywce przegródki same kończą się pod rowkiem.',
       },
     ],
+    normalize: dropLayout,
     build: (p) => {
       const W = num(p, 'W'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
-      if (p.shape === 'round') return cyl(H, W / 2).subtract(cyl(H, W / 2 - t).translate([0, 0, b]));
-      if (p.shape === 'hex') return hex(W, H).subtract(hex(W - 2 * t, H).translate([0, 0, b]));
+      const rect = !p.shape || p.shape === 'rect';
+      // Dividers stop under a sliding lid's groove so the lid can pass over them.
+      const top = Math.min(H - (Number(p.low) || 0), rect && p.slide ? slideGroove(p).z0 - 0.3 : H);
+      const div = boxDividers(p, b, top);
+      if (p.shape === 'round') {
+        const m = cyl(H, W / 2).subtract(cyl(H, W / 2 - t).translate([0, 0, b]));
+        return div ? m.add(div) : m;
+      }
+      if (p.shape === 'hex') {
+        const m = hex(W, H).subtract(hex(W - 2 * t, H).translate([0, 0, b]));
+        return div ? m.add(div) : m;
+      }
       const D = num(p, 'D');
       let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
-      const nx = Math.round(num(p, 'nx')), ny = Math.round(num(p, 'ny'));
-      // Dividers stop under a sliding lid's groove so the lid can pass over them.
-      const top = Math.min(H - (Number(p.low) || 0), p.slide ? slideGroove(p).z0 - 0.3 : H);
-      if (top > b + 0.2) {
-        for (let i = 1; i < nx; i++) m = m.add(block(t, D - 2 * t, top - b, -W / 2 + t + ((W - 2 * t) * i) / nx, 0, b));
-        for (let i = 1; i < ny; i++) m = m.add(block(W - 2 * t, t, top - b, 0, -D / 2 + t + ((D - 2 * t) * i) / ny, b));
-      }
+      if (div) m = m.add(div);
       if (p.slide) {
         const g = slideGroove(p);
         // Groove in the side and back walls, open at the front; the front wall drops to the groove's bottom.
@@ -154,27 +211,32 @@ const BASE: PartDef[] = [
       { key: 'wall', label: 'Ścianka pudełka', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
       { key: 'R', label: 'Wysokość rantu', type: 'number', def: 4, min: 0, max: 50, unit: 'mm' },
       clearance(0.3),
-      { key: 'nx', label: 'Szczeliny na przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => rectOnly(p) && num(p, 'R') > 0, hint: 'Tyle samo co przegródek w pudełku: rant dostaje szczeliny tam, gdzie stoją przegródki.' },
-      { key: 'ny', label: 'Szczeliny na przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => rectOnly(p) && num(p, 'R') > 0 },
+      { key: 'nx', label: 'Szczeliny na przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => gridOn(p) && num(p, 'R') > 0 && !p.div, hint: 'Tyle samo co przegródek w pudełku: rant dostaje szczeliny tam, gdzie stoją przegródki.' },
+      { key: 'ny', label: 'Szczeliny na przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => gridOn(p) && num(p, 'R') > 0 && !p.div },
     ],
     build: (p) => {
       const W = num(p, 'W'), t = num(p, 'T'), wall = num(p, 'wall'), R = num(p, 'R'), c = num(p, 'luz'), lip = 1.6;
+      let m: Manifold;
       if (p.shape === 'round' || p.shape === 'hex') {
         const solid = (w: number, h: number) => (p.shape === 'round' ? cyl(h, w / 2) : hex(w, h));
-        let m = solid(W, t);
+        m = solid(W, t);
         const o = W - 2 * wall - c;
         if (R > 0) m = m.add(solid(o, R).subtract(solid(o - 2 * lip, R + 1)).translate([0, 0, t]));
-        return m;
+      } else {
+        const D = num(p, 'D');
+        m = block(W, D, t);
+        if (R > 0) {
+          const ow = W - 2 * wall - c, od = D - 2 * wall - c;
+          m = m.add(block(ow, od, R, 0, 0, t).subtract(block(ow - 2 * lip, od - 2 * lip, R + 1, 0, 0, t)));
+        }
       }
-      const D = num(p, 'D');
-      let m = block(W, D, t);
       if (R > 0) {
-        const ow = W - 2 * wall - c, od = D - 2 * wall - c;
-        m = m.add(block(ow, od, R, 0, 0, t).subtract(block(ow - 2 * lip, od - 2 * lip, R + 1, 0, 0, t)));
-        // Slots where the box dividers meet the rim (the dividers are as thick as the box wall).
-        const nx = Math.round(Number(p.nx) || 1), ny = Math.round(Number(p.ny) || 1), sw = wall + 2 * c;
-        for (let i = 1; i < nx; i++) m = m.subtract(block(sw, D, R + 1, -W / 2 + wall + ((W - 2 * wall) * i) / nx, 0, t + 0.01));
-        for (let i = 1; i < ny; i++) m = m.subtract(block(W, sw, R + 1, 0, -D / 2 + wall + ((D - 2 * wall) * i) / ny, t + 0.01));
+        // Slots where the box dividers meet the rim (dividers are as thick as the box wall), mirrored
+        // both ways so they fit however the lid is flipped onto the box.
+        const sp = { ...p, T: wall };
+        const { iw, id } = inside(sp);
+        const slots = dividerSolid(segmentsOf(sp, iw, id), wall + 2 * c, t + 0.01, R + 1, wall + 2);
+        if (slots) m = m.subtract(M().Manifold.union([slots, slots.mirror([1, 0, 0]), slots.mirror([0, 1, 0])]));
       }
       return m;
     },
@@ -184,13 +246,16 @@ const BASE: PartDef[] = [
     label: 'Szuflada',
     category: 'ready',
     hole: false,
-    description: 'Szuflada z wycięciem na palec lub gałką z przodu.',
+    description: 'Szuflada z wycięciem na palec lub gałką z przodu, z opcjonalnymi przegródkami.',
+    normalize: dropLayout,
     params: [
       { key: 'W', label: 'Szerokość', type: 'number', def: 60, min: 10, max: 500, unit: 'mm' },
       { key: 'D', label: 'Głębokość', type: 'number', def: 80, min: 10, max: 500, unit: 'mm' },
       { key: 'H', label: 'Wysokość', type: 'number', def: 30, min: 5, max: 300, unit: 'mm' },
       T(1.6),
       { key: 'B', label: 'Grubość dna', type: 'number', def: 1.6, min: 0.4, max: 10, step: 0.2, unit: 'mm' },
+      { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1 },
+      { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1 },
       {
         key: 'handle',
         label: 'Uchwyt',
@@ -206,6 +271,9 @@ const BASE: PartDef[] = [
     build: (p) => {
       const W = num(p, 'W'), D = num(p, 'D'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
       let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
+      // Dividers stay 2 mm under the top so the drawer slides into its opening.
+      const div = boxDividers(p, b, H - 2);
+      if (div) m = m.add(div);
       if (p.handle === 'notch') {
         const r = Math.min(12, H / 2.5, W / 4);
         m = m.subtract(cyl(4 * t, r).rotate([90, 0, 0]).translate([0, -D / 2 + 2 * t, H]));

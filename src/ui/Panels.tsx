@@ -10,6 +10,7 @@ import { Icon } from './Icon';
 import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
 import { WALL_SIDES, sideOf } from '../parts/connectors';
+import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, segmentsOf, toggleSegment, type DivLayout } from '../geom/dividers';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 
@@ -476,6 +477,127 @@ function Section({ title, children, open = false, info }: { title: string; child
   );
 }
 
+/** Top view of a box's dividers: click a segment to remove or restore it, drag it to move its line. */
+function DividerEditor({ part }: { part: Part }) {
+  const update = useStore((s) => s.update);
+  const p = part.params;
+  const [drag, setDrag] = useState<{ axis: 'v' | 'h'; line: number; x0: number; y0: number; key: string; moved: boolean; l: DivLayout } | null>(null);
+  const svg = useRef<SVGSVGElement>(null);
+  const shape = (p.shape as string) || 'rect';
+  const radialMode = (shape === 'round' || shape === 'hex') && p.divMode === 'radial';
+  const t = Number(p.T) || 2;
+  const W = Number(p.W) || 0;
+  const iw = W - 2 * t;
+  const id = shape === 'rect' ? (Number(p.D) || 0) - 2 * t : iw;
+  if (iw <= 0 || id <= 0) return null;
+  const base = layoutOf(p);
+  const l = drag?.l ?? base;
+  const segs = segmentsOf({ ...p, ...layoutParams(l) }, iw, id);
+  const save = (next: DivLayout) => update(part.id, { params: { ...p, ...layoutParams(next) } });
+  const pad = t + 4;
+  // Spokes start at the ring when there is one.
+  const ringD = radialMode ? Number(p.ring) || 0 : 0;
+  const hub = ringD > 2 * t ? ringD / 2 / (shape === 'hex' ? iw / Math.sqrt(3) : iw / 2) : 0;
+  const sw = Math.max(t, Math.max(iw, id) / 70);
+  const hexPts = Array.from({ length: 6 }, (_, i) => {
+    const a = (i * Math.PI) / 3, r = iw / Math.sqrt(3);
+    return `${(Math.cos(a) * r).toFixed(2)},${(-Math.sin(a) * r).toFixed(2)}`;
+  }).join(' ');
+  const outline =
+    shape === 'round' ? <circle r={iw / 2} /> : shape === 'hex' ? <polygon points={hexPts} /> : <rect x={-iw / 2} y={-id / 2} width={iw} height={id} />;
+  const ext = shape === 'hex' ? iw / Math.sqrt(3) : Math.max(iw, id) / 2;
+  const world = (e: React.PointerEvent) => {
+    const m = svg.current?.getScreenCTM();
+    if (!m) return [0, 0];
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    return [pt.x, -pt.y];
+  };
+  const down = (e: React.PointerEvent, key: string, axis: 'v' | 'h' | 'r', line: number) => {
+    e.preventDefault();
+    if (axis === 'r') return save(toggleSegment(base, key));
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const [x, y] = world(e);
+    setDrag({ axis, line, key, x0: x, y0: y, moved: false, l: base });
+  };
+  const move = (e: React.PointerEvent) => {
+    if (!drag) return;
+    const [x, y] = world(e);
+    if (!drag.moved && Math.hypot(x - drag.x0, y - drag.y0) < sw) return;
+    const f = drag.axis === 'v' ? (x + iw / 2) / iw : (y + id / 2) / id;
+    setDrag({ ...drag, moved: true, l: moveLine(drag.l, drag.axis, drag.line, f, drag.axis === 'v' ? iw : id) });
+  };
+  const up = () => {
+    if (!drag) return;
+    save(drag.moved ? drag.l : toggleSegment(base, drag.key));
+    setDrag(null);
+  };
+  const cells = (list: number[], size: number) => [0, ...list, 1].slice(1).map((v, i, a) => Math.round(((v - (i ? a[i - 1] : 0)) * size - t) * 10) / 10);
+  return (
+    <div className="div-editor">
+      <svg
+        ref={svg}
+        viewBox={`${-ext - pad} ${-(shape === 'rect' ? id / 2 : ext) - pad} ${2 * (ext + pad)} ${2 * ((shape === 'rect' ? id / 2 : ext) + pad)}`}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={() => setDrag(null)}
+      >
+        <defs>
+          <clipPath id={`clip-${part.id}`}>{outline}</clipPath>
+        </defs>
+        <g className="div-wall" style={{ strokeWidth: t }}>
+          {outline}
+        </g>
+        <g clipPath={`url(#clip-${part.id})`}>
+          {segs.map((s) => (
+            <g key={s.key}>
+              <line className={s.on ? 'div-seg on' : 'div-seg'} x1={s.axis === 'r' ? s.b[0] * hub : s.a[0]} y1={s.axis === 'r' ? -s.b[1] * hub : -s.a[1]} x2={s.b[0]} y2={-s.b[1]} style={{ strokeWidth: sw }} />
+              <line
+                className="div-hit"
+                x1={s.a[0]}
+                y1={-s.a[1]}
+                x2={s.b[0]}
+                y2={-s.b[1]}
+                style={{ strokeWidth: sw * 4, cursor: s.axis === 'r' ? 'pointer' : s.axis === 'v' ? 'ew-resize' : 'ns-resize' }}
+                onPointerDown={(e) => down(e, s.key, s.axis, s.line)}
+              >
+                <title>{s.on ? 'Klik: usuń ten odcinek' : 'Klik: przywróć ten odcinek'}{s.axis !== 'r' ? '. Przeciągnij: przesuń przegródkę.' : ''}</title>
+              </line>
+            </g>
+          ))}
+          {radialMode && Number(p.ring) > 2 * t && <circle className="div-seg on" r={Number(p.ring) / 2} style={{ strokeWidth: sw, fill: 'none' }} />}
+        </g>
+        <text className="div-front" x={0} y={(shape === 'rect' ? id / 2 : ext) + pad * 0.85} style={{ fontSize: Math.max(3, Math.max(iw, id) / 22) }}>
+          przód
+        </text>
+      </svg>
+      <p className="desc">
+        {radialMode ? 'Klik w przegródkę usuwa ją albo przywraca.' : `Klik w odcinek usuwa go albo przywraca (łączy komory). Przeciągnij, żeby przesunąć. Komora min. ${MIN_CELL} mm.`}
+      </p>
+      {!radialMode && (
+        <>
+          <p className="desc">
+            Komory wzdłuż X: {cells(l.xs, iw).join(' / ')} mm · wzdłuż Y: {cells(l.ys, id).join(' / ')} mm
+          </p>
+          <div className="row">
+            <button className="small" onClick={() => save(addInWidestGap(base, 'v'))} title="Nowa przegródka od przodu do tyłu, w najszerszej komorze">
+              + wzdłuż
+            </button>
+            <button className="small" onClick={() => save(addInWidestGap(base, 'h'))} title="Nowa przegródka od lewej do prawej, w najgłębszej komorze">
+              + w poprzek
+            </button>
+            <button className="small" onClick={() => save(evenOut(base))}>
+              Równe odstępy
+            </button>
+            <button className="small" onClick={() => save({ ...base, off: [] })} title="Przywraca wszystkie usunięte odcinki">
+              Przywróć odcinki
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function PartProperties({ part }: { part: Part }) {
   const st = useStore();
   const def = DEFS[part.type];
@@ -531,6 +653,11 @@ function PartProperties({ part }: { part: Part }) {
             Całość na {height} mm
           </button>
         </div>
+      )}
+      {(part.type === 'box' || part.type === 'drawer') && (
+        <Section title="▦ Układ przegródek" info={INFO.dividers} open={typeof part.params.div === 'string' && part.params.div.length > 0}>
+          <DividerEditor part={part} />
+        </Section>
       )}
       <Helpers part={part} />
       {part.type === 'connector' && <ConnectorWalls part={part} />}

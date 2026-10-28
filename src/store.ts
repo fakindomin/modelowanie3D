@@ -10,6 +10,7 @@ import type { Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from '
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
+import { gridSegments, layoutOf } from './geom/dividers';
 
 export const PALETTE = ['#a9aeb3', '#e8873a', '#5bb974', '#c9b48a', '#7f8c99', '#d97757', '#8fbf9f', '#b8a07a'];
 const FIG_PALETTE = ['#e9d8c4', '#f0b6a8', '#b9d7a8', '#a8c8e8', '#f2d68a', '#d8b8e8'];
@@ -1029,10 +1030,24 @@ export const useStore = create<State>((set, get) => {
         ['Ścianka lewa', t, D - 2 * t, h, -W / 2 + t / 2, 0, b],
         ['Ścianka prawa', t, D - 2 * t, h, W / 2 - t / 2, 0, b],
       ];
-      if (src.type === 'box') {
-        const nx = Math.round(Number(p.nx) || 1), ny = Math.round(Number(p.ny) || 1);
-        for (let i = 1; i < nx; i++) plates.push([`Przegródka ${i}`, t, D - 2 * t, h, -W / 2 + t + ((W - 2 * t) * i) / nx, 0, b]);
-        for (let i = 1; i < ny; i++) plates.push([`Przegródka poprzeczna ${i}`, W - 2 * t, t, h, 0, -D / 2 + t + ((D - 2 * t) * i) / ny, b]);
+      // Dividers become one plate per segment between crossings, so each compartment wall can go on its own.
+      const top = src.type === 'drawer' ? H - 2 : H - (Number(p.low) || 0);
+      if (top > b + 0.2) {
+        const iw = W - 2 * t, id = D - 2 * t, hd = top - b;
+        const segs = gridSegments(layoutOf(p), iw, id);
+        const inner = (v: number, lim: number) => Math.abs(Math.abs(v) - lim) > 0.01;
+        for (const sg of segs) {
+          if (!sg.on) continue;
+          const j = Number(sg.key.split(':')[1]);
+          if (sg.axis === 'v') {
+            // Ends at a crossing reach half into it, ends at a wall stop at its inner face.
+            const y0 = sg.a[1] - (inner(sg.a[1], id / 2) ? t / 2 : 0), y1 = sg.b[1] + (inner(sg.b[1], id / 2) ? t / 2 : 0);
+            plates.push([`Przegródka wzdłuż ${sg.line + 1}, odcinek ${j + 1}`, t, y1 - y0, hd, sg.a[0], (y0 + y1) / 2, b]);
+          } else {
+            const x0 = sg.a[0] - (inner(sg.a[0], iw / 2) ? t / 2 : 0), x1 = sg.b[0] + (inner(sg.b[0], iw / 2) ? t / 2 : 0);
+            plates.push([`Przegródka w poprzek ${sg.line + 1}, odcinek ${j + 1}`, x1 - x0, t, hd, (x0 + x1) / 2, sg.a[1], b]);
+          }
+        }
       }
       const next = parts.filter((x) => x.id !== id);
       const at = (x: number, y: number, z: number): Vec3 => {
@@ -1403,6 +1418,11 @@ function lidParams(box: Part, lid: Part): Params {
   const clear = (Number(box.params.low) || 0) >= (Number(lid.params.R) || 0);
   p.nx = clear ? 1 : (box.params.nx ?? 1);
   p.ny = clear ? 1 : (box.params.ny ?? 1);
+  // The editor's layout and the radial spokes move the slots too.
+  p.div = clear ? '' : (box.params.div ?? '');
+  p.divMode = box.params.divMode ?? 'grid';
+  p.nr = clear ? 0 : (box.params.nr ?? 0);
+  p.rot = box.params.rot ?? 0;
   return p;
 }
 

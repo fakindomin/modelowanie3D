@@ -16,8 +16,12 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Pokrywka idzie za pudełkiem:** pokrywka dodana do pudełka sama zmienia wymiary razem z nim. Przy
   przegródkach rant dostaje szczeliny, a przy rowkach pokrywka jest wsuwana. Przegródki można obniżyć
   („Przegródki niższe o”). „Odłącz od pudełka” zostawia pokrywkę taką, jaka jest.
-- **Rozbij na płyty:** pudełko albo szufladę można zamienić na dno, ścianki i przegródki (dalej jedna
-  bryła), żeby zmienić każdą płytę osobno.
+- **Układ przegródek:** widok pudełka lub szuflady z góry. Klik w odcinek przegródki usuwa go albo
+  przywraca (łączy komory), przeciągnięcie przesuwa przegródkę (komora min. 5 mm). Okrągłe i
+  sześciokątne pudełka mają przegródki na krzyż albo promieniowe („tort”) z pierścieniem w środku.
+  Przegródki są zawsze przycięte do wnętrza pudełka.
+- **Rozbij na płyty:** pudełko albo szufladę można zamienić na dno, ścianki i odcinki przegródek między
+  skrzyżowaniami (dalej jedna bryła), żeby zmienić albo usunąć każdą płytę osobno.
 - **Miejsca na magnesy:** jeden przycisk przy pudełku (gotowym albo złożonym z płyt) lub pokrywce.
   Silnik robi gniazda (luz 0,2 mm, min. 1,2 mm ścianki), dokłada słupki tam, gdzie ścianka jest za
   cienka, i lustrzane gniazda w pokrywce. Opcje: 4/6/8 magnesów, magnesy ukryte (z wysokością pauzy
