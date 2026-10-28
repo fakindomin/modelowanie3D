@@ -1,17 +1,26 @@
 import type { Manifold } from 'manifold-3d';
-import type { Part } from '../types';
+import type { Part, Vec3 } from '../types';
+import { M } from './manifold';
 import { buildBodies, failed, worldBox, worldManifold } from './parts';
+import { surfaceAbove, surfaceBelow } from './snap';
+import { findLid, ringOk } from './magnets';
+
+/** A correction "Popraw wszystkie" may apply. */
+export type Fix = { kind: 'move'; id: string; position: Vec3 } | { kind: 'mirror'; body: number; lid: string; resting: boolean };
 
 export interface Issue {
   level: 'error' | 'warn' | 'info';
   text: string;
   /** What to select when the issue is clicked: a part id or "g:<body>". */
   select?: string;
+  fix?: Fix;
 }
 
 export interface CheckResult {
   issues: Issue[];
   bodies: number;
+  /** Heading for a focused check (e.g. magnets when a lid is added). */
+  title?: string;
 }
 
 const fmt = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
@@ -130,6 +139,7 @@ export function runCheck(parts: Part[], minWall: number): CheckResult {
       }
       if (!cuts) issues.push({ level: 'warn', text: `„${h.name}” nic nie wycina. Przesuń go w bryłę albo usuń.`, select: h.id });
     }
+    issues.push(...magnetIssues(parts));
   } finally {
     bodies.forEach((b) => {
       b.geometry.dispose();
@@ -138,3 +148,85 @@ export function runCheck(parts: Part[], minWall: number): CheckResult {
   }
   return { issues, bodies: bodies.length };
 }
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * Magnet pockets placed by hand: flush with the surface (or sealed 0,4–1,2 mm under it), fully in
+ * material with a wall around, laid out symmetrically, and matched by pockets in the lid.
+ */
+export function magnetIssues(parts: Part[]): Issue[] {
+  const issues: Issue[] = [];
+  const bodies = [...new Set(parts.filter((p) => p.type === 'magnet' && p.hole).map((p) => p.body))];
+  for (const body of bodies) {
+    const solids = parts.filter((p) => p.body === body && !p.hole);
+    if (!solids.length) continue;
+    const pockets = parts.filter((p) => p.body === body && p.type === 'magnet' && p.hole);
+    const ms = solids.map(worldManifold);
+    const union = M().Manifold.union(ms);
+    ms.forEach((m) => m.delete());
+    const box = worldBox(solids[0]).clone();
+    solids.forEach((p) => box.union(worldBox(p)));
+    try {
+      for (const p of pockets) {
+        const hb = worldBox(p);
+        const x = (hb.min.x + hb.max.x) / 2, y = (hb.min.y + hb.max.y) / 2, r = (hb.max.x - hb.min.x) / 2;
+        let surf = -Infinity, under = Infinity;
+        for (const s of solids) {
+          surf = Math.max(surf, surfaceBelow(s, x, y) ?? -Infinity);
+          under = Math.min(under, surfaceAbove(s, x, y) ?? Infinity);
+        }
+        if (!Number.isFinite(surf)) {
+          issues.push({ level: 'warn', text: `„${p.name}” nie leży nad żadną częścią bryły ${body}.`, select: p.id });
+          continue;
+        }
+        // A pocket opens at the face it is closest to: the top (box rim) or the underside (lid lying on the box).
+        const gapTop = surf - hb.max.z, gapBot = hb.min.z - under;
+        const fromBelow = Number.isFinite(under) && Math.abs(gapBot) < Math.abs(gapTop);
+        const gap = fromBelow ? gapBot : gapTop;
+        const shift = fromBelow ? -gap : gap;
+        const where = fromBelow ? 'pod spodem' : 'ponad powierzchnię';
+        const flush: Vec3 = [p.position[0], p.position[1], r2(p.position[2] + shift)];
+        if (gap < -0.05) {
+          issues.push({ level: 'warn', text: `„${p.name}” wystaje ${fmt(-gap)} mm ${where}: magnes nie będzie równo z krawędzią.`, select: p.id, fix: { kind: 'move', id: p.id, position: flush } });
+          continue;
+        }
+        if ((gap > 0.05 && gap < 0.4) || gap > 1.25) {
+          issues.push({
+            level: 'warn',
+            text: `„${p.name}” jest ${fmt(gap)} mm ${fromBelow ? 'nad spodem' : 'pod powierzchnią'}: za głęboko na odkryte gniazdo${gap < 0.4 ? ', a za cienko na ukryte (min. 0,4 mm)' : ', a za grubo na ukryte (maks. 1,2 mm)'}. Poprawka zrówna je z powierzchnią.`,
+            select: p.id,
+            fix: { kind: 'move', id: p.id, position: flush },
+          });
+          continue;
+        }
+        const pm = worldManifold(p);
+        const inter = pm.intersect(union);
+        const inside = inter.volume() / Math.max(pm.volume(), 1e-6);
+        inter.delete();
+        pm.delete();
+        if (inside < 0.97) issues.push({ level: 'warn', text: `„${p.name}” wychodzi poza materiał (przebija ściankę albo dno). Przesuń je albo dodaj słupek.`, select: p.id });
+        else if (!ringOk(union, x, y, r, (hb.min.z + hb.max.z) / 2))
+          issues.push({ level: 'warn', text: `Ścianka wokół „${p.name}” jest cieńsza niż 1,2 mm. Magnes może ją rozsadzić; dodaj słupek albo przesuń gniazdo do środka.`, select: p.id });
+      }
+      if (pockets.length > 1) {
+        const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2;
+        const has = (x: number, y: number) => pockets.some((q) => Math.hypot(q.position[0] - x, q.position[1] - y) < 0.6);
+        const odd = pockets.find((q) => !has(2 * cx - q.position[0], q.position[1]) && !has(q.position[0], 2 * cy - q.position[1]));
+        if (odd) issues.push({ level: 'info', text: `Gniazda w bryle ${body} nie są rozstawione symetrycznie (np. „${odd.name}”). Pokrywka obrócona o 180° nie będzie pasować.`, select: odd.id });
+      }
+      const lid = findLid(parts, body, box);
+      if (lid) {
+        const inLid = parts.filter((q) => q.body === lid.part.body && q.type === 'magnet').length;
+        if (!inLid)
+          issues.push({ level: 'warn', text: `Pokrywka „${lid.part.name}” nie ma gniazd na magnesy. Poprawka doda ${pockets.length} ${pockets.length % 10 >= 2 && pockets.length % 10 <= 4 && (pockets.length % 100 < 12 || pockets.length % 100 > 14) ? 'lustrzane gniazda' : 'lustrzanych gniazd'}.`, select: lid.part.id, fix: { kind: 'mirror', body, lid: lid.part.id, resting: lid.resting } });
+        else if (inLid !== pockets.length)
+          issues.push({ level: 'warn', text: `Pudełko ma ${pockets.length} gniazd, a pokrywka „${lid.part.name}” ${inLid}.`, select: lid.part.id });
+      }
+    } finally {
+      union.delete();
+    }
+  }
+  return issues;
+}
+

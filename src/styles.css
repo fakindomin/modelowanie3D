@@ -168,3 +168,39 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 .checkres li.error { border-left: 3px solid var(--danger); }
 .checkres li.warn { border-left: 3px solid #e0b04a; }
 .checkres li.info { border-left: 3px solid var(--muted); }
+
+/* "Wymiary" mode */
+.mlabel {
+  position: absolute; pointer-events: none; z-index: 5;
+  background: #ffd54a; color: #1a1e26; font-weight: 600; font-size: 12.5px;
+  padding: 3px 8px; border-radius: 5px; white-space: nowrap; box-shadow: 0 2px 8px #0008;
+}
+.measure {
+  position: absolute; left: 10px; top: 10px; width: 280px; max-height: 60%; overflow-y: auto; z-index: 4;
+  background: #191d25ee; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12.5px;
+}
+.measure-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.measure .pair { position: relative; border-top: 1px solid var(--line); padding: 6px 0; }
+.measure .pair .x { position: absolute; right: 0; top: 6px; }
+.measure .pin { margin: 2px 22px 2px 0; }
+.measure .pin b { color: #3ddc84; }
+.measure .pin em { color: var(--muted); font-style: normal; }
+.measure .dist { color: #ffd54a; font-weight: 600; margin-top: 4px; }
+.measure .field { margin-top: 3px; }
+
+/* Families of ready elements */
+.tile.family { padding: 0; flex-direction: row; align-items: stretch; gap: 0; cursor: default; }
+.tile.family .fam-main { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; background: none; border: 0; cursor: pointer; color: inherit; font-size: 12px; }
+.tile.family .fam-more { width: 26px; background: none; border: 0; border-left: 1px solid var(--line); color: var(--muted); cursor: pointer; font-size: 11px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2; }
+.tile.family.open { border-color: var(--accent); }
+.tile.family .fam-more:hover, .tile.family .fam-main:hover { color: var(--text); }
+.variants { grid-column: 1 / -1; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 6px; }
+.variant { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 3px 0; font-size: 12px; }
+.variant + .variant { border-top: 1px solid var(--line); }
+.variant .vname { display: flex; align-items: center; gap: 4px; color: var(--text); }
+.variant .vname svg { width: 18px; height: 18px; color: #a9c8f0; flex: none; }
+.variant .sizes { display: flex; gap: 3px; flex: none; }
+.chip { min-width: 22px; padding: 2px 5px; font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 5px; cursor: pointer; }
+.chip.main { border-color: #3f5f8a; }
+.chip:hover { border-color: var(--accent); }
+.chip.recent { color: var(--accent-2); }

@@ -1,15 +1,27 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
-import { DEFS, cabinetOpenings, defaultParams, type Params } from './catalog';
-import { built, partMatrix, worldBox } from './geom/parts';
+import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from './catalog';
+import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
+import { buildBodies, built, partMatrix, worldBox } from './geom/parts';
+import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planSpots, wallThickness, type LidRef, type MagnetOptions } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
-import { runCheck, type CheckResult } from './geom/check';
-import type { Part, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
+import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
+import type { Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
+import type { Feature } from './scene/measure';
 
 const PALETTE = ['#4f8edc', '#e0864a', '#5bb37a', '#c96bc4', '#d9b84a', '#53b6c4', '#d76565', '#8a8fdc'];
 const FIG_PALETTE = ['#e9d8c4', '#f0b6a8', '#b9d7a8', '#a8c8e8', '#f2d68a', '#d8b8e8'];
 export const HOLE_COLOR = '#8b939e';
 const STORAGE_KEY = 'modelowanie3d.project';
+const RECENT_KEY = 'modelowanie3d.recent';
+
+function loadRecent(): Record<string, Params> {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '{}') as Record<string, Params>;
+  } catch {
+    return {};
+  }
+}
 const DEG = Math.PI / 180;
 
 export interface Settings {
@@ -20,7 +32,7 @@ export interface Settings {
   minWall: number;
 }
 
-export type PatternKind = 'linear' | 'circle' | 'corners' | 'mirrorX' | 'mirrorY';
+export type PatternKind = 'linear' | 'circle' | 'corners' | 'mirrorX' | 'mirrorY' | 'mirrorXY';
 export interface PatternOptions {
   count: number;
   distance: number;
@@ -52,6 +64,15 @@ interface State {
   toast: string | null;
   fitRequest: number;
   check: CheckResult | null;
+  /** "Wymiary" mode: hovering shows sizes, clicks pin features and measure between them. */
+  measure: boolean;
+  measureHover: (Feature & { x: number; y: number }) | null;
+  pins: Feature[];
+  setMeasure(on: boolean): void;
+  setMeasureHover(f: (Feature & { x: number; y: number }) | null): void;
+  addPin(f: Feature): void;
+  removePin(i: number): void;
+  clearPins(): void;
   fit(): void;
 
   setTab(tab: Tab): void;
@@ -75,6 +96,15 @@ interface State {
   matchingThreadHole(id: string): void;
   addDrawers(id: string): void;
   addLid(id: string): void;
+  /** Magnet pockets on the top edge of a box (ready-made or built from plates) and mirrored ones in its lid. */
+  addMagnets(id: string, opt: MagnetOptions): void;
+  /** Adds a family variant in size S/M/L or with the dimensions last used for its type. */
+  addVariant(family: Family, variant: Variant, size: Size | 'recent'): void;
+  /** Last parameters the user set, per part type ("Ostatnie" in the library). */
+  recent: Record<string, Params>;
+  /** Replaces a box or drawer with the plates it is made of (grouped in the same body). */
+  explode(id: string): void;
+  applyFixes(fixes: Fix[]): void;
   pattern(id: string, kind: PatternKind, opt: PatternOptions): void;
   unlink(id: string): void;
   setTexture(id: string, texture: Texture | undefined): void;
@@ -101,6 +131,9 @@ interface State {
   setSnapTargets(ids: string[]): void;
   notify(msg: string): void;
 }
+
+/** Polish plural: 2–4 (but not 12–14) take the "few" form. */
+const few = (n: number) => n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14);
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const round = (v: number, d = 3) => Math.round(v * 10 ** d) / 10 ** d;
@@ -199,6 +232,8 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
   const shareParams = !!params && !!src.link;
   const shareTexture = 'texture' in patch && !!src.link;
   const sharePose = !!src.rigid && (patch.position !== undefined || patch.rotation !== undefined);
+  const follow = src.pattern && patch.position && patch.pattern === undefined ? followers(parts, src, own.position) : null;
+  if (follow) own.pattern = follow.get(src.id)!.pattern;
   return parts.map((p) => {
     if (p.id === id) return own;
     let q = p;
@@ -209,8 +244,35 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
     }
     if (shareTexture && p.link === src.link) q = { ...q, texture: patch.texture };
     if (sharePose && p.rigid === src.rigid) q = { ...q, position: own.position, rotation: own.rotation };
+    const f = follow?.get(p.id);
+    if (f) q = { ...q, position: f.position, pattern: f.pattern };
     return q;
   });
+}
+
+/** New positions of every member of `src`'s pattern after `src` moves to `to` (rule kept). */
+function followers(parts: Part[], src: Part, to: Vec3): Map<string, { position: Vec3; pattern: PatternRule }> {
+  const r = src.pattern!;
+  const cx = src.position[0] + r.c[0], cy = src.position[1] + r.c[1];
+  const out = new Map<string, { position: Vec3; pattern: PatternRule }>();
+  const d: Vec3 = [to[0] - src.position[0], to[1] - src.position[1], to[2] - src.position[2]];
+  const R = Math.hypot(to[0] - cx, to[1] - cy);
+  const a0 = Math.atan2(to[1] - cy, to[0] - cx) - (r.i * 2 * Math.PI) / r.n;
+  const ux = (to[0] - cx) * r.s[0], uy = (to[1] - cy) * r.s[1];
+  for (const p of parts) {
+    const q = p.pattern;
+    if (!q || q.id !== r.id) continue;
+    let pos: Vec3;
+    if (p.id === src.id) pos = to;
+    else if (r.kind === 'linear') pos = [p.position[0] + d[0], p.position[1] + d[1], p.position[2] + d[2]];
+    else if (r.kind === 'circle') {
+      const a = a0 + (q.i * 2 * Math.PI) / q.n;
+      pos = [cx + R * Math.cos(a), cy + R * Math.sin(a), to[2]];
+    } else pos = [cx + q.s[0] * ux, cy + q.s[1] * uy, to[2]];
+    pos = r3(pos);
+    out.set(p.id, { position: pos, pattern: { ...q, c: [round(cx - pos[0]), round(cy - pos[1])] } });
+  }
+  return out;
 }
 
 export const useStore = create<State>((set, get) => {
@@ -325,6 +387,81 @@ export const useStore = create<State>((set, get) => {
     part.position = besideAll(parts, size);
   };
 
+  /**
+   * Pockets in a lid mirroring the box pockets at (x, y) around the box centre (cx, cy).
+   * A lid lying on the box gets them in its underside; a lid elsewhere is treated as printed
+   * the usual way (flipped onto the box), so they are mirrored across X. Lids with a rim get
+   * notches where the rim would hit a column. Returns the lid, possibly thickened.
+   */
+  const lidPockets = (
+    next: Part[],
+    lid: LidRef,
+    spots: { x: number; y: number; s: [number, number]; set: string; notch?: number }[],
+    c: [number, number],
+    size: string,
+    hidden: boolean,
+    link: string,
+  ) => {
+    const { depth } = magnetDims(size);
+    const need = depth + (hidden ? MAGNET_COVER : 0) + 1; // 1 mm of plastic left on the outer face
+    let part = next.find((p) => p.id === lid.part.id)!;
+    const T = Number(part.params.T);
+    let thickened = false;
+    if (Number.isFinite(T) && (part.type === 'lid' || part.type === 'slab' || part.type === 'plate') && T < need) {
+      part = { ...part, params: { ...part.params, T: Math.ceil(need * 5) / 5 } };
+      next.splice(next.indexOf(next.find((p) => p.id === part.id)!), 1, part);
+      thickened = true;
+    }
+    const pats: Record<string, string> = {};
+    const lb = worldBox(part);
+    const m = partMatrix(part.position, part.rotation);
+    const lc = new THREE.Vector3(0, 0, 0).applyMatrix4(m);
+    const R = Number(part.params.R) || 0;
+    const t = Number(part.params.T) || 0;
+    spots.forEach((sp, k) => {
+      let pos: Vec3, rotation: Vec3, s: [number, number], center: [number, number];
+      if (lid.resting) {
+        pos = [sp.x, sp.y, lb.min.z + (hidden ? MAGNET_COVER : 0)];
+        rotation = [0, 0, 0];
+        s = sp.s;
+        center = c;
+      } else {
+        // Plate top (z = T in the lid's own frame) is the side that touches the box.
+        const local = new THREE.Vector3(sp.x - c[0], -(sp.y - c[1]), t - depth - (hidden ? MAGNET_COVER : 0)).applyMatrix4(m);
+        pos = [local.x, local.y, local.z];
+        rotation = [...part.rotation];
+        s = [sp.s[0], -sp.s[1]];
+        center = [lc.x, lc.y];
+        if (sp.notch && R > 0 && part.type === 'lid') {
+          const nl = new THREE.Vector3(sp.x - c[0], -(sp.y - c[1]), t - 0.01).applyMatrix4(m);
+          next.push(
+            makePart('holeBox', next, {
+              name: `Wcięcie w rancie ${k + 1}`,
+              params: { W: sp.notch, D: sp.notch, H: R + 1, luz: 0 },
+              position: r3([nl.x, nl.y, nl.z]),
+              rotation: [...part.rotation],
+              body: part.body,
+            }),
+          );
+        }
+      }
+      const id = (pats[sp.set] ??= uid());
+      const p3 = r3(pos);
+      next.push(
+        makePart('magnet', next, {
+          name: `Magnes w pokrywce ${k + 1}${hidden ? ' (ukryty)' : ''}`,
+          params: { size, luz: MAGNET_LUZ },
+          position: p3,
+          rotation,
+          body: part.body,
+          link,
+          pattern: { id, kind: 'sym', i: k, n: spots.length, s, c: [round(center[0] - p3[0]), round(center[1] - p3[1])] },
+        }),
+      );
+    });
+    return { lid: part, thickened };
+  };
+
   const initial = loadSaved();
 
   return {
@@ -341,7 +478,21 @@ export const useStore = create<State>((set, get) => {
     toast: null,
     fitRequest: 0,
     check: null,
+    measure: false,
+    measureHover: null,
+    recent: loadRecent(),
+    pins: [],
     fit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),
+    setMeasure: (on) => set({ measure: on, measureHover: null, pins: on ? get().pins : [], preview: false }),
+    setMeasureHover: (f) => {
+      const cur = get().measureHover;
+      if (cur === f || (cur && f && cur.label === f.label && cur.pick === f.pick && cur.x === f.x && cur.y === f.y)) return;
+      set({ measureHover: f });
+    },
+    addPin: (f) => set((s) => ({ pins: [...s.pins, f] })),
+    // Removes the measurement (pair of pins) that pin i belongs to.
+    removePin: (i) => set((s) => ({ pins: s.pins.filter((_, k) => Math.floor(k / 2) !== Math.floor(i / 2)) })),
+    clearPins: () => set({ pins: [] }),
 
     setTab(tab) {
       const s = get();
@@ -418,6 +569,16 @@ export const useStore = create<State>((set, get) => {
 
     update(id, patch) {
       commit(applyPatch(get().parts, id, patch));
+      const p = get().parts.find((x) => x.id === id);
+      if (patch.params && p && !p.params.piece && p.type !== 'figurine') {
+        const recent = { ...get().recent, [p.type]: p.params };
+        set({ recent });
+        try {
+          localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+        } catch {
+          /* storage unavailable */
+        }
+      }
     },
 
     updateLive(id, patch) {
@@ -468,6 +629,7 @@ export const useStore = create<State>((set, get) => {
           body: p.hole ? p.body : src.rigid ? nextBody(next) : (solidBody ||= nextBody(next)),
           link,
           rigid: p.rigid ? link : undefined,
+          pattern: undefined,
         };
         if (!firstId) firstId = copy.id;
         next.push(copy);
@@ -604,10 +766,217 @@ export const useStore = create<State>((set, get) => {
       if (!box) return;
       const b = worldBox(box);
       const lid = makePart('lid', parts, {
-        params: { ...defaultParams(DEFS.lid), W: box.params.W, D: box.params.D, wall: box.params.T },
+        params: { ...defaultParams(DEFS.lid), shape: box.params.shape ?? 'rect', W: box.params.W, D: box.params.D, wall: box.params.T },
         position: [round(b.max.x + 10 + Number(box.params.W) / 2), round(box.position[1]), 0],
       });
       commit([...parts, lid], { selectedId: lid.id });
+      // Pockets placed by hand in the box: check them now that a lid is coming and offer fixes.
+      const issues = magnetIssues(get().parts).filter((i) => i.fix);
+      if (issues.length) set({ check: { issues, bodies: 0, title: 'Gniazda na magnesy' } });
+    },
+
+    addMagnets(id, opt) {
+      const { parts } = get();
+      let body: number | null = groupBody(id);
+      let lid: LidRef | null = null;
+      const part = parts.find((p) => p.id === id);
+      if (body === null && part) {
+        if (part.type === 'lid') {
+          body = boxForLid(parts, part);
+          lid = { part, resting: false };
+          if (body === null) return get().notify('Nie widzę pudełka do tej pokrywki. Zaznacz pudełko i dodaj magnesy stamtąd.');
+        } else body = part.body;
+      }
+      if (body === null) return;
+      const boxPart = parts.find((p) => p.body === body && p.type === 'box');
+      if (boxPart && boxPart.params.shape && boxPart.params.shape !== 'rect') return get().notify('Magnesy dodam na razie tylko do prostokątnego pudełka.');
+      const box = bodyBox(parts, body);
+      const [res] = buildBodies(parts, [body]);
+      if (!res || box.isEmpty()) return;
+      const spots = planSpots(res.manifold, box, opt);
+      const wall = boxPart ? Number(boxPart.params.T) : wallThickness(res.manifold, box);
+      res.geometry.dispose();
+      res.manifold.delete();
+      lid ??= findLid(parts, body, box);
+      const { depth, r } = magnetDims(opt.size);
+      const top = box.max.z;
+      const c: [number, number] = [round((box.min.x + box.max.x) / 2), round((box.min.y + box.max.y) / 2)];
+      const color = parts.find((p) => p.body === body && !p.hole)?.color ?? PALETTE[0];
+      const link = uid(), colLink = uid();
+      const pats: Record<string, string> = {}, colPats: Record<string, string> = {};
+      const next = [...parts];
+      let columns = 0;
+      spots.forEach((sp, k) => {
+        if (sp.column) {
+          const col = sp.column;
+          const pos: Vec3 = r3([col.cx, col.cy, box.min.z]);
+          columns++;
+          next.push(
+            makePart('cube', next, {
+              name: `Słupek pod magnes ${k + 1}`,
+              params: { W: col.w, D: col.d, H: round(top - box.min.z, 2) },
+              position: pos,
+              body,
+              color,
+              link: colLink,
+              pattern: { id: (colPats[sp.set] ??= uid()), kind: 'sym', i: k, n: spots.length, s: sp.s, c: [round(c[0] - pos[0]), round(c[1] - pos[1])] },
+            }),
+          );
+        }
+        const pos = r3([sp.x, sp.y, top - depth - (opt.hidden ? MAGNET_COVER : 0)]);
+        next.push(
+          makePart('magnet', next, {
+            name: `Magnes ${k + 1}${opt.hidden ? ' (ukryty)' : ''}`,
+            params: { size: opt.size, luz: MAGNET_LUZ },
+            position: pos,
+            body,
+            link,
+            pattern: { id: (pats[sp.set] ??= uid()), kind: 'sym', i: k, n: spots.length, s: sp.s, c: [round(c[0] - pos[0]), round(c[1] - pos[1])] },
+          }),
+        );
+      });
+      let lidMsg = '';
+      if (!lid && opt.lid !== 'none') {
+        const W = round(box.max.x - box.min.x, 2), D = round(box.max.y - box.min.y, 2);
+        const made = makePart('lid', next, {
+          params: { ...defaultParams(DEFS.lid), W, D, wall, R: opt.lid === 'rim' ? 4 : 0 },
+          position: [round(box.max.x + 10 + W / 2), c[1], 0],
+        });
+        next.push(made);
+        lid = { part: made, resting: false };
+        lidMsg = opt.lid === 'rim' ? ' Dodałem pokrywkę z rantem.' : ' Dodałem płaską pokrywkę.';
+      }
+      let pause = '';
+      if (lid) {
+        const notch = Math.ceil((2 * (r + MAGNET_WALL) + 0.6) * 5) / 5;
+        const out = lidPockets(
+          next,
+          lid,
+          spots.map((sp) => {
+            // Distance of the pocket centre from the outer edge it sits at; beyond the wall the lid's rim is in the way.
+            const ex = box.max.x - c[0] - Math.abs(sp.x - c[0]), ey = box.max.y - c[1] - Math.abs(sp.y - c[1]);
+            const edge = sp.set === 'sideX' ? ex : sp.set === 'sideY' ? ey : Math.min(ex, ey);
+            return { ...sp, notch: sp.column || edge + r + MAGNET_WALL > wall ? notch : undefined };
+          }),
+          c,
+          opt.size,
+          opt.hidden,
+          link,
+        );
+        lidMsg += ` W pokrywce ${spots.length} ${few(spots.length) ? 'lustrzane gniazda' : 'lustrzanych gniazd'}${out.thickened ? `, pogrubiona do ${String(out.lid.params.T).replace('.', ',')} mm, żeby magnes się zmieścił` : ''}.`;
+        if (opt.hidden) pause = ` Pauza w druku: pudełko na Z = ${String(round(top - MAGNET_COVER - box.min.z, 2)).replace('.', ',')} mm${lid.resting ? '' : `, pokrywka na Z = ${String(round(Number(out.lid.params.T) - MAGNET_COVER, 2)).replace('.', ',')} mm`}. Wtedy włóż magnesy i wznów druk.`;
+      } else if (opt.hidden) pause = ` Pauza w druku na Z = ${String(round(top - MAGNET_COVER - box.min.z, 2)).replace('.', ',')} mm.`;
+      commit(next, { selectedId: groupId(body) });
+      get().notify(
+        `Dodano ${spots.length} ${few(spots.length) ? 'gniazda' : 'gniazd'} na magnesy ${opt.size.replace('x', '×')} mm${columns ? ` i ${columns} ${columns === 1 ? 'słupek' : few(columns) ? 'słupki' : 'słupków'} (ścianka była za cienka)` : ''}.${lidMsg}${pause} Bieguny: przed wklejeniem złóż magnesy pudełka i pokrywki parami.`,
+      );
+    },
+
+    addVariant(family, variant, size) {
+      const def = DEFS[variant.type];
+      const base = defaultParams(def);
+      let params: Params;
+      if (size === 'recent') params = { ...base, ...(get().recent[variant.type] ?? {}), ...(variant.params ?? {}) };
+      else {
+        const preset = (variant.sizes ?? family.sizes)?.[size];
+        if (preset) params = { ...base, ...preset, ...(variant.params ?? {}) };
+        else {
+          params = { ...base, ...(variant.params ?? {}) };
+          for (const d of def.params)
+            if (d.type === 'number' && SCALED.includes(d.key) && d.def > 0) params[d.key] = Math.min(d.max, Math.max(d.min, round(d.def * SCALE[size], 1)));
+        }
+      }
+      const id = get().add(variant.type, { params });
+      const part = get().parts.find((p) => p.id === id);
+      if (!part) return;
+      if (variant.extra === 'lid') {
+        get().addLid(id);
+        get().select(id);
+      } else if (variant.extra === 'drawers') get().addDrawers(id);
+      else if (variant.extra === 'hinged') {
+        const parts = get().parts;
+        const b = worldBox(part);
+        const lid = makePart('lid', parts, {
+          params: { ...defaultParams(DEFS.lid), W: part.params.W, D: part.params.D, T: 2, R: 0 },
+          position: [part.position[0], part.position[1], round(b.max.z)],
+        });
+        commit([...parts, lid], { selectedId: id });
+        get().add('hingePip');
+        get().notify('Pudełko z pokrywką na zawiasie print-in-place: drukuje się w całości, zawias jest od razu ruchomy.');
+      } else if (variant.extra === 'slide') {
+        const parts = get().parts;
+        const g = slideGroove(part.params);
+        const b = worldBox(part);
+        const lid = makePart('slab', parts, {
+          name: `Wsuwana pokrywka do: ${part.name}`,
+          params: { W: round(g.lidW, 2), D: round(g.lidD, 2), T: g.lidT },
+          position: [round(b.max.x + 10 + g.lidW / 2), part.position[1], 0],
+        });
+        commit([...parts, lid], { selectedId: id, fitRequest: get().fitRequest + 1 });
+        get().notify('Pokrywka wsuwa się od przodu w rowki pod górną krawędzią (luz 0,3 mm na stronę).');
+      }
+    },
+
+    explode(id) {
+      const { parts } = get();
+      const src = parts.find((p) => p.id === id);
+      if (!src || (src.type !== 'box' && src.type !== 'drawer')) return;
+      const p = src.params;
+      if (src.type === 'box' && ((p.shape && p.shape !== 'rect') || p.slide)) return get().notify('Na płyty rozbiję tylko prostokątne pudełko bez rowków.');
+      const W = Number(p.W), D = Number(p.D), H = Number(p.H), t = Number(p.T), b = Number(p.B);
+      const m = partMatrix(src.position, src.rotation);
+      const h = H - b;
+      // Plates in the part's own frame: [name, width, depth, height, centre x, centre y, bottom z].
+      const plates: [string, number, number, number, number, number, number][] = [
+        ['Dno', W, D, b, 0, 0, 0],
+        ['Ścianka przednia', W, t, h, 0, -D / 2 + t / 2, b],
+        ['Ścianka tylna', W, t, h, 0, D / 2 - t / 2, b],
+        ['Ścianka lewa', t, D - 2 * t, h, -W / 2 + t / 2, 0, b],
+        ['Ścianka prawa', t, D - 2 * t, h, W / 2 - t / 2, 0, b],
+      ];
+      if (src.type === 'box') {
+        const nx = Math.round(Number(p.nx) || 1), ny = Math.round(Number(p.ny) || 1);
+        for (let i = 1; i < nx; i++) plates.push([`Przegródka ${i}`, t, D - 2 * t, h, -W / 2 + t + ((W - 2 * t) * i) / nx, 0, b]);
+        for (let i = 1; i < ny; i++) plates.push([`Przegródka poprzeczna ${i}`, W - 2 * t, t, h, 0, -D / 2 + t + ((D - 2 * t) * i) / ny, b]);
+      }
+      const next = parts.filter((x) => x.id !== id);
+      const at = (x: number, y: number, z: number): Vec3 => {
+        const v = new THREE.Vector3(x, y, z).applyMatrix4(m);
+        return r3([v.x, v.y, v.z]);
+      };
+      for (const [name, w, d, hh, x, y, z] of plates)
+        next.push(makePart('slab', next, { name: `${src.name}: ${name}`, params: { W: round(w, 3), D: round(d, 3), T: round(hh, 3) }, position: at(x, y, z), rotation: [...src.rotation], body: src.body, color: src.color }));
+      if (src.type === 'drawer' && p.handle === 'notch') {
+        const r = Math.min(12, H / 2.5, W / 4);
+        next.push(makePart('hole', next, { name: `${src.name}: wycięcie na palec`, params: { D: round(2 * r, 2), H: round(4 * t, 2), luz: 0 }, position: at(0, -D / 2 + 2 * t, H), rotation: rotationAfter(src.rotation, AXES[0], 90), body: src.body }));
+      } else if (src.type === 'drawer' && p.handle === 'knob') {
+        const r = Math.min(6, H / 4);
+        next.push(makePart('cone', next, { name: `${src.name}: gałka`, params: { D1: round(2 * r, 2), D2: round(1.6 * r, 2), H: 8 }, position: at(0, -D / 2 + 0.01, H / 2), rotation: rotationAfter(src.rotation, AXES[0], 90), body: src.body, color: src.color }));
+      }
+      commit(next, { selectedId: groupId(src.body) });
+      get().notify(`Rozbito na ${next.length - parts.length + 1} części w bryle ${src.body}. Każdą płytę zmienisz osobno; razem dalej drukują się jako jedna bryła.`);
+    },
+
+    applyFixes(fixes) {
+      let next = [...get().parts];
+      for (const f of fixes) {
+        if (f.kind === 'move') next = next.map((p) => (p.id === f.id ? { ...p, position: f.position } : p));
+        else {
+          const lidPart = next.find((p) => p.id === f.lid);
+          if (!lidPart) continue;
+          const pockets = next.filter((p) => p.body === f.body && p.type === 'magnet');
+          if (!pockets.length) continue;
+          const box = bodyBox(next, f.body);
+          const c: [number, number] = [round((box.min.x + box.max.x) / 2), round((box.min.y + box.max.y) / 2)];
+          const spots = pockets.map((p) => ({ x: p.position[0], y: p.position[1], s: [Math.sign(p.position[0] - c[0]) || 1, Math.sign(p.position[1] - c[1]) || 1] as [number, number], set: 'm' }));
+          const link = pockets[0].link ?? uid();
+          next = next.map((p) => (pockets.includes(p) && !p.link ? { ...p, link } : p));
+          const hidden = box.max.z - worldBox(pockets[0]).max.z > 0.3;
+          lidPockets(next, { part: lidPart, resting: f.resting }, spots, c, String(pockets[0].params.size), hidden, link);
+        }
+      }
+      commit(next);
+      get().notify(`Poprawiono ${fixes.length} ${fixes.length === 1 ? 'rzecz' : 'rzeczy'}. „Cofnij” przywróci poprzedni stan.`);
     },
 
     pattern(id, kind, opt) {
@@ -615,17 +984,58 @@ export const useStore = create<State>((set, get) => {
       const src = parts.find((x) => x.id === id);
       if (!src) return;
       const link = src.link ?? uid();
+      const pid = uid();
       let ref = bodyBox(parts, src.body, src.id);
       if (ref.isEmpty()) ref = worldBox(src);
       const center = ref.getCenter(new THREE.Vector3());
-      const copies: { position: Vec3; rotation: Vec3 }[] = [];
+      type Copy = { position: Vec3; rotation: Vec3; rule: Omit<PatternRule, 'c' | 'id'> };
+      const copies: Copy[] = [];
       let moved: Vec3 | null = null;
+      let srcRule: Omit<PatternRule, 'c' | 'id'> = { kind: 'linear', i: 0, n: 1, s: [1, 1] };
+      let cx = center.x, cy = center.y;
       const n = Math.max(2, Math.round(opt.count));
+      const mirrored = (rot: Vec3, sx: number, sy: number): Vec3 => {
+        if (sx === 1 && sy === 1) return rot;
+        const S = new THREE.Matrix4().makeScale(sx, sy, 1);
+        const R = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(rot.map((r) => r * DEG) as Vec3)));
+        const e = new THREE.Euler().setFromRotationMatrix(S.clone().multiply(R).multiply(S));
+        return [e.x, e.y, e.z].map((r) => round(r / DEG, 2)) as Vec3;
+      };
+      // A mirror on a member of a mirrored set mirrors the whole set and keeps one rule (X then Y = 4 corners).
+      const prev = src.pattern?.kind === 'sym' && (kind === 'mirrorX' || kind === 'mirrorY') ? src.pattern : null;
+      if (prev) {
+        cx = src.position[0] + prev.c[0];
+        cy = src.position[1] + prev.c[1];
+        const members = parts.filter((p) => p.pattern?.id === prev.id);
+        const ax = kind === 'mirrorX' ? 0 : 1;
+        if (members.some((m) => m.pattern!.s[ax] === -1)) {
+          get().notify(`Ten szyk ma już lustro ${kind === 'mirrorX' ? 'X' : 'Y'}.`);
+          return;
+        }
+        const next = [...parts];
+        for (const m of members) {
+          const pos = [...m.position] as Vec3;
+          pos[ax] = 2 * (ax === 0 ? cx : cy) - pos[ax];
+          const s: [number, number] = ax === 0 ? [-m.pattern!.s[0], m.pattern!.s[1]] : [m.pattern!.s[0], -m.pattern!.s[1]];
+          next.push({
+            ...m,
+            id: uid(),
+            name: `${m.name} (lustro)`,
+            params: { ...m.params },
+            position: r3(pos),
+            rotation: mirrored(m.rotation, ax === 0 ? -1 : 1, ax === 1 ? -1 : 1),
+            pattern: { ...m.pattern!, s, c: [round(cx - pos[0]), round(cy - pos[1])] },
+          });
+        }
+        commit(next);
+        get().notify(`Dodano ${members.length} ${members.length === 1 ? 'kopię' : 'kopii'}. Przesuń jedną, a reszta przesunie się symetrycznie.`);
+        return;
+      }
       if (kind === 'linear') {
         for (let i = 1; i < n; i++) {
           const pos = [...src.position] as Vec3;
           pos[opt.axis] += opt.distance * i;
-          copies.push({ position: pos, rotation: src.rotation });
+          copies.push({ position: pos, rotation: src.rotation, rule: { kind: 'linear', i, n, s: [1, 1] } });
         }
       } else if (kind === 'circle') {
         const dx = src.position[0] - center.x, dy = src.position[1] - center.y;
@@ -633,41 +1043,54 @@ export const useStore = create<State>((set, get) => {
         if (R < 0.5) R = Math.max(5, Math.min(ref.max.x - ref.min.x, ref.max.y - ref.min.y) * 0.3);
         const a0 = Math.hypot(dx, dy) > 0.5 ? Math.atan2(dy, dx) : 0;
         moved = [center.x + R * Math.cos(a0), center.y + R * Math.sin(a0), src.position[2]];
+        srcRule = { kind: 'circle', i: 0, n, s: [1, 1] };
         for (let i = 1; i < n; i++) {
           const a = a0 + (i * 2 * Math.PI) / n;
-          copies.push({ position: [center.x + R * Math.cos(a), center.y + R * Math.sin(a), src.position[2]], rotation: rotationAfter(src.rotation, AXES[2], (i * 360) / n) });
+          copies.push({
+            position: [center.x + R * Math.cos(a), center.y + R * Math.sin(a), src.position[2]],
+            rotation: rotationAfter(src.rotation, AXES[2], (i * 360) / n),
+            rule: { kind: 'circle', i, n, s: [1, 1] },
+          });
         }
       } else if (kind === 'corners') {
         const e = opt.inset;
-        const pts: [number, number][] = [
-          [ref.min.x + e, ref.min.y + e],
-          [ref.max.x - e, ref.min.y + e],
-          [ref.max.x - e, ref.max.y - e],
-          [ref.min.x + e, ref.max.y - e],
+        moved = [ref.min.x + e, ref.min.y + e, src.position[2]];
+        srcRule = { kind: 'sym', i: 0, n: 4, s: [1, 1] };
+        const signs: [number, number][] = [
+          [-1, 1],
+          [-1, -1],
+          [1, -1],
         ];
-        moved = [pts[0][0], pts[0][1], src.position[2]];
-        for (const [x, y] of pts.slice(1)) copies.push({ position: [x, y, src.position[2]], rotation: src.rotation });
+        // Each copy mirrors the first corner by its signs.
+        signs.forEach((sg, i) =>
+          copies.push({ position: [cx + sg[0] * (moved![0] - cx), cy + sg[1] * (moved![1] - cy), src.position[2]], rotation: src.rotation, rule: { kind: 'sym', i: i + 1, n: 4, s: sg } }),
+        );
       } else {
-        const ax = kind === 'mirrorX' ? 0 : 1;
-        const pos = [...src.position] as Vec3;
-        pos[ax] = 2 * (ax === 0 ? center.x : center.y) - pos[ax];
-        const S = new THREE.Matrix4().makeScale(ax === 0 ? -1 : 1, ax === 1 ? -1 : 1, 1);
-        const R = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(src.rotation.map((r) => r * DEG) as Vec3)));
-        const e = new THREE.Euler().setFromRotationMatrix(S.clone().multiply(R).multiply(S));
-        copies.push({ position: pos, rotation: [e.x, e.y, e.z].map((r) => round(r / DEG, 2)) as Vec3 });
+        const signs: [number, number][] = kind === 'mirrorX' ? [[-1, 1]] : kind === 'mirrorY' ? [[1, -1]] : [[-1, 1], [-1, -1], [1, -1]];
+        srcRule = { kind: 'sym', i: 0, n: signs.length + 1, s: [1, 1] };
+        signs.forEach((sg, i) =>
+          copies.push({
+            position: [cx + sg[0] * (src.position[0] - cx), cy + sg[1] * (src.position[1] - cy), src.position[2]],
+            rotation: mirrored(src.rotation, sg[0], sg[1]),
+            rule: { kind: 'sym', i: i + 1, n: signs.length + 1, s: sg },
+          }),
+        );
       }
-      const next = parts.map((p) => (p.id === src.id ? { ...p, link, position: moved ? r3(moved) : p.position } : p));
+      const rule = (pos: Vec3, r: Omit<PatternRule, 'c' | 'id'>): PatternRule => ({ ...r, id: pid, c: [round(cx - pos[0]), round(cy - pos[1])] });
+      const srcPos = moved ? r3(moved) : src.position;
+      const next = parts.map((p) => (p.id === src.id ? { ...p, link, position: srcPos, pattern: rule(srcPos, srcRule) } : p));
       copies.forEach((c, i) => {
-        next.push({ ...src, id: uid(), name: `${src.name} · ${i + 2}`, params: { ...src.params }, link, position: r3(c.position), rotation: c.rotation });
+        const pos = r3(c.position);
+        next.push({ ...src, id: uid(), name: `${src.name} · ${i + 2}`, params: { ...src.params }, link, position: pos, rotation: c.rotation, pattern: rule(pos, c.rule) });
       });
       commit(next);
-      get().notify(`Dodano ${copies.length} ${copies.length === 1 ? 'kopię' : 'kopii'}. Są powiązane: zmiana wymiarów jednej zmienia wszystkie.`);
+      get().notify(`Dodano ${copies.length} ${copies.length === 1 ? 'kopię' : 'kopii'}. Są powiązane: zmiana wymiarów jednej zmienia wszystkie, a przesunięcie jednej przesuwa resztę według szyku.`);
     },
 
     unlink(id) {
       const p = get().parts.find((x) => x.id === id);
-      if (!p?.link) return;
-      commit(get().parts.map((x) => (x.id === id ? { ...x, link: undefined } : x)));
+      if (!p?.link && !p?.pattern) return;
+      commit(get().parts.map((x) => (x.id === id ? { ...x, link: undefined, pattern: undefined } : x)));
       get().notify('Odłączono. Ten element możesz teraz zmieniać osobno.');
     },
 
@@ -715,7 +1138,8 @@ export const useStore = create<State>((set, get) => {
       let next = parts.map((p) => {
         if (!ids.has(p.id)) return p;
         const pos = new THREE.Vector3(...p.position).sub(c).applyQuaternion(q).add(c);
-        return { ...p, position: r3(pos.toArray() as Vec3), rotation: rotationAfter(p.rotation, AXES[axis], degrees) };
+        // Mirror signs and angles no longer match after a turn, so the pattern rule is dropped (the link stays).
+        return { ...p, position: r3(pos.toArray() as Vec3), rotation: rotationAfter(p.rotation, AXES[axis], degrees), pattern: undefined };
       });
       const dz = box.min.z - bodyBox(next, body).min.z;
       next = next.map((p) => (ids.has(p.id) ? { ...p, position: r3([p.position[0], p.position[1], p.position[2] + dz]) } : p));
@@ -738,6 +1162,7 @@ export const useStore = create<State>((set, get) => {
       const w = box.getSize(new THREE.Vector3()).x + 5;
       const nb = nextBody(parts);
       const rigids: Record<string, string> = {};
+      const pats: Record<string, string> = {};
       const copies = parts
         .filter((p) => p.body === body)
         .map((p) => ({
@@ -748,6 +1173,7 @@ export const useStore = create<State>((set, get) => {
           body: nb,
           position: r3([p.position[0] + w, p.position[1], p.position[2]]),
           rigid: p.rigid ? (rigids[p.rigid] ??= uid()) : undefined,
+          pattern: p.pattern ? { ...p.pattern, id: (pats[p.pattern.id] ??= uid()) } : undefined,
         }));
       commit([...parts, ...copies], { selectedId: groupId(nb) });
     },

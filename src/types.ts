@@ -41,6 +41,23 @@ export interface Part {
   /** Pieces of one fitting (hinge leaves, gland parts, figurine pieces) move together. */
   rigid?: string;
   texture?: Texture;
+  /** Member of a pattern that keeps its rule: move one member and the others follow. */
+  pattern?: PatternRule;
+}
+
+/**
+ * How pattern members follow each other.
+ * linear: all move by the same delta. circle: member i sits at angle a0 + i·360/n around the centre.
+ * sym: mirror signs `s` around the centre (corners, X/Y mirrors).
+ * The centre is kept as an X/Y offset from the member, so moving the whole group keeps the rule intact.
+ */
+export interface PatternRule {
+  id: string;
+  kind: 'linear' | 'circle' | 'sym';
+  c: [number, number];
+  i: number;
+  n: number;
+  s: [number, number];
 }
 
 export type Tab = 'tech' | 'fig';

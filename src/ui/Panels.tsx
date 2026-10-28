@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { CATALOG, CATEGORIES, DEFS, paramsOf, type Category, type ParamDef } from '../catalog';
+import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
+import { findLid, type MagnetOptions } from '../geom/magnets';
 import { assembly, bodyBox, groupBody, groupId, isMerged, useStore, type PatternKind } from '../store';
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
 import type { Part, Texture, Vec3 } from '../types';
 import { Icon } from './Icon';
+import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 
@@ -17,6 +19,7 @@ export function Library() {
     const gb = groupBody(s.selectedId);
     return gb !== null ? `Bryła ${gb}` : s.parts.find((p) => p.id === s.selectedId)?.name;
   });
+  const [open, setOpen] = useState<string | null>('box');
   const cats = tab === 'fig' ? FIG_TOOLS.map((id) => CATEGORIES.find((c) => c.id === id)!) : CATEGORIES;
   return (
     <aside className="library">
@@ -42,7 +45,8 @@ export function Library() {
         <section key={c.id}>
           <h3>{tab === 'fig' && c.id === 'joints' ? 'Narzędzia: otwory, magnesy, czopy' : c.label}</h3>
           <div className="grid">
-            {CATALOG.filter((d) => d.category === c.id && !d.hidden).map((d) => (
+            {tab === 'tech' && FAMILIES.filter((f) => f.category === c.id).map((f) => <FamilyTile key={f.id} family={f} open={open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />)}
+            {CATALOG.filter((d) => d.category === c.id && !d.hidden && (tab !== 'tech' || !IN_FAMILY.has(d.type))).map((d) => (
               <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={d.description} onClick={() => add(d.type)}>
                 <Icon type={d.type} hole={d.hole} />
                 <span>{d.label}</span>
@@ -55,7 +59,60 @@ export function Library() {
   );
 }
 
-function NumberInput({ value, onChange, min, max, step = 1, unit }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) {
+/** A family of ready elements: click adds the first variant (size M), the arrow shows all variants with S/M/L. */
+function FamilyTile({ family, open, onToggle }: { family: Family; open: boolean; onToggle: () => void }) {
+  const addVariant = useStore((s) => s.addVariant);
+  const recent = useStore((s) => s.recent);
+  const first = family.variants[0];
+  return (
+    <>
+      <div className={open ? 'tile family open' : 'tile family'}>
+        <button className="fam-main" title={`${family.label}: kliknij, żeby dodać „${first.label}” (rozmiar M)`} onClick={() => addVariant(family, first, 'M')}>
+          <Icon type={family.icon} hole={false} />
+          <span>{family.label}</span>
+        </button>
+        <button className="fam-more" onClick={onToggle} title={open ? 'Zwiń' : `Pokaż ${family.variants.length} odmian i rozmiary`}>
+          <span>{open ? '▴' : '▾'}</span>
+          <span>{family.variants.length}</span>
+        </button>
+      </div>
+      {open && (
+        <div className="variants">
+          {family.variants.map((v) => (
+            <div key={v.label} className="variant" title={v.hint ?? DEFS[v.type].description}>
+              <span className="vname">
+                <Icon type={v.type} hole={false} />
+                {v.label}
+              </span>
+              <span className="sizes">
+                {(['S', 'M', 'L'] as Size[]).map((sz) => (
+                  <button key={sz} className={sz === 'M' ? 'chip main' : 'chip'} onClick={() => addVariant(family, v, sz)} title={sizeHint(family, v, sz)}>
+                    {sz}
+                  </button>
+                ))}
+                {recent[v.type] && (
+                  <button className="chip recent" onClick={() => addVariant(family, v, 'recent')} title="Wymiary, których ostatnio użyłeś dla tego elementu">
+                    ↺
+                  </button>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function sizeHint(family: Family, v: Family['variants'][number], sz: Size) {
+  const preset = (v.sizes ?? family.sizes)?.[sz];
+  const label = sz === 'S' ? 'Mały' : sz === 'M' ? 'Średni' : 'Duży';
+  if (!preset) return `${label}: ${sz === 'S' ? 'połowa' : sz === 'M' ? 'domyślne wymiary' : 'dwa razy większy'}`;
+  const dims = ['W', 'D', 'H', 'T'].filter((k) => preset[k] !== undefined).map((k) => preset[k]);
+  return `${label}: ${dims.join(' × ')} mm`;
+}
+
+export function NumberInput({ value, onChange, min, max, step = 1, unit }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) {
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
   const commit = (raw: string) => {
@@ -131,6 +188,8 @@ function Helpers({ part }: { part: Part }) {
   if (part.type === 'peg' || part.type === 'pegSquare' || part.type === 'dovetail') out.push(b('+ Dodaj pasujące gniazdo (z luzem)', () => st.matchingHole(part.id)));
   if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id)));
   if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id)));
+  if ((part.type === 'box' && (!part.params.shape || part.params.shape === 'rect') && !part.params.slide) || part.type === 'drawer')
+    out.push(b('⊞ Rozbij na płyty (każdą zmienisz osobno)', () => st.explode(part.id)));
   if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id)));
   if (part.type === 'bolt') {
     out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id)));
@@ -139,6 +198,59 @@ function Helpers({ part }: { part: Part }) {
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
     out.push(b(`⧉ Złącz z bryłą ${part.body} (pokaż gotowy element)`, () => st.merge(part.body)));
   return <>{out}</>;
+}
+
+/** "Dodaj miejsca na magnesy" for a box, a box built from plates (whole body) or a lid. */
+function MagnetTool({ target, body }: { target: string; body: number }) {
+  const st = useStore();
+  const [opt, setOpt] = useState<MagnetOptions>({ size: '6x3', layout: '4', hidden: false, lid: 'flat' });
+  const set = (p: Partial<MagnetOptions>) => setOpt((o) => ({ ...o, ...p }));
+  const isLid = st.parts.find((p) => p.id === target)?.type === 'lid';
+  const lid = isLid ? null : findLid(st.parts, body);
+  return (
+    <div className="tool">
+      <p className="desc">Silnik znajdzie górną krawędź ścianek i narożniki. Gdzie ścianka jest za cienka, dołoży słupek. W pokrywce zrobi lustrzane gniazda.</p>
+      <label className="field">
+        <span>Magnes (średnica × grubość)</span>
+        <select value={opt.size} onChange={(e) => set({ size: e.target.value })}>
+          {Object.keys(MAGNETS).map((k) => (
+            <option key={k} value={k}>
+              {k.replace('x', ' × ')} mm
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Ile i gdzie</span>
+        <select value={opt.layout} onChange={(e) => set({ layout: e.target.value as MagnetOptions['layout'] })}>
+          <option value="4">4 w narożnikach</option>
+          <option value="6">6: narożniki i środki dłuższych boków</option>
+          <option value="8">8: narożniki i środki wszystkich boków</option>
+        </select>
+      </label>
+      <label className="field" title="Magnes zamknięty pod warstwą 0,6 mm. W slicerze ustaw pauzę na podanej wysokości i włóż magnesy.">
+        <span>Magnesy ukryte (pauza w druku)</span>
+        <input type="checkbox" checked={opt.hidden} onChange={(e) => set({ hidden: e.target.checked })} />
+      </label>
+      {isLid ? (
+        <p className="desc">Gniazda dostanie pudełko pasujące do tej pokrywki i sama pokrywka.</p>
+      ) : lid ? (
+        <p className="desc">Pokrywka: „{lid.part.name}”. Dostanie lustrzane gniazda.</p>
+      ) : (
+        <label className="field">
+          <span>Pokrywka (brak w projekcie)</span>
+          <select value={opt.lid} onChange={(e) => set({ lid: e.target.value as MagnetOptions['lid'] })}>
+            <option value="flat">Dodaj płaską</option>
+            <option value="rim">Dodaj z rantem</option>
+            <option value="none">Bez pokrywki</option>
+          </select>
+        </label>
+      )}
+      <button className="action" onClick={() => st.addMagnets(target, opt)}>
+        🧲 Dodaj miejsca na magnesy
+      </button>
+    </div>
+  );
 }
 
 function PatternTool({ part }: { part: Part }) {
@@ -159,6 +271,7 @@ function PatternTool({ part }: { part: Part }) {
           <option value="corners">W narożnikach bryły</option>
           <option value="mirrorX">Lustro względem środka (X)</option>
           <option value="mirrorY">Lustro względem środka (Y)</option>
+          <option value="mirrorXY">Lustro X i Y (4 sztuki od tego miejsca)</option>
         </select>
       </label>
       {(kind === 'linear' || kind === 'circle') && (
@@ -256,6 +369,8 @@ function TextureTool({ part }: { part: Part }) {
   );
 }
 
+const PATTERN_LABEL = { linear: 'w rzędzie', circle: 'po okręgu', sym: 'symetryczny' } as const;
+
 function Section({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
   return (
     <details className="section" open={open}>
@@ -271,6 +386,7 @@ function PartProperties({ part }: { part: Part }) {
   const bodies = [...new Set(st.parts.map((p) => p.body))].sort((a, b) => a - b);
   const newBody = Math.max(0, ...bodies) + 1;
   const linked = part.link ? st.parts.filter((p) => p.link === part.link && p.id !== part.id && (!part.rigid || p.rigid !== part.rigid)).length : 0;
+  const patterned = part.pattern ? st.parts.filter((p) => p.pattern?.id === part.pattern!.id && p.id !== part.id).length : 0;
   const pieces = part.rigid ? st.parts.filter((p) => p.rigid === part.rigid).length : 1;
   const [height, setHeight] = useState(150);
   const fields = paramsOf(def, part.params).filter((p) => !p.show || p.show(part.params));
@@ -292,9 +408,10 @@ function PartProperties({ part }: { part: Part }) {
         <input className="name" value={part.name} onChange={(e) => st.updateLive(part.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
       </div>
       <p className="desc">{def.description}</p>
-      {linked > 0 && (
+      {(linked > 0 || patterned > 0) && (
         <div className="linkbar">
-          🔗 Powiązany z {linked} {linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.
+          🔗 {linked > 0 ? `Powiązany z ${linked} ${linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.` : ''}
+          {patterned > 0 && ` Szyk (${PATTERN_LABEL[part.pattern!.kind]}): przesuń ten element, a ${patterned === 1 ? 'druga kopia przesunie się' : `${patterned} pozostałe przesuną się`} ${part.pattern!.kind === 'linear' ? 'razem z nim' : 'symetrycznie'}.`}
           <button className="small" onClick={() => st.unlink(part.id)}>
             Odłącz
           </button>
@@ -335,6 +452,11 @@ function PartProperties({ part }: { part: Part }) {
         ))}
       </div>
 
+      {(part.type === 'box' || part.type === 'lid') && (
+        <Section title="🧲 Miejsca na magnesy">
+          <MagnetTool target={part.id} body={part.body} />
+        </Section>
+      )}
       {!part.rigid && (
         <Section title="Szyk: kopiuj, okrąg, narożniki, lustro">
           <PatternTool part={part} />
@@ -412,6 +534,9 @@ function GroupProperties({ body }: { body: number }) {
           {merged ? '⧈ Rozdziel (pokaż otwory osobno)' : '⧉ Złącz otwory z bryłą (pokaż gotowy element)'}
         </button>
       )}
+      <Section title="🧲 Miejsca na magnesy (pudełko z płyt)">
+        <MagnetTool target={groupId(body)} body={body} />
+      </Section>
       {merged && <p className="desc">Złączona: widać gotowy element. Otwory nadal możesz kliknąć (na liście albo w modelu) i przesuwać w bryle.</p>}
 
       <h4>Położenie</h4>
@@ -515,12 +640,14 @@ function CheckPanel() {
   const minWall = useStore((s) => s.settings.minWall);
   const setSettings = useStore((s) => s.setSettings);
   const run = useStore((s) => s.runCheck);
+  const applyFixes = useStore((s) => s.applyFixes);
   if (!check) return null;
   const problems = check.issues.filter((i) => i.level !== 'info').length;
+  const fixes = check.issues.flatMap((i) => (i.fix ? [i.fix] : []));
   return (
     <div className="checkres">
       <div className="checkres-head">
-        <b>{problems ? `Do poprawy: ${problems}` : '✓ Model gotowy do druku'}</b>
+        <b>{check.title ? `${check.title}: ${problems ? `do poprawy ${problems}` : 'w porządku'}` : problems ? `Do poprawy: ${problems}` : '✓ Model gotowy do druku'}</b>
         <button className="mini" onClick={close}>
           ✕
         </button>
@@ -533,6 +660,19 @@ function CheckPanel() {
           </li>
         ))}
       </ul>
+      {fixes.length > 0 && (
+        <div className="row">
+          <button className="action" onClick={() => applyFixes(fixes)}>
+            Popraw wszystkie ({fixes.length})
+          </button>
+          <button className="small" onClick={() => select(check.issues.find((i) => i.fix)?.select ?? null)} title="Zaznacza pierwszy problem; kliknij wpis na liście, żeby zobaczyć inne">
+            Pokaż
+          </button>
+          <button className="small" onClick={close}>
+            Zostaw
+          </button>
+        </div>
+      )}
       <label className="field" title="Najcieńsza ścianka, którą drukarka zrobi porządnie (zwykle 2 × średnica dyszy)">
         <span>Min. ścianka</span>
         <NumberInput value={minWall} min={0.2} max={5} step={0.1} unit="mm" onChange={(v) => setSettings({ minWall: v })} />
@@ -558,10 +698,11 @@ function Welcome() {
         </ol>
       ) : (
         <ol>
-          <li>Kliknij element w menu po lewej, np. <b>Płyta</b> albo <b>Pudełko</b>.</li>
+          <li>Kliknij element w menu po lewej, np. <b>Pudełka</b>. Strzałka obok kafelka pokazuje odmiany i rozmiary S/M/L.</li>
           <li>Zmień wymiary w tym panelu.</li>
           <li>Przeciągaj elementy myszką. Same się przyciągają do sąsiednich ścianek.</li>
           <li>Zaznacz element i dodaj <b>otwór</b>, <b>gwint</b>, <b>zawias</b> albo <b>dławik</b>: pojawi się na jego wierzchu.</li>
+          <li><b>📏 Wymiary</b> (klawisz W) pokazują rozmiar ścianki, krawędzi lub otworu pod kursorem.</li>
           <li>Kliknij <b>Sprawdź model</b>, potem pobierz <b>STL/3MF</b>.</li>
         </ol>
       )}

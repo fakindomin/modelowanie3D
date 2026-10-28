@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Viewport } from './scene/Viewport';
 import { Library, Properties } from './ui/Panels';
+import { MeasurePanel } from './ui/MeasurePanel';
 import { useStore } from './store';
 import { buildBodies } from './geom/parts';
 import { export3MF, exportSTL, saveJSON } from './export';
@@ -84,6 +85,9 @@ function Toolbar() {
       </div>
       <div className="group">
         <button onClick={st.fit} title="Pokaż cały model (F)">⤢ Widok całości</button>
+        <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">
+          📏 Wymiary
+        </button>
       </div>
       <div className="group right">
         <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Pokazuje wynik po wycięciu otworów i sklejeniu brył">
@@ -120,8 +124,13 @@ function useShortcuts() {
         else st.remove(id);
       } else if (e.key.toLowerCase() === 'f' && !ctrl) {
         st.fit();
+      } else if (e.key.toLowerCase() === 'w' && !ctrl) {
+        st.setMeasure(!st.measure);
       } else if (e.key === 'Escape') {
-        st.select(null);
+        if (st.measure) {
+          if (st.pins.length) st.clearPins();
+          else st.setMeasure(false);
+        } else st.select(null);
       } else if (id && e.key.toLowerCase() === 'r') {
         if (id.startsWith('g:')) st.rotateBody(Number(id.slice(2)), 2, e.shiftKey ? -90 : 90);
         else st.rotateBy(id, 2, e.shiftKey ? -90 : 90);
@@ -166,6 +175,7 @@ export function App() {
           Kliknij ponownie, by wybrać to, co leży pod spodem (np. otwór w bryle) · Przeciągnij: przesuń · Tło: obrót widoku · Prawy: przesuń widok · Kółko: zoom · Strzałki/PgUp/PgDn · R: obróć · Shift: bez kładzenia · Alt: bez przyciągania
         </div>
         {toast && <div className="toast">{toast}</div>}
+        <MeasurePanel />
       </main>
       <Properties />
     </div>

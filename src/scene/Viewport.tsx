@@ -6,10 +6,16 @@ import { assembly, groupBody, groupId, useStore } from '../store';
 import { built, buildBodies, worldBox, type BodyResult } from '../geom/parts';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, Vec3 } from '../types';
+import { distance, featureAt, type Feature } from './measure';
 
 const DEG = Math.PI / 180;
 const BED = 220;
 const noRaycast = () => null;
+
+/** The arrow gizmo: while one of its handles is under the pointer, clicks belong to it, not to the parts behind. */
+const gizmo: { controls: { axis: string | null; dragging: boolean } | null; pick: { prev: string | null } | null } = { controls: null, pick: null };
+(globalThis as unknown as { __gizmo: typeof gizmo }).__gizmo = gizmo;
+export const gizmoBusy = () => !!gizmo.controls && (gizmo.controls.axis !== null || gizmo.controls.dragging);
 
 interface Look {
   selected: boolean;
@@ -143,6 +149,8 @@ function candidates(e: ThreeEvent<PointerEvent>): string[] {
   return [...preferred.map((h) => h.id), ...hits.filter((h) => !preferred.includes(h)).map((h) => h.id)];
 }
 
+let cancelDrag = () => {};
+
 interface Drag {
   /** Part id, or group id for a whole body. */
   target: string;
@@ -164,6 +172,7 @@ function Scene() {
   const snapTargets = useStore((s) => s.snapTargets);
   const { camera, gl, controls } = useThree();
   const drag = useRef<Drag | null>(null);
+  cancelDrag = () => (drag.current = null);
 
   useEffect(() => {
     const ray = new THREE.Raycaster();
@@ -220,13 +229,45 @@ function Scene() {
     };
   }, [camera, gl, controls]);
 
+  /** "Wymiary" mode: the feature under the pointer (first surface hit). */
+  const measureAt = (e: ThreeEvent<PointerEvent>): Feature | null => {
+    const it = e.intersections.find((i) => i.object instanceof THREE.Mesh && i.faceIndex != null);
+    if (!it) return null;
+    let o: THREE.Object3D | null = it.object;
+    while (o && o.userData.pick === undefined) o = o.parent;
+    const mesh = it.object as THREE.Mesh;
+    const rect = gl.domElement.getBoundingClientRect();
+    const toScreen = (v: THREE.Vector3) => {
+      const q = v.clone().project(camera);
+      return new THREE.Vector2(((q.x + 1) / 2) * rect.width, ((1 - q.y) / 2) * rect.height);
+    };
+    return featureAt({
+      geometry: mesh.geometry,
+      matrix: mesh.matrixWorld,
+      faceIndex: it.faceIndex!,
+      point: it.point,
+      pick: (o?.userData.pick as string) ?? '',
+      toScreen,
+      cursor: new THREE.Vector2(e.nativeEvent.clientX - rect.left, e.nativeEvent.clientY - rect.top),
+    });
+  };
+
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
     e.stopPropagation();
+    if (gizmoBusy()) return;
+    if (useStore.getState().measure) {
+      const f = measureAt(e);
+      if (f) useStore.getState().addPin(f);
+      return;
+    }
     const cands = candidates(e);
     if (!cands.length) return;
     const st = useStore.getState();
     const sel = st.selectedId;
+    // Touch has no hover: if the gizmo turns out to take this press, it undoes this pick (see Gizmo).
+    gizmo.pick = { prev: sel };
+    setTimeout(() => (gizmo.pick = null), 0);
     const target = sel && cands.includes(sel) ? sel : cands[0];
     st.select(target);
     const gb = groupBody(target);
@@ -249,6 +290,14 @@ function Scene() {
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     if (drag.current?.moved) return;
+    if (gizmoBusy()) return useStore.getState().setHover(null);
+    if (useStore.getState().measure) {
+      const f = measureAt(e);
+      const rect = gl.domElement.getBoundingClientRect();
+      useStore.getState().setMeasureHover(f ? { ...f, x: e.nativeEvent.clientX - rect.left, y: e.nativeEvent.clientY - rect.top } : null);
+      useStore.getState().setHover(f ? f.pick : null);
+      return;
+    }
     const cands = candidates(e);
     const sel = useStore.getState().selectedId;
     useStore.getState().setHover(cands.length ? (sel && cands.includes(sel) ? sel : cands[0]) : null);
@@ -266,7 +315,14 @@ function Scene() {
   });
 
   return (
-    <group onPointerDown={onDown} onPointerMove={onMove} onPointerOut={() => useStore.getState().setHover(null)}>
+    <group
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerOut={() => {
+        useStore.getState().setHover(null);
+        useStore.getState().setMeasureHover(null);
+      }}
+    >
       {parts.map((p) =>
         mergedBodies.has(p.body) && !p.hole ? (
           <MergedMember key={p.id} part={p} look={look(p)} />
@@ -305,12 +361,21 @@ function Gizmo() {
   const gb = groupBody(selectedId);
   return (
     <TransformControls
+      ref={(c) => {
+        gizmo.controls = c as unknown as typeof gizmo.controls;
+      }}
       object={target}
       mode="translate"
-      size={0.7}
+      size={0.85}
       translationSnap={grid > 0 ? grid : null}
       onMouseDown={() => {
         const st = useStore.getState();
+        if (gizmo.pick) {
+          // The same press also hit a part behind the arrow: keep the selection and skip the part drag.
+          cancelDrag();
+          if (st.selectedId !== gizmo.pick.prev) st.select(gizmo.pick.prev);
+          gizmo.pick = null;
+        }
         st.beginGesture();
         const members = gb !== null ? assembly(st.parts, gb) : [];
         dragging.current = { start: Object.fromEntries(members.map((p) => [p.id, [...p.position] as Vec3])), anchor: target.position.toArray() as Vec3 };
@@ -339,6 +404,64 @@ function Gizmo() {
         useStore.getState().fixHoles();
       }}
     />
+  );
+}
+
+const HOVER_COLOR = '#ffd54a';
+const PIN_COLOR = '#3ddc84';
+
+/** Highlight of one measured feature: its faces, or its edge line. */
+function FeatureMark({ f, color }: { f: Feature; color: string }) {
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(f.tris ?? f.line ?? [], 3));
+    return g;
+  }, [f]);
+  useEffect(() => () => geo.dispose(), [geo]);
+  if (f.tris)
+    return (
+      <mesh geometry={geo} raycast={noRaycast} renderOrder={10}>
+        <meshBasicMaterial color={color} transparent opacity={0.45} depthTest={false} side={THREE.DoubleSide} />
+      </mesh>
+    );
+  if (f.line) return <LineOf geo={geo} color={color} />;
+  return null;
+}
+
+function LineOf({ geo, color }: { geo: THREE.BufferGeometry; color: string }) {
+  const line = useMemo(() => {
+    const l = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, depthTest: false }));
+    l.renderOrder = 11;
+    l.raycast = noRaycast;
+    return l;
+  }, [geo, color]);
+  useEffect(() => () => (line.material as THREE.Material).dispose(), [line]);
+  return <primitive object={line} />;
+}
+
+function Segment({ from, to }: { from: Vec3; to: Vec3 }) {
+  const geo = useMemo(() => new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...from), new THREE.Vector3(...to)]), [from, to]);
+  useEffect(() => () => geo.dispose(), [geo]);
+  return <LineOf geo={geo} color="#ffffff" />;
+}
+
+function MeasureMarks() {
+  const hover = useStore((s) => s.measureHover);
+  const pins = useStore((s) => s.pins);
+  const on = useStore((s) => s.measure);
+  if (!on) return null;
+  return (
+    <>
+      {hover && <FeatureMark f={hover} color={HOVER_COLOR} />}
+      {pins.map((p, i) => (
+        <FeatureMark key={i} f={p} color={PIN_COLOR} />
+      ))}
+      {pins.map((p, i) => {
+        if (i % 2 === 0 || !pins[i - 1]) return null;
+        const d = distance(pins[i - 1], p);
+        return <Segment key={`d${i}`} from={d.from} to={d.to} />;
+      })}
+    </>
   );
 }
 
@@ -391,6 +514,7 @@ function Bed() {
 
 export function Viewport() {
   const preview = useStore((s) => s.preview);
+  const measure = useStore((s) => s.measure);
   const select = useStore((s) => s.select);
   const lights = useMemo(
     () => (
@@ -407,14 +531,15 @@ export function Viewport() {
       shadows
       frameloop="demand"
       camera={{ position: [160, -220, 180], fov: 40, near: 1, far: 10000, up: [0, 0, 1] }}
-      onPointerMissed={(e) => e.button === 0 && select(null)}
+      onPointerMissed={(e) => e.button === 0 && !gizmoBusy() && select(null)}
       gl={{ antialias: true, preserveDrawingBuffer: true }}
     >
       <color attach="background" args={['#1a1e26']} />
       {lights}
       <Bed />
       {preview ? <PreviewBodies /> : <Scene />}
-      {!preview && <Gizmo />}
+      {!preview && !measure && <Gizmo />}
+      <MeasureMarks />
       <OrbitControls makeDefault enableDamping={false} />
       <CameraFit />
       <GizmoHelper alignment="bottom-right" margin={[70, 70]}>

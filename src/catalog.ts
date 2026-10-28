@@ -1,6 +1,6 @@
 import { M, settle } from './geom/manifold';
 import type { Category, ParamDef, Params, PartDef } from './parts/def';
-import { L, T, bar, block, clearance, cube, cyl, metric, num, poly, rect } from './parts/util';
+import { L, T, bar, block, clearance, cube, cyl, hex, metric, num, poly, rect, select } from './parts/util';
 import { THREAD_DEFS } from './parts/threads';
 import { JOINT_DEFS } from './parts/joints';
 import { FITTING_DEFS } from './parts/fittings';
@@ -18,7 +18,7 @@ export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'fittings', label: 'Przepusty i złączki' },
 ];
 
-const MAGNETS: Record<string, [number, number]> = {
+export const MAGNETS: Record<string, [number, number]> = {
   '5x2': [5, 2],
   '6x2': [6, 2],
   '6x3': [6, 3],
@@ -57,6 +57,21 @@ export function cabinetOpenings(p: Params) {
   return { W, H: rows * h + (rows + 1) * t, D: d, depth: d - t, openings };
 }
 
+const SHAPE = select('shape', 'Kształt', 'rect', [
+  ['rect', 'Prostokątny'],
+  ['round', 'Okrągły'],
+  ['hex', 'Sześciokątny'],
+]);
+const rectOnly = (p: Params) => !p.shape || p.shape === 'rect';
+
+/** Groove for a sliding lid: 2 mm lid + 0.4 mm play, cut up to 1.2 mm into walls, 1.2 mm under the top. */
+export function slideGroove(p: Params) {
+  const t = num(p, 'T'), H = num(p, 'H');
+  const depth = Math.max(0.4, Math.min(1.2, t - 0.8));
+  const h = 2.4;
+  return { depth, h, z0: H - 1.2 - h, lidW: num(p, 'W') - 2 * t + 2 * depth - 0.6, lidD: num(p, 'D') - t + depth - 0.3, lidT: 2 };
+}
+
 const BASE: PartDef[] = [
   // ---------------------------------------------------------------- ready
   {
@@ -77,22 +92,33 @@ const BASE: PartDef[] = [
     label: 'Pudełko',
     category: 'ready',
     hole: false,
-    description: 'Otwarte pudełko z opcjonalnymi przegródkami.',
+    description: 'Otwarte pudełko: prostokątne, okrągłe albo sześciokątne, z opcjonalnymi przegródkami lub wsuwaną pokrywką.',
     params: [
-      { key: 'W', label: 'Szerokość', type: 'number', def: 80, min: 5, max: 500, unit: 'mm' },
-      { key: 'D', label: 'Głębokość', type: 'number', def: 60, min: 5, max: 500, unit: 'mm' },
+      SHAPE,
+      { key: 'W', label: 'Szerokość', type: 'number', def: 80, min: 5, max: 500, unit: 'mm', hint: 'Dla okrągłego: średnica. Dla sześciokątnego: rozstaw boków.' },
+      { key: 'D', label: 'Głębokość', type: 'number', def: 60, min: 5, max: 500, unit: 'mm', show: rectOnly },
       { key: 'H', label: 'Wysokość', type: 'number', def: 40, min: 3, max: 500, unit: 'mm' },
       T(2),
       { key: 'B', label: 'Grubość dna', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
-      { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1 },
-      { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1 },
+      { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: rectOnly },
+      { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: rectOnly },
+      { key: 'slide', label: 'Rowki na wsuwaną pokrywkę', type: 'bool', def: false, show: rectOnly, hint: 'Rowki w ściankach pod górną krawędzią; pokrywka wsuwa się od przodu (ścianka min. 2 mm).' },
     ],
     build: (p) => {
-      const W = num(p, 'W'), D = num(p, 'D'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
+      const W = num(p, 'W'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
+      if (p.shape === 'round') return cyl(H, W / 2).subtract(cyl(H, W / 2 - t).translate([0, 0, b]));
+      if (p.shape === 'hex') return hex(W, H).subtract(hex(W - 2 * t, H).translate([0, 0, b]));
+      const D = num(p, 'D');
       let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
       const nx = Math.round(num(p, 'nx')), ny = Math.round(num(p, 'ny'));
       for (let i = 1; i < nx; i++) m = m.add(block(t, D - 2 * t, H - b, -W / 2 + t + ((W - 2 * t) * i) / nx, 0, b));
       for (let i = 1; i < ny; i++) m = m.add(block(W - 2 * t, t, H - b, 0, -D / 2 + t + ((D - 2 * t) * i) / ny, b));
+      if (p.slide) {
+        const g = slideGroove(p);
+        // Groove in the side and back walls, open at the front; the front wall drops to the groove's bottom.
+        m = m.subtract(block(W - 2 * t + 2 * g.depth, D - t + g.depth + 1, g.h, 0, -(t - g.depth + 1) / 2, g.z0));
+        m = m.subtract(block(W - 2 * t, t + 2, H - g.z0 + 1, 0, -D / 2 + t / 2, g.z0));
+      }
       return m;
     },
   },
@@ -101,20 +127,29 @@ const BASE: PartDef[] = [
     label: 'Pokrywka',
     category: 'ready',
     hole: false,
-    description: 'Wciskana pokrywka do pudełka (rant od spodu, drukuj rantem do góry).',
+    description: 'Wciskana pokrywka do pudełka (rant od spodu, drukuj rantem do góry). Bez rantu jest płaska.',
     params: [
+      SHAPE,
       { key: 'W', label: 'Szerokość pudełka', type: 'number', def: 80, min: 5, max: 500, unit: 'mm' },
-      { key: 'D', label: 'Głębokość pudełka', type: 'number', def: 60, min: 5, max: 500, unit: 'mm' },
+      { key: 'D', label: 'Głębokość pudełka', type: 'number', def: 60, min: 5, max: 500, unit: 'mm', show: rectOnly },
       { key: 'T', label: 'Grubość pokrywki', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
       { key: 'wall', label: 'Ścianka pudełka', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
       { key: 'R', label: 'Wysokość rantu', type: 'number', def: 4, min: 0, max: 50, unit: 'mm' },
       clearance(0.3),
     ],
     build: (p) => {
-      const W = num(p, 'W'), D = num(p, 'D'), t = num(p, 'T'), wall = num(p, 'wall'), R = num(p, 'R'), c = num(p, 'luz');
+      const W = num(p, 'W'), t = num(p, 'T'), wall = num(p, 'wall'), R = num(p, 'R'), c = num(p, 'luz'), lip = 1.6;
+      if (p.shape === 'round' || p.shape === 'hex') {
+        const solid = (w: number, h: number) => (p.shape === 'round' ? cyl(h, w / 2) : hex(w, h));
+        let m = solid(W, t);
+        const o = W - 2 * wall - c;
+        if (R > 0) m = m.add(solid(o, R).subtract(solid(o - 2 * lip, R + 1)).translate([0, 0, t]));
+        return m;
+      }
+      const D = num(p, 'D');
       let m = block(W, D, t);
       if (R > 0) {
-        const ow = W - 2 * wall - c, od = D - 2 * wall - c, lip = 1.6;
+        const ow = W - 2 * wall - c, od = D - 2 * wall - c;
         m = m.add(block(ow, od, R, 0, 0, t).subtract(block(ow - 2 * lip, od - 2 * lip, R + 1, 0, 0, t)));
       }
       return m;
@@ -197,6 +232,41 @@ const BASE: PartDef[] = [
       if (d > 0)
         for (const sx of [-1, 1]) for (const sy of [-1, 1]) m = m.subtract(cyl(t + 2, d / 2).translate([sx * (W / 2 - e), sy * (D / 2 - e), -1]));
       return m;
+    },
+  },
+  {
+    type: 'perfPlate',
+    label: 'Płyta perforowana',
+    category: 'ready',
+    hole: false,
+    hidden: true,
+    description: 'Płyta z siatką otworów (wentylacja, maskownica, organizer na narzędzia).',
+    params: [
+      { key: 'W', label: 'Szerokość (X)', type: 'number', def: 100, min: 5, max: 1000, unit: 'mm' },
+      { key: 'D', label: 'Głębokość (Y)', type: 'number', def: 60, min: 5, max: 1000, unit: 'mm' },
+      { key: 'T', label: 'Grubość', type: 'number', def: 2, min: 0.4, max: 50, step: 0.2, unit: 'mm' },
+      { key: 'hole', label: 'Średnica otworów', type: 'number', def: 4, min: 0.5, max: 50, step: 0.1, unit: 'mm' },
+      { key: 'pitch', label: 'Rozstaw otworów', type: 'number', def: 7, min: 1, max: 100, step: 0.5, unit: 'mm' },
+      { key: 'margin', label: 'Pełny margines', type: 'number', def: 5, min: 0, max: 100, unit: 'mm' },
+      select('grid', 'Układ', 'hex', [
+        ['hex', 'Plaster miodu (przesunięte rzędy)'],
+        ['square', 'Kwadratowy'],
+      ]),
+    ],
+    build: (p) => {
+      const W = num(p, 'W'), D = num(p, 'D'), t = num(p, 'T'), d = num(p, 'hole'), e = num(p, 'margin');
+      const pitch = Math.max(num(p, 'pitch'), d + 0.8);
+      const rowStep = p.grid === 'hex' ? (pitch * Math.sqrt(3)) / 2 : pitch;
+      const holes: ReturnType<typeof cyl>[] = [];
+      const ny = Math.floor((D - 2 * e - d) / rowStep) + 1;
+      for (let j = 0; j < ny && holes.length < 4000; j++) {
+        const y = -((ny - 1) * rowStep) / 2 + j * rowStep;
+        const shift = p.grid === 'hex' && j % 2 ? pitch / 2 : 0;
+        const nx = Math.floor((W - 2 * e - d - shift) / pitch) + 1;
+        for (let i = 0; i < nx; i++) holes.push(cyl(t + 2, d / 2, d / 2, 16).translate([-((nx - 1) * pitch) / 2 + i * pitch + shift / 2, y, -1]));
+      }
+      const plate = block(W, D, t);
+      return holes.length ? plate.subtract(M().Manifold.union(holes)) : plate;
     },
   },
   // -------------------------------------------------------------- profiles

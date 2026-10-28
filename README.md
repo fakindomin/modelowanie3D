@@ -9,8 +9,18 @@ i dosuwasz go do innych, a ścianki same się do siebie przyciągają.
 Dwie zakładki: **Techniczne** (składanie z gotowych elementów) i **Figurki** (żebrowana kolekcja).
 Każda ma własną scenę, historię cofania i autozapis.
 
-- **Gotowe elementy:** płyta (szerokość × głębokość × grubość), pudełko z przegródkami, pokrywka,
-  szuflada, obudowa na szuflady, płytka montażowa.
+- **Gotowe elementy w rodzinach:** kafelek dodaje podstawową odmianę, a strzałka obok rozwija
+  wszystkie odmiany z rozmiarami S/M/L i ↺ (ostatnio użyte wymiary). Pudełka: prostokątne, okrągłe,
+  sześciokątne, z przegródkami, z pokrywką, z pokrywką na zawiasie, z wsuwaną pokrywką. Pokrywki:
+  płaska, z rantem, okrągła. Szuflady z obudową. Płyty: pełna, z otworami montażowymi, perforowana.
+- **Rozbij na płyty:** pudełko albo szufladę można zamienić na dno, ścianki i przegródki (dalej jedna
+  bryła), żeby zmienić każdą płytę osobno.
+- **Miejsca na magnesy:** jeden przycisk przy pudełku (gotowym albo złożonym z płyt) lub pokrywce.
+  Silnik robi gniazda (luz 0,2 mm, min. 1,2 mm ścianki), dokłada słupki tam, gdzie ścianka jest za
+  cienka, i lustrzane gniazda w pokrywce. Opcje: 4/6/8 magnesów, magnesy ukryte (z wysokością pauzy
+  w druku), dodanie płaskiej pokrywki albo z rantem (z wcięciami na słupki). Gniazda ustawione ręcznie
+  „Sprawdź model” (i dodanie pokrywki) sprawdza: wysokość, wychodzenie poza materiał, cienką ściankę,
+  symetrię, brak gniazd w pokrywce. Proponuje „Popraw wszystkie / Pokaż / Zostaw”.
 - **Profile:** płaskownik, kątownik, teownik, ceownik, profil zamknięty, rura, pręt.
 - **Bryły podstawowe:** prostopadłościan, walec, stożek, klin, kula.
 - **Otwory i połączenia:** otwór okrągły i prostokątny, czop okrągły i kwadratowy, gniazdo magnesu,
@@ -28,8 +38,12 @@ Każda ma własną scenę, historię cofania i autozapis.
   a ponowne kliknięcie w to samo miejsce wybiera to, co leży pod nim.
 - **Grupy:** „Złącz otwory z bryłą” pokazuje gotowy, wycięty element. Otwory dalej można klikać
   i przesuwać, a całą grupę przesuwać, obracać i duplikować. „Rozdziel” cofa złączenie.
-- **Szyki i kopie:** w rzędzie, po okręgu, w narożnikach bryły, lustro. Kopie są powiązane (zmiana
-  wymiarów jednej zmienia wszystkie), „Odłącz” pozwala zmienić jedną.
+- **Szyki i kopie:** w rzędzie, po okręgu, w narożnikach bryły, lustro X, Y albo X i Y. Kopie są powiązane
+  (zmiana wymiarów jednej zmienia wszystkie) i pamiętają regułę: przesuń jedną, a reszta przesunie się
+  symetrycznie. „Odłącz” pozwala zmienić jedną.
+- **Wymiary (W):** najechanie pokazuje wymiary ścianki, długość krawędzi, średnicę okręgu, otworu
+  albo walca. Kliknięcie przypina wymiar, a drugie kliknięcie mierzy odległość. Jeśli wymiar jest
+  parametrem elementu, można go zmienić od razu w okienku pomiaru.
 - **Faktura powierzchni** jako prawdziwa geometria: żeberka, rowki, radełko, kropki, plaster miodu,
   na wybranej ściance albo dookoła walca, wypukła lub wycięta.
 - **Sprawdź model:** nachodzące na siebie bryły, ścianki cieńsze niż ustawione minimum (domyślnie
@@ -37,8 +51,10 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Figurki:** 16 modeli z żebrowanej kolekcji (silnik przeniesiony z artefaktu, STANDARD v1.0),
   suwaki zmieniają wszystkie części figurki naraz, „Całość na 150 mm”. Do figurek można dodawać
   narzędzia techniczne: magnesy, otwory, czopy, gwinty.
-- **Składanie:** przeciąganie myszką, kładzenie elementu na tym, co jest pod nim, przyciąganie
-  ścianek i krawędzi do sąsiadów, obrót o 90°, strzałki z osiami do podnoszenia.
+- **Składanie:** przeciąganie myszką, kładzenie elementu na tym, co jest pod nim (w pudełku na dnie,
+  nie na krawędzi), przyciąganie do prawdziwych ścianek, także wewnętrznych (dno, ścianki, narożniki
+  w środku pudełka), obrót o 90°, strzałki z osiami do podnoszenia. Strzałka pod kursorem ma
+  pierwszeństwo przed elementem za nią.
 - **Bryły do druku:** każdy element należy do bryły. Elementy jednej bryły są sklejane w jeden wydruk,
   a jej otwory wycinają tylko ją. Dzięki temu czop zostaje na jednej części, a gniazdo powstaje w drugiej.
 - **Eksport:** STL (wszystko w jednym pliku) i 3MF (każda bryła jako osobny obiekt).
