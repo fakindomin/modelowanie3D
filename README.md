@@ -33,6 +33,14 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Przepusty i złączki:** dławik kablowy dobierany do średnicy kabla (otwór, korpus, nakrętka
   kontrująca, nakrętka dociskowa, uszczelka z TPU), przepust na wtyczkę (keyhole), odciążka kabla,
   karbowana końcówka na wąż 1/2", 5/8", 3/4" z gwintem G, rowek na o-ring.
+- **Otwory pod złącza:** USB-C, USB-A (też podwójne), micro USB, USB-B, HDMI, micro i mini HDMI, RJ45,
+  XT30/60/90, DC 5,5, IEC C14, „ósemka” C8, wyłącznik kołyskowy, jack 3,5, LED 3/5, przyciski 12/16,
+  potencjometr, GX12/16, SMA. Każdy ma luz, opcjonalne otwory na śruby, tryb „wtyczka do gniazda na
+  płytce” i wzmocnienie (ramka od środka; przy zatrzaskach ścianka jest dookoła pocieniana). Przyciski
+  „Na której ściance” przenoszą otwór na przód, tył, boki, górę lub dół bryły. Wymiary są typowe:
+  sprawdź swoje złącze suwmiarką.
+- **Obudowy Raspberry Pi:** Pi 5, 4B, 3B+, Zero 2 W i Pico. Pudełko, słupki z otworami pod wkręty,
+  otwory na gniazda, szczelina na kartę microSD i pokrywka z rantem, wszystko jako zwykłe elementy do edycji.
 - **Wybieranie:** lista wszystkich elementów pogrupowanych w bryły, podświetlenie elementu pod kursorem
   (jednocześnie w modelu i na liście). Otwór schowany w bryle wybiera się pierwszym kliknięciem,
   a ponowne kliknięcie w to samo miejsce wybiera to, co leży pod nim.

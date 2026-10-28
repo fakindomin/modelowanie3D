@@ -9,6 +9,7 @@ import type { Part, Texture, Vec3 } from '../types';
 import { Icon } from './Icon';
 import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
+import { WALL_SIDES, sideOf } from '../parts/connectors';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 
@@ -68,7 +69,7 @@ function FamilyTile({ family, open, onToggle }: { family: Family; open: boolean;
   return (
     <>
       <div className={open ? 'tile family open' : 'tile family'}>
-        <button className="fam-main" title={`${family.label}: kliknij, żeby dodać „${first.label}” (rozmiar M)`} onClick={() => addVariant(family, first, 'M')}>
+        <button className="fam-main" title={`${family.label}: kliknij, żeby dodać „${first.label}”${family.noSizes ? '' : ' (rozmiar M)'}`} onClick={() => addVariant(family, first, 'M')}>
           <Icon type={family.icon} hole={false} />
           <span>{family.label}</span>
         </button>
@@ -86,12 +87,17 @@ function FamilyTile({ family, open, onToggle }: { family: Family; open: boolean;
                 {v.label}
               </span>
               <span className="sizes">
-                {(['S', 'M', 'L'] as Size[]).map((sz) => (
+                {family.noSizes && (
+                  <button className="chip main" onClick={() => addVariant(family, v, 'M')} title={v.hint ?? DEFS[v.type].description}>
+                    +
+                  </button>
+                )}
+                {!family.noSizes && (['S', 'M', 'L'] as Size[]).map((sz) => (
                   <button key={sz} className={sz === 'M' ? 'chip main' : 'chip'} onClick={() => addVariant(family, v, sz)} title={sizeHint(family, v, sz)}>
                     {sz}
                   </button>
                 ))}
-                {recent[v.type] && (
+                {!family.noSizes && recent[v.type] && (
                   <button className="chip recent" onClick={() => addVariant(family, v, 'recent')} title="Wymiary, których ostatnio użyłeś dla tego elementu">
                     ↺
                   </button>
@@ -202,6 +208,30 @@ function Helpers({ part }: { part: Part }) {
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
     out.push(b(`⧉ Złącz z bryłą ${part.body} (pokaż gotowy element)`, () => st.merge(part.body), INFO.merge));
   return <>{out}</>;
+}
+
+/** Buttons that move a connector cut-out onto another wall of its body. */
+function ConnectorWalls({ part }: { part: Part }) {
+  const toWall = useStore((s) => s.connectorToWall);
+  const now = sideOf(part.rotation);
+  return (
+    <>
+      <div className="action-row">
+        <span className="desc">Wymiary złącza są typowe, zmierz swoje suwmiarką.</span>
+        <Info text={INFO.connector} />
+      </div>
+      <h5>
+        Na której ściance <Info text={INFO.connWall} />
+      </h5>
+      <div className="row">
+        {WALL_SIDES.map((w) => (
+          <button key={w.side} className={now === w.side ? 'small on' : 'small'} onClick={() => toWall(part.id, w.side)}>
+            {w.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
 }
 
 /** "Dodaj miejsca na magnesy" for a box, a box built from plates (whole body) or a lid. */
@@ -444,6 +474,7 @@ function PartProperties({ part }: { part: Part }) {
         </div>
       )}
       <Helpers part={part} />
+      {part.type === 'connector' && <ConnectorWalls part={part} />}
 
       <h4>
         Położenie <Info text={INFO.position} />

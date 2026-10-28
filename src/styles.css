@@ -115,6 +115,7 @@ button, input, select { font: inherit; color: inherit; }
 .ax { font-size: 12px; width: 12px; }
 .ax0 { color: #e05555; } .ax1 { color: #55c065; } .ax2 { color: #5580e0; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; }
+button.small.on { border-color: var(--accent-2); color: var(--accent-2); }
 .row.end { margin-top: 14px; justify-content: flex-end; }
 .small { font-size: 12.5px; padding: 4px 8px; }
 .danger:hover { border-color: var(--danger) !important; color: var(--danger); }

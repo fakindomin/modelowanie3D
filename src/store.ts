@@ -8,6 +8,8 @@ import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurin
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
 import type { Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
 import type { Feature } from './scene/measure';
+import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
+import { BOARDS, EDGE_SIDE } from './parts/raspberry';
 
 const PALETTE = ['#4f8edc', '#e0864a', '#5bb37a', '#c96bc4', '#d9b84a', '#53b6c4', '#d76565', '#8a8fdc'];
 const FIG_PALETTE = ['#e9d8c4', '#f0b6a8', '#b9d7a8', '#a8c8e8', '#f2d68a', '#d8b8e8'];
@@ -104,6 +106,10 @@ interface State {
   recent: Record<string, Params>;
   /** Replaces a box or drawer with the plates it is made of (grouped in the same body). */
   explode(id: string): void;
+  /** Moves a connector cut-out (with its reinforcement) onto another wall of the body it is in. */
+  connectorToWall(id: string, side: WallSide): void;
+  /** Ready case for a Raspberry Pi board, made of ordinary editable elements. */
+  addPiCase(board: string): void;
   applyFixes(fixes: Fix[]): void;
   pattern(id: string, kind: PatternKind, opt: PatternOptions): void;
   unlink(id: string): void;
@@ -335,9 +341,12 @@ export const useStore = create<State>((set, get) => {
     const link = uid();
     let params: Params = { ...defaultParams(def), ...(overrides.params ?? {}) };
     let position: Vec3;
+    let rotation: Vec3 = [0, 0, 0];
     if (sel && def.place) {
-      const pl = def.place(sel.box, params);
+      const selPart = get().parts.find((p) => p.id === get().selectedId) ?? largestSolid(parts, sel.body);
+      const pl = def.place(sel.box, params, selPart);
       position = pl.position;
+      rotation = pl.rotation ?? rotation;
       params = { ...params, ...(pl.params ?? {}) };
     } else if (sel) {
       const c = sel.box.getCenter(new THREE.Vector3());
@@ -364,13 +373,15 @@ export const useStore = create<State>((set, get) => {
         name: `${def.label} ${count}: ${piece.label}`,
         params: { ...params, piece: piece.value },
         position: r3(position),
+        rotation,
         hole: piece.hole,
         color: piece.hole ? HOLE_COLOR : PALETTE[(next.length + 1) % PALETTE.length],
         body,
         link,
         rigid: link,
       });
-      if (piece.hole) part.avoidBody = solidBody;
+      // A fitting's own solids are separate bodies; its hole must not move into them.
+      if (piece.hole && def.pieces!.some((q) => !q.hole && q.body !== 'sel')) part.avoidBody = solidBody;
       if (!firstId) firstId = part.id;
       next.push(part);
     }
@@ -895,6 +906,7 @@ export const useStore = create<State>((set, get) => {
             if (d.type === 'number' && SCALED.includes(d.key) && d.def > 0) params[d.key] = Math.min(d.max, Math.max(d.min, round(d.def * SCALE[size], 1)));
         }
       }
+      if (variant.extra === 'pi') return get().addPiCase(variant.board ?? 'pi4');
       const id = get().add(variant.type, { params });
       const part = get().parts.find((p) => p.id === id);
       if (!part) return;
@@ -924,6 +936,74 @@ export const useStore = create<State>((set, get) => {
         commit([...parts, lid], { selectedId: id, fitRequest: get().fitRequest + 1 });
         get().notify('Pokrywka wsuwa się od przodu w rowki pod górną krawędzią (luz 0,3 mm na stronę).');
       }
+    },
+
+    connectorToWall(id, side) {
+      const { parts } = get();
+      const src = parts.find((p) => p.id === id);
+      if (!src || src.type !== 'connector') return;
+      const set_ = parts.filter((p) => (src.rigid ? p.rigid === src.rigid : p.id === src.id));
+      const ids = new Set(set_.map((p) => p.id));
+      const host = parts.filter((p) => p.body === src.body && !p.hole && !ids.has(p.id));
+      if (!host.length) return get().notify('Najpierw wstaw otwór w pudełko lub płytę (ta sama bryła).');
+      const box = new THREE.Box3();
+      host.forEach((p) => box.union(worldBox(p)));
+      const same = sideOf(src.rotation) === side;
+      const pose = wallPose(box, side, largestSolid(parts, src.body, ids), same ? src.position : undefined);
+      const params = pose.wall ? { ...src.params, wall: pose.wall } : src.params;
+      commit(parts.map((p) => (ids.has(p.id) ? { ...p, position: r3(pose.position), rotation: pose.rotation, params: { ...params, piece: p.params.piece } } : p)));
+    },
+
+    addPiCase(key) {
+      const b = BOARDS[key];
+      if (!b) return;
+      const { parts } = get();
+      const c = 1, T = 2, B = 2, sh = 4; // clearance around the board, wall, floor, standoff height
+      const W = b.L + 2 * (c + T), D = b.W + 2 * (c + T);
+      // Tall enough for the parts on the board, 2 mm of wall above every port and the lid rim.
+      const portTop = Math.max(...b.ports.map((q) => q.z + connOpening({ ...defaultParams(DEFS.connector), ...q.params }).h / 2));
+      const rim = 3; // the lid rim reaches this far down inside
+      const H = Math.ceil(B + sh + b.t + Math.max(b.top + 1.5, portTop + 2) + rim);
+      const next = [...parts];
+      const body = nextBody(next);
+      const box = makePart('box', next, { name: `Obudowa ${b.label}`, body, params: { W, D, H, T, B } });
+      box.position = parts.length ? besideAll(parts, new THREE.Vector3(W, D, H)) : [0, 0, 0];
+      next.push(box);
+      const [cx, cy] = box.position;
+      const x0 = cx - b.L / 2, y0 = cy - b.W / 2;
+      const top = B + sh + b.t; // board top surface
+      const posts = uid(), pilots = uid();
+      b.holes.forEach(([hx, hy], i) => {
+        const at: Vec3 = r3([x0 + hx, y0 + hy, B - 0.01]);
+        next.push(makePart('cylinder', next, { name: `Słupek ${i + 1}`, body, link: posts, color: box.color, position: at, params: { D: b.standoff, H: sh + 0.01 } }));
+        next.push(makePart('hole', next, { name: `Otwór pod wkręt ${i + 1}`, body, link: pilots, position: r3([at[0], at[1], B + 0.6]), params: { D: b.pilot, H: sh, luz: 0 } }));
+      });
+      const wb = worldBox(box);
+      for (const port of b.ports) {
+        const along: Vec3 = port.edge === 'y0' ? [x0 + port.at, 0, top + port.z] : [0, y0 + port.at, top + port.z];
+        const pose = wallPose(wb, EDGE_SIDE[port.edge], box, along);
+        next.push(
+          makePart('connector', next, {
+            name: `${b.label}: ${port.label}`,
+            body,
+            rigid: uid(),
+            hole: true,
+            color: HOLE_COLOR,
+            position: r3(pose.position),
+            rotation: pose.rotation,
+            params: { ...port.params, wall: T, piece: 'cut' },
+          }),
+        );
+      }
+      if (b.sd) {
+        const z = b.sd.side < 0 ? top - b.t - 1.5 : top + 0.8;
+        next.push(makePart('holeBox', next, { name: `${b.label}: karta microSD`, body, position: r3([wb.min.x + T / 2, y0 + b.sd.at, z - 1.75]), params: { W: T + 2, D: 13, H: 3.5, luz: 0 } }));
+      }
+      const lid = makePart('lid', next, { name: `Pokrywka ${b.label}`, params: { ...defaultParams(DEFS.lid), W, D, T: 2, wall: T, R: rim } });
+      lid.position = [round(wb.max.x + 10 + W / 2), cy, 0];
+      next.push(lid);
+      commit(next, { selectedId: box.id, fitRequest: get().fitRequest + 1 });
+      get().notify(`${b.label}: pudełko, 4 słupki pod wkręty, otwory na gniazda i pokrywka. Wymiary są typowe, sprawdź je suwmiarką na swojej płytce. ${b.hint}`);
     },
 
     explode(id) {
@@ -1366,6 +1446,21 @@ function inCorner(parts: Part[], part: Part): boolean {
 }
 
 /** Body (other than `exclude`) whose solids overlap the given part the most, or null. */
+/** Biggest solid of a body (the box a connector sits in), skipping the given ids. */
+function largestSolid(parts: Part[], body: number, skip?: Set<string>): Part | undefined {
+  let best: Part | undefined;
+  let bestVol = -1;
+  for (const p of parts) {
+    if (p.body !== body || p.hole || skip?.has(p.id)) continue;
+    const v = volume(worldBox(p));
+    if (v > bestVol) {
+      bestVol = v;
+      best = p;
+    }
+  }
+  return best;
+}
+
 function bestBodyFor(part: Part, parts: Part[], exclude: number | null): number | null {
   const hb = worldBox(part);
   let best: number | null = null;

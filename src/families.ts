@@ -1,4 +1,6 @@
 import type { Category, Params } from './catalog';
+import { CONNECTORS, connectorParams, type ConnSpec } from './parts/connectors';
+import { BOARDS } from './parts/raspberry';
 
 export type Size = 'S' | 'M' | 'L';
 
@@ -8,7 +10,9 @@ export interface Variant {
   type: string;
   params?: Params;
   /** Extra pieces added together: a lid, drawers in the cabinet, a hinged or sliding lid. */
-  extra?: 'lid' | 'drawers' | 'hinged' | 'slide';
+  extra?: 'lid' | 'drawers' | 'hinged' | 'slide' | 'pi';
+  /** Raspberry Pi board for a ready case. */
+  board?: string;
   /** Per-size parameters (overrides the family's). */
   sizes?: Record<Size, Params>;
   hint?: string;
@@ -22,7 +26,20 @@ export interface Family {
   category: Category;
   variants: Variant[];
   sizes?: Record<Size, Params>;
+  /** Fixed-size members (connectors, cases for a given board): no S/M/L. */
+  noSizes?: boolean;
 }
+
+const connectorFamily = (id: string, label: string, group: ConnSpec['group']): Family => ({
+  id,
+  label,
+  icon: 'connector',
+  category: 'connectors',
+  noSizes: true,
+  variants: Object.entries(CONNECTORS)
+    .filter(([, s]) => s.group === group)
+    .map(([k, s]) => ({ label: s.label, type: 'connector', params: connectorParams(k), hint: s.hint })),
+});
 
 const boxSizes: Record<Size, Params> = { S: { W: 60, D: 40, H: 30 }, M: { W: 80, D: 60, H: 40 }, L: { W: 120, D: 80, H: 60 } };
 
@@ -47,6 +64,14 @@ export const FAMILIES: Family[] = [
       { label: 'Z pokrywką na zawiasie', type: 'box', extra: 'hinged', hint: 'Pudełko, płaska pokrywka i zawias print-in-place na tylnej krawędzi.' },
       { label: 'Z wsuwaną pokrywką', type: 'box', params: { slide: true, T: 3 }, extra: 'slide' },
     ],
+  },
+  {
+    id: 'pi',
+    label: 'Obudowy Raspberry Pi',
+    icon: 'piCase',
+    category: 'ready',
+    noSizes: true,
+    variants: Object.entries(BOARDS).map(([k, b]) => ({ label: b.label, type: 'box', extra: 'pi' as const, board: k, hint: `Pudełko ze słupkami, otworami na gniazda i pokrywką pod ${b.label} (${b.L} × ${b.W} mm). Wszystko da się dalej zmieniać.` })),
   },
   {
     id: 'lid',
@@ -119,6 +144,9 @@ export const FAMILIES: Family[] = [
       { label: 'Kula', type: 'sphere' },
     ],
   },
+  connectorFamily('connUsb', 'USB, HDMI, Ethernet', 'usb'),
+  connectorFamily('connPower', 'Zasilanie i wyłączniki', 'power'),
+  connectorFamily('connOther', 'Audio, LED, przyciski, antena', 'other'),
 ];
 
 /** Types that live inside a family (shown there, not as loose tiles). */

@@ -1,6 +1,6 @@
 import type { Manifold } from 'manifold-3d';
 import type * as THREE from 'three';
-import type { Vec3 } from '../types';
+import type { Part, Vec3 } from '../types';
 
 export type ParamValue = number | string | boolean;
 export type Params = Record<string, ParamValue>;
@@ -20,7 +20,7 @@ export type ParamDef =
   | (ParamBase & { type: 'select'; def: string; options: { value: string; label: string }[] })
   | (ParamBase & { type: 'bool'; def: boolean });
 
-export type Category = 'ready' | 'profile' | 'basic' | 'joints' | 'threads' | 'hinges' | 'fittings' | 'figurines';
+export type Category = 'ready' | 'profile' | 'basic' | 'joints' | 'threads' | 'hinges' | 'fittings' | 'connectors' | 'figurines';
 
 /** One printed piece of a multi-piece fitting (hinge leaf, gland nut…). */
 export interface PieceDef {
@@ -44,7 +44,7 @@ export interface PartDef {
   /** Multi-piece fitting: one part per piece, sharing parameters and moving together. */
   pieces?: PieceDef[];
   /** Placement relative to the selected part's world box; default is centred on its top. */
-  place?: (sel: THREE.Box3, p: Params) => { position: Vec3; params?: Params };
+  place?: (sel: THREE.Box3, p: Params, part?: Part) => { position: Vec3; rotation?: Vec3; params?: Params };
   /** Fix up parameters after an edit (e.g. a new figurine model resets its sliders). */
   normalize?: (prev: Params, next: Params) => Params;
   /** Not shown in the library (made by helper buttons). */
