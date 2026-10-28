@@ -155,14 +155,55 @@ function aroundTexture(m: Manifold, t: Texture): Manifold {
   return w.rotate(back);
 }
 
+/**
+ * Height of the face to texture on a solid turned with that face up: the outermost flat face, unless
+ * it is just the end of something small standing on a bigger face (the tip of a drawer's knob), in which
+ * case that bigger face below wins. A box's rim stays the top: it reaches the outline.
+ */
+export function faceLevel(w: Manifold): number {
+  const mesh = w.getMesh();
+  const v = mesh.vertProperties, np = mesh.numProp, tri = mesh.triVerts;
+  const levels = new Map<number, { z: number; area: number; x0: number; x1: number; y0: number; y1: number }>();
+  for (let i = 0; i < tri.length; i += 3) {
+    const a = tri[i] * np, b = tri[i + 1] * np, c = tri[i + 2] * np;
+    const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2];
+    const wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
+    const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    const len = Math.hypot(nx, ny, nz);
+    if (len < 1e-9 || nz / len < 0.999) continue;
+    const key = Math.round(v[a + 2] * 50);
+    const l = levels.get(key) ?? { z: v[a + 2], area: 0, x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+    l.area += len / 2;
+    for (const q of [a, b, c]) {
+      l.x0 = Math.min(l.x0, v[q]);
+      l.x1 = Math.max(l.x1, v[q]);
+      l.y0 = Math.min(l.y0, v[q + 1]);
+      l.y1 = Math.max(l.y1, v[q + 1]);
+    }
+    levels.set(key, l);
+  }
+  const box = w.boundingBox();
+  const list = [...levels.values()].sort((p, q) => q.z - p.z);
+  if (!list.length) return box.max[2];
+  const W = box.max[0] - box.min[0], D = box.max[1] - box.min[1];
+  const small = (l: (typeof list)[number]) => l.x1 - l.x0 < 0.6 * W && l.y1 - l.y0 < 0.6 * D;
+  let i = 0;
+  while (i < list.length - 1 && small(list[i])) i++;
+  // Nothing big: the largest face it is.
+  if (small(list[i])) return list.reduce((p, q) => (q.area > p.area ? q : p)).z;
+  return list[i].z;
+}
+
 /** Adds the texture as real geometry, so it prints exactly as shown. */
 export function applyTexture(m: Manifold, t: Texture): Manifold {
   if (t.face === 'around') return aroundTexture(m, t);
   const rot = TO_TOP[t.face];
   const w = m.rotate(rot);
-  const b = w.boundingBox();
-  const top = b.max[2];
-  const footprint = w.slice(top - 0.05);
+  const top = faceLevel(w);
+  // The face itself: material just under it, less anything standing on it (a knob, a peg).
+  const under = w.slice(top - 0.05);
+  const above = w.slice(top + 0.05);
+  const footprint = above.isEmpty() ? under : under.subtract(above.offset(0.4, 'Round'));
   const region = t.margin > 0 ? footprint.offset(-t.margin, 'Miter') : footprint;
   if (region.isEmpty()) return m;
   const d = Math.max(0.1, t.depth);
