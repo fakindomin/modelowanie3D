@@ -81,6 +81,8 @@ export interface Project {
   version: 2;
   tech: Part[];
   fig: Part[];
+  /** Imported STL meshes the parts refer to (base64 vertices and triangles). */
+  meshes?: Record<string, { v: string; t: string }>;
 }
 
 /** Older single-scene project file. */

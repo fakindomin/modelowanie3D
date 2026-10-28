@@ -31,6 +31,8 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Podziel na części:** cięcie bryły płaszczyzną (podgląd w modelu) albo „Podziel, żeby zmieściła się
   na stole” (wymiary stołu do ustawienia). W obu częściach powstają otwory na kołki z luzem 0,3 mm, a kołki
   (Ø8, Ø5 albo Ø3, zależnie od grubości) są osobną bryłą. Górne części stają cięciem na stole.
+- **Import STL:** „Otwórz” wczytuje też plik STL (binarny albo tekstowy). Model staje się zwykłą bryłą:
+  robisz w nim otwory, magnesy, napisy, tniesz go na części. Skala w %, siatka zapisuje się w projekcie.
 - **Miejsca na magnesy:** jeden przycisk przy pudełku (prostokątnym, okrągłym, sześciokątnym, gotowym albo
   złożonym z płyt) lub pokrywce. W okrągłych i sześciokątnych gniazda idą równo po obwodzie (3/4/6/8).
   Szuflady i obudowa mają opcję „Magnes-zatrzask z tyłu”, który domyka szufladę.

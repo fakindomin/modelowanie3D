@@ -12,6 +12,7 @@ import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
 import { gridSegments, layoutOf } from './geom/dividers';
 import { DOWEL_LUZ, dowelSpots } from './geom/split';
+import { decodeMeshes, loadStoredMeshes, parseSTL, persistMeshes, registerMesh, toSolid } from './geom/meshes';
 
 export const PALETTE = ['#a9aeb3', '#e8873a', '#5bb974', '#c9b48a', '#7f8c99', '#d97757', '#8fbf9f', '#b8a07a'];
 const FIG_PALETTE = ['#e9d8c4', '#f0b6a8', '#b9d7a8', '#a8c8e8', '#f2d68a', '#d8b8e8'];
@@ -112,6 +113,8 @@ interface State {
   explode(id: string): void;
   /** Moves a connector cut-out (with its reinforcement) onto another wall of the body it is in. */
   connectorToWall(id: string, side: WallSide): void;
+  /** Adds a model read from an STL file. */
+  importSTL(name: string, data: ArrayBuffer): void;
   /** Puts a label onto a face of the body it belongs to, upright and readable from outside. */
   textToWall(id: string, side: WallSide): void;
   /** Cuts a body in two at a plane across `axis`, with dowel holes in both halves and loose dowels. */
@@ -221,6 +224,7 @@ function sanitize(parts: unknown): Part[] {
 }
 
 function loadSaved(): { tech: Part[]; fig: Part[] } {
+  loadStoredMeshes();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -1159,6 +1163,26 @@ export const useStore = create<State>((set, get) => {
       get().notify(`Podzielono bryłę ${body} na ${pieces.length} części, każda mieści się na stole ${bed.join(' × ')} mm.${dowelNote(pins, dowel)}`);
     },
 
+    importSTL(name, data) {
+      let mesh;
+      try {
+        mesh = parseSTL(data);
+      } catch {
+        return get().notify(`„${name}” nie wygląda na plik STL.`);
+      }
+      const solid = toSolid(mesh);
+      if (typeof solid === 'string')
+        return get().notify(`„${name}” ma dziurawą albo samoprzecinającą się siatkę, więc nie da się w niej wycinać ani jej łączyć. Napraw ją (np. w slicerze: „Napraw model”) i wczytaj jeszcze raz.`);
+      const ref = registerMesh(mesh, solid);
+      const b = solid.boundingBox();
+      const size = [0, 1, 2].map((i) => b.max[i] - b.min[i]);
+      const id = get().add('mesh', { name: name.replace(/\.stl$/i, ''), params: { ref, scale: 100 } });
+      const big = Math.max(...size);
+      const hint = big < 2 ? ' Jest bardzo mały: może był w metrach albo calach, zmień „Skalę”.' : big > 1000 ? ' Jest bardzo duży: może był w mikronach, zmień „Skalę”.' : '';
+      get().select(id);
+      get().notify(`Wczytano „${name}”: ${(mesh.tri.length / 3).toLocaleString('pl-PL')} trójkątów, ${size.map((v) => String(Math.round(v * 10) / 10).replace('.', ',')).join(' × ')} mm.${hint}`);
+    },
+
     textToWall(id, side) {
       const { parts } = get();
       const src = parts.find((p) => p.id === id);
@@ -1569,6 +1593,7 @@ export const useStore = create<State>((set, get) => {
 
     load(project) {
       const s = get();
+      if (project.version === 2) decodeMeshes(project.meshes);
       if (project.version === 1) {
         commit(sanitize(project.parts), { selectedId: null, fitRequest: s.fitRequest + 1 });
         return;
@@ -1783,6 +1808,7 @@ useStore.subscribe((s, prev) => {
     const tech = s.tab === 'tech' ? s.parts : s.stash.tech.parts;
     const fig = s.tab === 'fig' ? s.parts : s.stash.fig.parts;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, tech, fig } satisfies Project));
+    persistMeshes(new Set([...tech, ...fig].filter((p) => p.type === 'mesh').map((p) => String(p.params.ref))));
   } catch {
     /* storage unavailable */
   }

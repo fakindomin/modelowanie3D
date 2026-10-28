@@ -5,12 +5,15 @@ import { MeasurePanel } from './ui/MeasurePanel';
 import { useStore } from './store';
 import { buildBodies } from './geom/parts';
 import { export3MF, exportSTL, saveJSON } from './export';
+import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
 
 function projectOf(): Project {
   const s = useStore.getState();
   const of = (t: Tab): Part[] => (s.tab === t ? s.parts : s.stash[t].parts);
-  return { version: 2, tech: of('tech'), fig: of('fig') };
+  const tech = of('tech'), fig = of('fig');
+  const refs = new Set([...tech, ...fig].filter((p) => p.type === 'mesh').map((p) => String(p.params.ref)));
+  return { version: 2, tech, fig, ...(refs.size ? { meshes: encodeMeshes(refs) } : {}) };
 }
 
 function Toolbar() {
@@ -48,17 +51,20 @@ function Toolbar() {
       <span className="sep" />
       <div className="group">
         <button onClick={() => { st.reset(); st.notify('Scena wyczyszczona. „Cofnij” przywróci poprzedni model.'); }}>Nowy</button>
-        <button onClick={() => file.current?.click()}>Otwórz</button>
+        <button onClick={() => file.current?.click()} title="Otwiera zapisany projekt (.json) albo dodaje model z pliku STL">
+          Otwórz
+        </button>
         <button onClick={() => saveJSON(JSON.stringify(projectOf(), null, 1), 'projekt')}>Zapisz</button>
         <input
           ref={file}
           type="file"
-          accept=".json,application/json"
+          accept=".json,application/json,.stl,model/stl"
           hidden
           onChange={async (e) => {
             const f = e.target.files?.[0];
             e.target.value = '';
             if (!f) return;
+            if (/\.stl$/i.test(f.name)) return st.importSTL(f.name, await f.arrayBuffer());
             try {
               st.load(JSON.parse(await f.text()) as Project);
             } catch {
@@ -145,6 +151,7 @@ function Help() {
             <li><b>Tło</b>: obrót widoku · <b>prawy przycisk</b>: przesuń widok · <b>kółko</b>: zoom</li>
             <li><b>Strzałki, PgUp/PgDn</b>: przesuń o krok siatki · <b>R</b>: obróć o 90°</li>
             <li><b>F</b>: widok całości · <b>W</b>: wymiary · <b>Ctrl+Z / Ctrl+D / Delete</b></li>
+            <li><b>Otwórz</b> wczytuje też plik <b>STL</b>: robisz w nim otwory, napisy, magnesy i go tniesz</li>
           </ul>
         </div>
       )}

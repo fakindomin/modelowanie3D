@@ -8,6 +8,7 @@ import { FITTING_DEFS } from './parts/fittings';
 import { CONNECTOR_DEFS } from './parts/connectors';
 import { FIGURINE_DEF } from './parts/figurine';
 import { TEXT_DEFS } from './parts/text';
+import { meshSolid } from './geom/meshes';
 import { dividerSolid, segmentsOf } from './geom/dividers';
 
 export type { Category, ParamDef, ParamValue, Params, PartDef } from './parts/def';
@@ -157,6 +158,22 @@ function dropLayout(prev: Params, next: Params): Params {
 }
 
 const BASE: PartDef[] = [
+  {
+    type: 'mesh',
+    label: 'Model z pliku',
+    category: 'basic',
+    hole: false,
+    hidden: true,
+    description: 'Model wczytany z pliku STL. Robisz w nim otwory, magnesy i napisy, tniesz go i łączysz jak każdą bryłę.',
+    params: [
+      { key: 'ref', label: 'Plik', type: 'text', def: '', show: () => false },
+      { key: 'scale', label: 'Skala', type: 'number', def: 100, min: 1, max: 10000, step: 1, unit: '%', hint: '100% = wymiary z pliku (milimetry). Model w calach powiększ do 2540%.' },
+    ],
+    build: (p) => {
+      const k = num(p, 'scale') / 100;
+      return settle(meshSolid(String(p.ref)).scale([k, k, k]));
+    },
+  },
   // ---------------------------------------------------------------- ready
   {
     type: 'slab',
