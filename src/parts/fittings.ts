@@ -1,8 +1,8 @@
 import type { Manifold } from 'manifold-3d';
 import { M } from '../geom/manifold';
 import type { Params, PartDef } from './def';
-import { block, clearance, cyl, hex, num, select, union } from './util';
-import { THREADS, internalThreadCut, threadSolid, type ThreadSpec } from './threads';
+import { block, cyl, hex, num, select, union } from './util';
+import { THREADS, fitParams, internalThreadCut, threadGap, threadSolid, type ThreadSpec } from './threads';
 
 // ------------------------------------------------------------------ cable gland
 /** Gland sizes with the cable range each one seals. */
@@ -28,7 +28,7 @@ export function glandSize(p: Params) {
 function gland(p: Params): Manifold {
   const g = glandSize(p);
   const s: ThreadSpec = THREADS[g.thread];
-  const d = s.d, P = s.p, luz = num(p, 'luz');
+  const d = s.d, P = s.p, luz = threadGap(p, 'in');
   const cable = num(p, 'cable'), wall = num(p, 'wall');
   const af = Math.round(d * 1.35 + 3);
   const fh = 4; // flange height
@@ -136,7 +136,7 @@ export const FITTING_DEFS: PartDef[] = [
         ['M25', 'M25×1,5 (kabel 9–16)'],
       ]),
       { key: 'wall', label: 'Grubość ścianki', type: 'number', def: 3, min: 1, max: 15, step: 0.2, unit: 'mm' },
-      clearance(0.3, 'Luz gwintu nakrętek.'),
+      ...fitParams('in'),
     ],
     build: gland,
   },

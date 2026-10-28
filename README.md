@@ -78,6 +78,9 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Gwinty i śruby:** otwór z drukowanym gwintem (M6–M30, drobnozwojne, PG, rurowe G, własny skok),
   śruba / pręt gwintowany / króciec, nakrętka, otwór pod wkręcenie M2–M5. Przyciski „Dodaj pasującą
   śrubę / nakrętkę / otwór z gwintem” dobierają drugą część z luzem.
+  Dopasowanie: ciasne, normalne (wkręca się ręką) albo luźne; luz liczony na boku zwoju i dzielony między
+  śrubę i otwór, wierzchołki zwojów są lekko ścięte. „Próbka gwintu” to krótka śruba i trzy nakrętki
+  (1, 2, 3 kropki = ciasne, normalne, luźne) do wydruku testowego.
 - **Zawiasy i łączniki:** zawias z bolcem, zawias print-in-place, zatrzask (haczyk + okienko),
   jaskółczy ogon z gniazdem. Zawias zaznaczony na pudełku sam łączy skrzydełka z pudełkiem i pokrywą.
 - **Przepusty i złączki:** dławik kablowy dobierany do średnicy kabla (otwór, korpus, nakrętka

@@ -871,7 +871,7 @@ export const useStore = create<State>((set, get) => {
       const depth = Number(src.params.H) || 12;
       const bolt = makePart('bolt', parts, {
         name: `Śruba do: ${src.name}`,
-        params: { size: src.params.size, D: src.params.D, P: src.params.P, L: src.type === 'threadHole' ? Math.max(3, depth - 1) : Math.max(10, depth + 8), head: 'hex', bore: 0, luz: 0 },
+        params: { size: src.params.size, D: src.params.D, P: src.params.P, L: src.type === 'threadHole' ? Math.max(3, depth - 1) : Math.max(10, depth + 8), head: 'hex', bore: 0, fit: 'normal', luz: 0.1 },
       });
       pushRight(parts, bolt);
       commit([...parts, bolt], { selectedId: bolt.id, fitRequest: get().fitRequest + 1 });
@@ -882,7 +882,7 @@ export const useStore = create<State>((set, get) => {
       const { parts } = get();
       const src = parts.find((x) => x.id === id);
       if (!src) return;
-      const nut = makePart('threadNut', parts, { name: `Nakrętka do: ${src.name}`, params: { size: src.params.size, D: src.params.D, P: src.params.P, H: 0, shape: 'hex', luz: 0.3 } });
+      const nut = makePart('threadNut', parts, { name: `Nakrętka do: ${src.name}`, params: { size: src.params.size, D: src.params.D, P: src.params.P, H: 0, shape: 'hex', fit: 'normal', luz: 0.2 } });
       pushRight(parts, nut);
       commit([...parts, nut], { selectedId: nut.id, fitRequest: get().fitRequest + 1 });
       get().notify('Dodano pasującą nakrętkę jako osobną bryłę obok modelu.');
@@ -896,7 +896,7 @@ export const useStore = create<State>((set, get) => {
       const local = new THREE.Vector3(0, 0, Math.max(0, headH)).applyMatrix4(partMatrix(bolt.position, bolt.rotation));
       const hole = makePart('threadHole', parts, {
         name: `Gwint do: ${bolt.name}`,
-        params: { size: bolt.params.size, D: bolt.params.D, P: bolt.params.P, H: Number(bolt.params.L), luz: 0.3, chamfer: true },
+        params: { size: bolt.params.size, D: bolt.params.D, P: bolt.params.P, H: Number(bolt.params.L), fit: 'normal', luz: 0.2, chamfer: true },
         position: r3([local.x, local.y, local.z]),
         rotation: [...bolt.rotation],
       });

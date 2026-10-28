@@ -1,7 +1,7 @@
 import type { Manifold } from 'manifold-3d';
 import { M } from '../geom/manifold';
 import type { ParamDef, Params, PartDef } from './def';
-import { clearance, cyl, hex, knurled, num, select } from './util';
+import { cyl, hex, knurled, num, select, union } from './util';
 
 export interface ThreadSpec {
   d: number;
@@ -51,12 +51,53 @@ function depthFactor(angle: number) {
 }
 
 /**
+ * How a printed thread fits. The gap is measured on the flank of the thread (where the two threads
+ * actually touch), per part: a printed bolt in a printed hole gets both gaps.
+ */
+export const FITS: Record<string, { label: string; in: number; out: number }> = {
+  tight: { label: 'Ciasne', in: 0.1, out: 0.05 },
+  normal: { label: 'Normalne', in: 0.2, out: 0.1 },
+  loose: { label: 'Luźne', in: 0.3, out: 0.15 },
+};
+
+/** Fit choice plus the custom gap; `role` in = threaded hole or nut, out = bolt. */
+export function fitParams(role: 'in' | 'out'): ParamDef[] {
+  return [
+    {
+      ...select('fit', 'Dopasowanie', 'normal', [...Object.entries(FITS).map(([k, v]) => [k, v.label] as [string, string]), ['custom', 'Własny luz']]),
+      hint: 'Ciasne trzyma bez nakrętki, normalne wkręca się ręką, luźne do szybkiego skręcania. Nie wiesz, co wybrać? Wydrukuj „Próbkę gwintu”.',
+    },
+    {
+      key: 'luz',
+      label: 'Luz na boku zwoju',
+      type: 'number',
+      def: role === 'in' ? 0.2 : 0.1,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      unit: 'mm',
+      show: (p) => p.fit === 'custom',
+      hint: role === 'in' ? 'Szczelina między zwojami otworu i śruby. Gdy próbka gwintu chodzi ciężko, dodaj 0,05–0,1 mm.' : 'Odejmowany od zwojów śruby. Gdy śruba chodzi ciężko, dodaj 0,05 mm.',
+    },
+  ];
+}
+
+/** Flank gap in mm for this part's fit. */
+export function threadGap(p: Params, role: 'in' | 'out'): number {
+  const f = FITS[String(p.fit ?? 'normal')];
+  return f ? f[role] : Math.max(0, num(p, 'luz'));
+}
+
+/** Radial shift that opens a flank gap: the flanks lean at half the thread angle. */
+const radial = (gap: number, angle: number) => gap / Math.sin(((angle / 2) * Math.PI) / 180);
+
+/**
  * Right-hand helical thread from z = 0 to z = length.
  * `grow` enlarges the radius (internal cut = bolt shape + clearance); `z0` is the height the solid will
  * be moved to, so threads built for the same frame (gland body and its nuts) mesh with each other.
  * Built as a twisted extrusion of a cross-section whose radius follows the thread profile.
  */
-export function threadSolid(spec: { d: number; p: number; angle: number }, length: number, grow = 0, z0 = 0): Manifold {
+export function threadSolid(spec: { d: number; p: number; angle: number }, length: number, grow = 0, z0 = 0, flat: 'crest' | 'root' | null = null): Manifold {
   const { d, p, angle } = spec;
   const h = depthFactor(angle) * p;
   const rMaj = d / 2 + grow;
@@ -76,7 +117,9 @@ export function threadSolid(spec: { d: number; p: number; angle: number }, lengt
   for (let i = 0; i < n; i++) {
     const th = (i / n) * Math.PI * 2;
     const u = (((-th / (Math.PI * 2)) % 1) + 1) % 1;
-    const r = prof(u);
+    // Flattened tips print without sagging: a bolt loses its sharp crests, a hole its sharp inner ridges.
+    const cut = 0.12 * p;
+    const r = flat === 'crest' ? Math.min(prof(u), rMaj - cut) : flat === 'root' ? Math.max(prof(u), rMin + cut) : prof(u);
     pts.push([r * Math.cos(th), r * Math.sin(th)]);
   }
   const turns = length / p;
@@ -86,10 +129,11 @@ export function threadSolid(spec: { d: number; p: number; angle: number }, lengt
 }
 
 /** Bolt shank with chamfered ends so the thread starts cleanly. */
-function externalThread(spec: ThreadSpec, length: number, shrink: number, chamferTop = true, chamferBottom = false): Manifold {
-  let t = threadSolid(spec, length, -shrink / 2);
+export function externalThread(spec: ThreadSpec, length: number, gap: number, chamferTop = true, chamferBottom = false): Manifold {
+  const shrink = radial(gap, spec.angle);
+  let t = threadSolid(spec, length, -shrink, 0, 'crest');
   const h = depthFactor(spec.angle) * spec.p;
-  const r = spec.d / 2 - shrink / 2;
+  const r = spec.d / 2 - shrink;
   const c = h + 0.2;
   // Intersect with a cylinder whose ends are cones: removes the sharp thread start.
   const bottom = chamferBottom ? cyl(c, r - c, r + 0.01) : cyl(c, r + 0.01);
@@ -100,10 +144,11 @@ function externalThread(spec: ThreadSpec, length: number, shrink: number, chamfe
 }
 
 /** Shape to subtract for a threaded hole, with a lead-in countersink at the entry (top). */
-export function internalThreadCut(spec: ThreadSpec, depth: number, luz: number, chamfer = true, bothEnds = false, z0 = 0): Manifold {
-  let cut = threadSolid(spec, depth + 0.02, luz / 2, z0 - 0.01).translate([0, 0, -0.01]);
+export function internalThreadCut(spec: ThreadSpec, depth: number, gap: number, chamfer = true, bothEnds = false, z0 = 0): Manifold {
+  const grow = radial(gap, spec.angle);
+  let cut = threadSolid(spec, depth + 0.02, grow, z0 - 0.01, 'root').translate([0, 0, -0.01]);
   const h = depthFactor(spec.angle) * spec.p;
-  const r = spec.d / 2 + luz / 2;
+  const r = spec.d / 2 + grow;
   if (chamfer) {
     const c = h + 0.5;
     cut = cut.add(cyl(c + 0.01, r - h, r + 0.5).translate([0, 0, depth - c]));
@@ -134,10 +179,10 @@ export const THREAD_DEFS: PartDef[] = [
       customD,
       customP,
       { key: 'H', label: 'Głębokość', type: 'number', def: 12, min: 2, max: 300, unit: 'mm' },
-      clearance(0.3, 'Luz gwintu dodawany do średnicy. 0,3 mm pasuje do większości drukarek.'),
+      ...fitParams('in'),
       { key: 'chamfer', label: 'Fazka na wejściu', type: 'bool', def: true },
     ],
-    build: (p) => internalThreadCut(specOf(p), num(p, 'H'), num(p, 'luz'), Boolean(p.chamfer)),
+    build: (p) => internalThreadCut(specOf(p), num(p, 'H'), threadGap(p, 'in'), Boolean(p.chamfer)),
   },
   {
     type: 'bolt',
@@ -156,13 +201,13 @@ export const THREAD_DEFS: PartDef[] = [
         ['none', 'Bez łba (pręt)'],
       ]),
       { key: 'bore', label: 'Otwór w środku', type: 'number', def: 0, min: 0, max: 100, step: 0.5, unit: 'mm', hint: '0 = pełna śruba. Większy otwór robi króciec / złączkę.' },
-      clearance(0, 'Zmniejsza średnicę śruby, jeśli wchodzi za ciasno.'),
+      ...fitParams('out'),
     ],
     build: (p) => {
       const s = specOf(p);
       const L = num(p, 'L');
       const headH = p.head === 'none' ? 0 : Math.max(3, Math.round(s.d * 0.65 * 2) / 2);
-      let m = externalThread(s, L, num(p, 'luz'), true, p.head === 'none').translate([0, 0, headH]);
+      let m = externalThread(s, L, threadGap(p, 'out'), true, p.head === 'none').translate([0, 0, headH]);
       if (p.head === 'hex') m = m.add(hex(s.af, headH + 0.01));
       if (p.head === 'knurl') m = m.add(knurled(s.af * 1.1, headH + 0.01));
       const bore = num(p, 'bore');
@@ -185,13 +230,39 @@ export const THREAD_DEFS: PartDef[] = [
         ['hex', 'Sześciokątna'],
         ['knurl', 'Radełkowana (ręczna)'],
       ]),
-      clearance(0.3, 'Luz gwintu dodawany do średnicy.'),
+      ...fitParams('in'),
     ],
     build: (p) => {
       const s = specOf(p);
       const h = num(p, 'H') || Math.max(4, Math.round(s.d * 0.8));
       const outer = p.shape === 'knurl' ? knurled(s.af * 1.15, h) : hex(s.af, h);
-      return outer.subtract(internalThreadCut(s, h, num(p, 'luz'), true, true));
+      return outer.subtract(internalThreadCut(s, h, threadGap(p, 'in'), true, true));
+    },
+  },
+  {
+    type: 'threadTest',
+    label: 'Próbka gwintu',
+    category: 'threads',
+    hole: false,
+    description: 'Krótka śruba i trzy cienkie nakrętki: 1 kropka = ciasne, 2 = normalne, 3 = luźne. Wydrukuj, sprawdź, która chodzi dobrze, i ustaw takie dopasowanie w swoich gwintach.',
+    params: [sizeParam, customD, customP, ...fitParams('out').map((d) => (d.key === 'fit' ? { ...d, label: 'Dopasowanie śruby' } : d))],
+    build: (p) => {
+      const s = specOf(p);
+      const headH = Math.max(3, Math.round(s.d * 0.4));
+      const nutH = Math.max(4, Math.round(s.d * 0.5));
+      const bolt = externalThread(s, nutH * 2 + 2, threadGap(p, 'out')).translate([0, 0, headH]).add(hex(s.af, headH + 0.01));
+      const step = s.af * 1.25 + 3;
+      const nuts = (['tight', 'normal', 'loose'] as const).map((f, i) => {
+        let n = hex(s.af, nutH).subtract(internalThreadCut(s, nutH, FITS[f].in, true, true));
+        // Dots on the top face tell the nuts apart after printing.
+        const rd = (s.af / 2 + s.d / 2) / 2;
+        for (let k = 0; k <= i; k++) {
+          const a = Math.PI / 2 + (k - i / 2) * 0.45;
+          n = n.subtract(cyl(1, 0.8).translate([Math.cos(a) * rd, Math.sin(a) * rd, nutH - 0.6]));
+        }
+        return n.translate([step * (i + 1), 0, 0]);
+      });
+      return union([bolt, ...nuts]);
     },
   },
   {
