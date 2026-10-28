@@ -5,6 +5,7 @@ import type { Part } from '../types';
 import { M, matrixToMat4, toGeometry } from './manifold';
 import { applyTexture } from './texture';
 import { applyEdges } from './edges';
+import { applyBend } from './bend';
 
 interface Built {
   manifold: Manifold;
@@ -116,6 +117,18 @@ export function buildBodies(parts: Part[], only?: number[]): BodyResult[] {
       result = next;
     }
     if (result.isEmpty()) continue;
+    const bend = solids.find((p) => p.bend?.on)?.bend;
+    if (bend) {
+      try {
+        const bent = applyBend(result, bend);
+        if (bent !== result) {
+          result.delete();
+          result = bent;
+        }
+      } catch (e) {
+        console.warn('bend failed', e);
+      }
+    }
     out.push({ body, manifold: result, geometry: toGeometry(result), color: solids[0].color });
   }
   return out;

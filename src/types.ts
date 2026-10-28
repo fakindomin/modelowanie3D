@@ -32,6 +32,24 @@ export interface Edges {
   bottom: boolean;
 }
 
+/** Bending of a whole body, applied after holes are cut (kept on one of its solids). */
+export interface Bend {
+  /** Off shows the body flat for editing. */
+  on: boolean;
+  mode: 'wrap' | 'angle';
+  /** Which length bends: along X or along Y. */
+  axis: 'x' | 'y';
+  /** Ends go down (bottom face inside the bend) or up. */
+  dir: 'down' | 'up';
+  /** wrap: pipe diameter and play. */
+  D: number;
+  luz: number;
+  /** angle: bend line (world mm along the axis), angle in degrees and inner radius. */
+  at: number;
+  angle: number;
+  r: number;
+}
+
 export interface Part {
   id: string;
   type: string;
@@ -54,6 +72,7 @@ export interface Part {
   rigid?: string;
   texture?: Texture;
   edges?: Edges;
+  bend?: Bend;
   /** Lid made for this box: its size (and divider slots) follow the box. */
   fitTo?: string;
   /** Member of a pattern that keeps its rule: move one member and the others follow. */

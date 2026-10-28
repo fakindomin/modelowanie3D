@@ -6,7 +6,7 @@ import { buildBodies, built, partMatrix, worldBox, worldManifold } from './geom/
 import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
-import type { Edges, Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
+import type { Bend, Edges, Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
@@ -131,6 +131,8 @@ interface State {
   unlink(id: string): void;
   setTexture(id: string, texture: Texture | undefined): void;
   setEdges(id: string, edges: Edges | undefined): void;
+  /** Bending of a whole body, kept on one of its solids (`id`); other solids of the body lose theirs. */
+  setBend(id: string, bend: Bend | undefined): void;
   fitFigurine(id: string, height: number): void;
   merge(body: number): void;
   unmerge(body: number): void;
@@ -174,8 +176,9 @@ function nextBody(parts: Part[]) {
   return parts.reduce((m, p) => Math.max(m, p.body), 0) + 1;
 }
 
+/** Shown as the finished piece: merged by the user, or bent (bending needs the finished solid). */
 export function isMerged(parts: Part[], body: number) {
-  return parts.some((p) => p.body === body && !p.hole && p.merged);
+  return parts.some((p) => p.body === body && !p.hole && (p.merged || p.bend?.on));
 }
 
 function overlaps(a: THREE.Box3, b: THREE.Box3, eps = 0.01) {
@@ -1452,6 +1455,12 @@ export const useStore = create<State>((set, get) => {
 
     setEdges(id, edges) {
       get().update(id, { edges });
+    },
+
+    setBend(id, bend) {
+      const src = get().parts.find((p) => p.id === id);
+      if (!src) return;
+      commit(get().parts.map((p) => (p.id === id ? { ...p, bend } : p.body === src.body && p.bend ? { ...p, bend: undefined } : p)));
     },
 
     fitFigurine(id, height) {

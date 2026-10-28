@@ -108,7 +108,7 @@ function PreviewBodies() {
 
 function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | null; hoveredBody: number | null }) {
   const parts = useStore((s) => s.parts);
-  const merged = useMemo(() => [...new Set(parts.filter((p) => p.merged && !p.hole).map((p) => p.body))].sort((a, b) => a - b), [parts]);
+  const merged = useMemo(() => [...new Set(parts.filter((p) => (p.merged || p.bend?.on) && !p.hole).map((p) => p.body))].sort((a, b) => a - b), [parts]);
   const bodies = useBodies(parts, merged, merged.join(','));
   return (
     <>
@@ -307,7 +307,8 @@ function Scene() {
   const selectedPart = parts.find((p) => p.id === selectedId);
   const selBody = groupBody(selectedId);
   const hovBody = groupBody(hoveredId);
-  const mergedBodies = new Set(parts.filter((p) => p.merged && !p.hole).map((p) => p.body));
+  const mergedBodies = new Set(parts.filter((p) => (p.merged || p.bend?.on) && !p.hole).map((p) => p.body));
+  const bentBodies = new Set(parts.filter((p) => p.bend?.on && !p.hole).map((p) => p.body));
   const look = (p: Part): Look => ({
     selected: p.id === selectedId || (selBody !== null && p.body === selBody && !mergedBodies.has(p.body)),
     hovered: p.id === hoveredId || (hovBody !== null && p.body === hovBody && !mergedBodies.has(p.body)),
@@ -325,7 +326,8 @@ function Scene() {
       }}
     >
       {parts.map((p) =>
-        mergedBodies.has(p.body) && !p.hole ? (
+        // A bent body's flat holes would float beside the bent shape: shown only when picked.
+        bentBodies.has(p.body) && p.hole && p.id !== selectedId ? null : mergedBodies.has(p.body) && !p.hole ? (
           <MergedMember key={p.id} part={p} look={look(p)} />
         ) : (
           <PartMesh key={p.id} part={p} look={look(p)} ghost={mergedBodies.has(p.body)} />

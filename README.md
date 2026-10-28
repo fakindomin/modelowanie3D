@@ -33,6 +33,10 @@ Każda ma własną scenę, historię cofania i autozapis.
   (Ø8, Ø5 albo Ø3, zależnie od grubości) są osobną bryłą. Górne części stają cięciem na stole.
 - **Import STL:** „Otwórz” wczytuje też plik STL (binarny albo tekstowy). Model staje się zwykłą bryłą:
   robisz w nim otwory, magnesy, napisy, tniesz go na części. Skala w %, siatka zapisuje się w projekcie.
+- **Gięcie:** sekcja „↪ Gięcie” przy płaskiej bryle. „Owiń na rurę” (średnica rury i luz) albo „Zegnij o kąt”
+  (kąt, miejsce zgięcia, promień wewnętrzny). Płaska wersja zostaje do edycji, gięcie można wyłączyć.
+  „Sprawdź model” ostrzega, gdy gwint albo magnes wypada w strefie gięcia. Gotowe: siodełko, klips i obejma
+  dwudzielna na rurę (w „Okuciach”).
 - **Miejsca na magnesy:** jeden przycisk przy pudełku (prostokątnym, okrągłym, sześciokątnym, gotowym albo
   złożonym z płyt) lub pokrywce. W okrągłych i sześciokątnych gniazda idą równo po obwodzie (3/4/6/8).
   Szuflady i obudowa mają opcję „Magnes-zatrzask z tyłu”, który domyka szufladę.

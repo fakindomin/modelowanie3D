@@ -5,8 +5,9 @@ import { findLid, type MagnetOptions } from '../geom/magnets';
 import { assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, useStore, type PatternKind } from '../store';
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { DEFAULT_EDGES } from '../geom/edges';
+import { DEFAULT_BEND } from '../geom/bend';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
-import type { Edges, Part, Texture, Vec3 } from '../types';
+import type { Bend, Edges, Part, Texture, Vec3 } from '../types';
 import { Icon } from './Icon';
 import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
@@ -781,6 +782,11 @@ function PartProperties({ part }: { part: Part }) {
           <MagnetTool target={part.id} body={part.body} />
         </Section>
       )}
+      {!part.hole && (
+        <Section title="↪ Gięcie" open={st.parts.some((p) => p.body === part.body && p.bend)} info={INFO.bend}>
+          <BendTool body={part.body} prefer={part.id} />
+        </Section>
+      )}
       {!part.hole && <SplitTool body={part.body} />}
       {!part.rigid && (
         <Section title="Szyk i kopie" info={INFO.pattern}>
@@ -841,6 +847,83 @@ function PartProperties({ part }: { part: Part }) {
           Usuń
         </button>
       </div>
+    </div>
+  );
+}
+
+/** "Gięcie": wraps the whole body round a pipe or folds it by an angle; holes bend with it. */
+function BendTool({ body, prefer }: { body: number; prefer?: string }) {
+  const st = useStore();
+  const solids = st.parts.filter((p) => p.body === body && !p.hole);
+  const holder = solids.find((p) => p.bend) ?? solids.find((p) => p.id === prefer) ?? solids[0];
+  const flat = useMemo(() => {
+    const bb = bodyBox(st.parts, body);
+    return bb.isEmpty() ? null : bb;
+  }, [st.parts, body]);
+  if (!holder || !flat) return null;
+  const b = holder.bend;
+  const ax = (b?.axis ?? 'x') === 'x' ? 0 : 1;
+  const lo = flat.min.getComponent(ax), hi = flat.max.getComponent(ax);
+  const t = flat.max.z - flat.min.z;
+  const set = (patch: Partial<Bend>) => {
+    const base = b ?? { ...DEFAULT_BEND, at: Math.round((lo + hi) / 2), r: Math.max(1, Math.round(t)) };
+    st.setBend(holder.id, { ...base, ...patch });
+  };
+  const n = (key: 'D' | 'luz' | 'at' | 'angle' | 'r', label: string, min: number, max: number, step: number, unit: string) => (
+    <label className="field">
+      <span>{label}</span>
+      <NumberInput value={Number(b![key])} min={min} max={max} step={step} unit={unit} onChange={(v) => set({ [key]: v })} />
+    </label>
+  );
+  const wrapDeg = b && b.mode === 'wrap' ? Math.round(((hi - lo) / (b.D / 2 + b.luz + t / 2)) * (180 / Math.PI)) : 0;
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Gięcie</span>
+        <select value={b ? b.mode : 'none'} onChange={(e) => (e.target.value === 'none' ? st.setBend(holder.id, undefined) : set({ mode: e.target.value as Bend['mode'], on: true }))}>
+          <option value="none">Brak (płaska)</option>
+          <option value="wrap">Owiń na rurę</option>
+          <option value="angle">Zegnij o kąt</option>
+        </select>
+      </label>
+      {b && (
+        <>
+          <label className="field">
+            <span>Gięta długość</span>
+            <select value={b.axis} onChange={(e) => set({ axis: e.target.value as Bend['axis'], at: Math.round(((e.target.value === 'x' ? flat.min.x + flat.max.x : flat.min.y + flat.max.y) / 2)) })}>
+              <option value="x">wzdłuż X</option>
+              <option value="y">wzdłuż Y</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Końce idą</span>
+            <select value={b.dir} onChange={(e) => set({ dir: e.target.value as Bend['dir'] })}>
+              <option value="down">w dół (spód do środka)</option>
+              <option value="up">w górę (wierzch do środka)</option>
+            </select>
+          </label>
+          {b.mode === 'wrap' ? (
+            <>
+              {n('D', 'Średnica rury', 2, 1000, 0.5, 'mm')}
+              {n('luz', 'Luz na rurę', 0, 5, 0.1, 'mm')}
+              <p className="desc">
+                Długość {Math.round(hi - lo)} mm owija {wrapDeg}° rury{wrapDeg > 340 ? ': końce zachodzą na siebie, skróć element.' : '.'} Pełny obwód to {Math.round(Math.PI * (b.D + 2 * b.luz + t))} mm.
+              </p>
+            </>
+          ) : (
+            <>
+              {n('at', `Linia gięcia (${Math.round(lo)}…${Math.round(hi)})`, Math.ceil(lo), Math.floor(hi), 1, 'mm')}
+              {n('angle', 'Kąt', 1, 180, 5, '°')}
+              {n('r', 'Promień wewnętrzny', 0, 200, 0.5, 'mm')}
+            </>
+          )}
+          <label className="field">
+            <span>Pokaż płasko (do edycji)</span>
+            <input type="checkbox" checked={!b.on} onChange={(e) => set({ on: !e.target.checked })} />
+          </label>
+          <p className="desc">Otwory i napisy gną się razem z bryłą. Gwinty i gniazda magnesów w miejscu gięcia się zniekształcą.</p>
+        </>
+      )}
     </div>
   );
 }
@@ -945,13 +1028,16 @@ function GroupProperties({ body }: { body: number }) {
         {members.length} {members.length === 1 ? 'element' : 'elementów'}, w tym {holes} {holes === 1 ? 'otwór' : 'otworów'}. Wymiary: {size.map((v) => Math.round(v * 10) / 10).join(' × ')} mm.
         {tied > 0 && ' Połączona zawiasem lub złączką z inną bryłą, przesuwa się razem z nią.'}
       </p>
-      {holes > 0 && (
+      {holes > 0 && !members.some((p) => p.bend?.on) && (
         <button className="action" onClick={() => (merged ? st.unmerge(body) : st.merge(body))}>
           {merged ? '⧈ Rozdziel (pokaż otwory osobno)' : '⧉ Złącz otwory z bryłą (pokaż gotowy element)'}
         </button>
       )}
       <Section title="🧲 Miejsca na magnesy (pudełko z płyt)" info={INFO.magnets}>
         <MagnetTool target={groupId(body)} body={body} />
+      </Section>
+      <Section title="↪ Gięcie" open={members.some((p) => p.bend)} info={INFO.bend}>
+        <BendTool body={body} />
       </Section>
       <SplitTool body={body} />
       {merged && <p className="desc">Złączona: widać gotowy element. Otwory nadal możesz kliknąć (na liście albo w modelu) i przesuwać w bryle.</p>}
@@ -1008,13 +1094,14 @@ function Outliner() {
       {bodies.map((b) => {
         const members = parts.filter((p) => p.body === b);
         const merged = isMerged(parts, b);
-        const holes = members.some((p) => p.hole);
+        const bent = members.some((p) => p.bend?.on);
+        const holes = members.some((p) => p.hole) && !bent;
         const g = groupId(b);
         return (
           <div key={b} className="body">
             <div className={`body-head ${cls(g)}`} onMouseEnter={() => setHover(g)} onClick={() => select(g)}>
               <b>Bryła {b}</b>
-              {merged && <span className="badge">złączona</span>}
+              {merged && <span className="badge">{bent ? 'gięta' : 'złączona'}</span>}
               {holes && (
                 <button
                   className="mini"

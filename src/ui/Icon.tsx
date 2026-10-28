@@ -2,6 +2,9 @@
 const PATHS: Record<string, string> = {
   text: 'M5 7 H23 M14 7 V23 M10 23 H18',
   textCut: 'M4 5 H24 V23 H4 Z M8 9 H20 M14 9 V19',
+  pipeSaddle: 'M3 22 H9 V16 A5 5 0 0 1 19 16 V22 H25 M9 16 A5 5 0 0 1 19 16',
+  pipeClip: 'M10 6 A7 7 0 1 0 18 6 M6 24 H22',
+  pipeClamp: 'M3 14 H8 A6 6 0 0 1 20 14 H25 M3 16 H8 A6 6 0 0 0 20 16 H25',
   mesh: 'M14 4 L24 10 L24 20 L14 25 L4 20 L4 10 Z M4 10 L14 15 L24 10 M14 15 V25 M9 7.5 L19 12.5',
   box: 'M4 9 L4 24 L24 24 L24 9 M7 9 L7 21 L21 21 L21 9 M14 12 L14 21',
   lid: 'M3 10 H25 V14 H3 Z M7 14 V19 H21 V14',

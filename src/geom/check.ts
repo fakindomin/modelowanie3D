@@ -1,6 +1,8 @@
 import type { Manifold } from 'manifold-3d';
 import type { Part, Vec3 } from '../types';
 import { M } from './manifold';
+import * as THREE from 'three';
+import { bendZone } from './bend';
 import { buildBodies, failed, worldBox, worldManifold } from './parts';
 import { surfaceAbove, surfaceBelow } from './snap';
 import { findLid, ringOk } from './magnets';
@@ -75,10 +77,27 @@ function thinWall(m: Manifold, w: number): Box | null {
   return null;
 }
 
+/** Features that only work while round and straight. */
+const FRAGILE = ['magnet', 'threadHole', 'threadNut', 'bolt', 'insert'];
+
 export function runCheck(parts: Part[], minWall: number): CheckResult {
   const issues: Issue[] = [];
   for (const p of parts)
     if (failed(p)) issues.push({ level: 'error', text: `„${p.name}” ma wymiary, z których nie da się zbudować bryły (pokazany jako mały sześcian).`, select: p.id });
+
+  // Threads and magnet pockets in a bend come out warped.
+  for (const body of new Set(parts.map((p) => p.body))) {
+    const holder = parts.find((p) => p.body === body && !p.hole && p.bend?.on);
+    if (!holder) continue;
+    const b = holder.bend!;
+    const flat = new THREE.Box3();
+    parts.filter((p) => p.body === body && !p.hole).forEach((p) => flat.union(worldBox(p)));
+    const ax = b.axis === 'x' ? 'x' : 'y';
+    const [z0, z1] = bendZone(b, flat.min[ax], flat.max[ax], flat.max.z - flat.min.z);
+    const hit = parts.filter((p) => p.body === body && FRAGILE.includes(p.type) && worldBox(p).max[ax] > z0 && worldBox(p).min[ax] < z1);
+    if (hit.length)
+      issues.push({ level: 'warn', text: `Bryła ${body} jest gięta, a ${hit.map((p) => `„${p.name}”`).join(', ')} ${hit.length === 1 ? 'leży' : 'leżą'} w miejscu gięcia: gwint albo gniazdo wyjdzie krzywe. Przesuń poza zgięcie albo dodaj po gięciu.`, select: hit[0].id });
+  }
 
   const bodies = buildBodies(parts);
   try {
