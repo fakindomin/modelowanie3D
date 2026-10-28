@@ -6,7 +6,7 @@ import { buildBodies, built, partMatrix, worldBox, worldManifold } from './geom/
 import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
-import type { Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
+import type { Edges, Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
@@ -117,6 +117,7 @@ interface State {
   pattern(id: string, kind: PatternKind, opt: PatternOptions): void;
   unlink(id: string): void;
   setTexture(id: string, texture: Texture | undefined): void;
+  setEdges(id: string, edges: Edges | undefined): void;
   fitFigurine(id: string, height: number): void;
   merge(body: number): void;
   unmerge(body: number): void;
@@ -245,6 +246,7 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
   const own = { ...src, ...patch, ...(params ? { params } : {}) };
   const shareParams = !!params && !!src.link;
   const shareTexture = 'texture' in patch && !!src.link;
+  const shareEdges = 'edges' in patch && !!src.link;
   const sharePose = !!src.rigid && (patch.position !== undefined || patch.rotation !== undefined);
   const follow = src.pattern && patch.position && patch.pattern === undefined ? followers(parts, src, own.position) : null;
   if (follow) own.pattern = follow.get(src.id)!.pattern;
@@ -257,6 +259,7 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
       q = { ...q, params: next };
     }
     if (shareTexture && p.link === src.link) q = { ...q, texture: patch.texture };
+    if (shareEdges && p.link === src.link) q = { ...q, edges: patch.edges };
     if (sharePose && p.rigid === src.rigid) q = { ...q, position: own.position, rotation: own.rotation };
     const f = follow?.get(p.id);
     if (f) q = { ...q, position: f.position, pattern: f.pattern };
@@ -1229,6 +1232,10 @@ export const useStore = create<State>((set, get) => {
       get().update(id, { texture });
     },
 
+    setEdges(id, edges) {
+      get().update(id, { edges });
+    },
+
     fitFigurine(id, height) {
       const p = get().parts.find((x) => x.id === id);
       if (!p) return;
@@ -1433,7 +1440,7 @@ function lidParams(box: Part, lid: Part): Params {
     const g = slideGroove(box.params);
     return { W: round(g.lidW, 2), D: round(g.lidD, 2), T: g.lidT };
   }
-  const p: Params = { shape: box.params.shape ?? 'rect', W: box.params.W, D: box.params.D, wall: box.params.T };
+  const p: Params = { shape: box.params.shape ?? 'rect', W: box.params.W, D: box.params.D, wall: box.params.T, rad: box.params.slide ? 0 : (box.params.rad ?? 0) };
   // Dividers lowered at least by the rim height don't reach it: no slots needed.
   const clear = (Number(box.params.low) || 0) >= (Number(lid.params.R) || 0);
   p.nx = clear ? 1 : (box.params.nx ?? 1);

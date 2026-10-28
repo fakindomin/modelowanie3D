@@ -4,6 +4,7 @@ import { DEFS } from '../catalog';
 import type { Part } from '../types';
 import { M, matrixToMat4, toGeometry } from './manifold';
 import { applyTexture } from './texture';
+import { applyEdges } from './edges';
 
 interface Built {
   manifold: Manifold;
@@ -15,7 +16,7 @@ interface Built {
 const cache = new Map<string, Built>();
 
 function key(part: Part) {
-  return part.type + JSON.stringify(part.params) + (part.texture ? JSON.stringify(part.texture) : '');
+  return part.type + JSON.stringify(part.params) + (part.texture ? JSON.stringify(part.texture) : '') + (part.edges ? JSON.stringify(part.edges) : '');
 }
 
 /** Local geometry of a part (centred in X/Y, resting on Z = 0), cached per type + params. */
@@ -32,6 +33,13 @@ export function built(part: Part): Built {
           manifold = applyTexture(manifold, part.texture);
         } catch (e) {
           console.warn('texture failed', e);
+        }
+      }
+      if (part.edges && !part.hole) {
+        try {
+          manifold = applyEdges(manifold, part.edges);
+        } catch (e) {
+          console.warn('edges failed', e);
         }
       }
       if (manifold.isEmpty()) throw new Error('empty');

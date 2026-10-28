@@ -20,6 +20,18 @@ export interface Texture {
   margin: number;
 }
 
+/** Rounded or chamfered outer edges of a solid. */
+export interface Edges {
+  kind: 'round' | 'chamfer';
+  r: number;
+  /** Corners of the outline seen from above. */
+  vertical: boolean;
+  /** Rim of the top face. */
+  top: boolean;
+  /** Rim of the bottom face (a chamfer prints best there). */
+  bottom: boolean;
+}
+
 export interface Part {
   id: string;
   type: string;
@@ -41,6 +53,7 @@ export interface Part {
   /** Pieces of one fitting (hinge leaves, gland parts, figurine pieces) move together. */
   rigid?: string;
   texture?: Texture;
+  edges?: Edges;
   /** Lid made for this box: its size (and divider slots) follow the box. */
   fitTo?: string;
   /** Member of a pattern that keeps its rule: move one member and the others follow. */

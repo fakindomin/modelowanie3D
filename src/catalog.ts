@@ -1,7 +1,7 @@
 import type { Manifold } from 'manifold-3d';
 import { M, settle } from './geom/manifold';
 import type { Category, ParamDef, Params, PartDef } from './parts/def';
-import { L, T, bar, block, clearance, cube, cyl, hex, metric, num, poly, rect, select } from './parts/util';
+import { L, T, bar, block, rblock, clearance, cube, cyl, hex, metric, num, poly, rect, select } from './parts/util';
 import { THREAD_DEFS } from './parts/threads';
 import { JOINT_DEFS } from './parts/joints';
 import { FITTING_DEFS } from './parts/fittings';
@@ -83,6 +83,18 @@ const SHAPE = select('shape', 'Kształt', 'rect', [
   ['hex', 'Sześciokątny'],
 ]);
 const rectOnly = (p: Params) => !p.shape || p.shape === 'rect';
+const RAD = (show?: (p: Params) => boolean): ParamDef => ({
+  key: 'rad',
+  label: 'Zaokrąglenie narożników',
+  type: 'number',
+  def: 0,
+  min: 0,
+  max: 100,
+  step: 0.5,
+  unit: 'mm',
+  show,
+  hint: 'Promień pionowych narożników. Wnętrze dostaje promień mniejszy o grubość ścianki, więc ścianka ma wszędzie tę samą grubość.',
+});
 
 /** Groove for a sliding lid: 2 mm lid + 0.4 mm play, cut up to 1.2 mm into walls, 1.2 mm under the top. */
 export function slideGroove(p: Params) {
@@ -118,7 +130,7 @@ function boxDividers(p: Params, b: number, top: number): Manifold | null {
     m = m ? m.subtract(hole).add(rc) : rc;
   }
   if (!m) return null;
-  const clip = p.shape === 'round' ? cyl(top + 1, W / 2 - t / 2) : p.shape === 'hex' ? hex(W - t, top + 1) : block(W - t, num(p, 'D') - t, top + 1);
+  const clip = p.shape === 'round' ? cyl(top + 1, W / 2 - t / 2) : p.shape === 'hex' ? hex(W - t, top + 1) : rblock(W - t, num(p, 'D') - t, top + 1, Math.max(0, (Number(p.rad) || 0) - t / 2));
   return m.intersect(clip);
 }
 
@@ -172,6 +184,7 @@ const BASE: PartDef[] = [
       T(2),
       { key: 'B', label: 'Grubość dna', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
       ...DIVIDER_PARAMS,
+      RAD((p) => rectOnly(p) && !p.slide),
       { key: 'slide', label: 'Rowki na wsuwaną pokrywkę', type: 'bool', def: false, show: rectOnly, hint: 'Rowki w ściankach pod górną krawędzią; pokrywka wsuwa się od przodu (ścianka min. 2 mm).' },
       {
         key: 'low',
@@ -202,7 +215,8 @@ const BASE: PartDef[] = [
         return div ? m.add(div) : m;
       }
       const D = num(p, 'D');
-      let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
+      const rad = p.slide ? 0 : Number(p.rad) || 0;
+      let m = rblock(W, D, H, rad).subtract(rblock(W - 2 * t, D - 2 * t, H, Math.max(0, rad - t), 0, 0, b));
       if (div) m = m.add(div);
       if (p.slide) {
         const g = slideGroove(p);
@@ -227,6 +241,7 @@ const BASE: PartDef[] = [
       { key: 'wall', label: 'Ścianka pudełka', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
       { key: 'R', label: 'Wysokość rantu', type: 'number', def: 4, min: 0, max: 50, unit: 'mm' },
       clearance(0.3),
+      RAD(rectOnly),
       { key: 'nx', label: 'Szczeliny na przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => gridOn(p) && num(p, 'R') > 0 && !p.div, hint: 'Tyle samo co przegródek w pudełku: rant dostaje szczeliny tam, gdzie stoją przegródki.' },
       { key: 'ny', label: 'Szczeliny na przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => gridOn(p) && num(p, 'R') > 0 && !p.div },
     ],
@@ -239,11 +254,12 @@ const BASE: PartDef[] = [
         const o = W - 2 * wall - c;
         if (R > 0) m = m.add(solid(o, R).subtract(solid(o - 2 * lip, R + 1)).translate([0, 0, t]));
       } else {
-        const D = num(p, 'D');
-        m = block(W, D, t);
+        const D = num(p, 'D'), rad = Number(p.rad) || 0;
+        m = rblock(W, D, t, rad);
         if (R > 0) {
-          const ow = W - 2 * wall - c, od = D - 2 * wall - c;
-          m = m.add(block(ow, od, R, 0, 0, t).subtract(block(ow - 2 * lip, od - 2 * lip, R + 1, 0, 0, t)));
+          // The rim follows the box's rounded inside, less the clearance.
+          const ow = W - 2 * wall - c, od = D - 2 * wall - c, ri = Math.max(0, rad - wall - c / 2);
+          m = m.add(rblock(ow, od, R, ri, 0, 0, t).subtract(rblock(ow - 2 * lip, od - 2 * lip, R + 1, Math.max(0, ri - lip), 0, 0, t)));
         }
       }
       if (R > 0) {
@@ -272,6 +288,7 @@ const BASE: PartDef[] = [
       { key: 'B', label: 'Grubość dna', type: 'number', def: 1.6, min: 0.4, max: 10, step: 0.2, unit: 'mm' },
       { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1 },
       { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1 },
+      RAD(),
       CATCH,
       {
         key: 'handle',
@@ -287,7 +304,8 @@ const BASE: PartDef[] = [
     ],
     build: (p) => {
       const W = num(p, 'W'), D = num(p, 'D'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
-      let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
+      const rad = Number(p.rad) || 0;
+      let m = rblock(W, D, H, rad).subtract(rblock(W - 2 * t, D - 2 * t, H, Math.max(0, rad - t), 0, 0, b));
       // Dividers stay 2 mm under the top so the drawer slides into its opening.
       const div = boxDividers(p, b, H - 2);
       if (div) m = m.add(div);
@@ -354,10 +372,11 @@ const BASE: PartDef[] = [
       { key: 'T', label: 'Grubość', type: 'number', def: 3, min: 0.4, max: 50, step: 0.2, unit: 'mm' },
       { key: 'hole', label: 'Średnica otworów', type: 'number', def: 3.4, min: 0, max: 20, step: 0.1, unit: 'mm' },
       { key: 'inset', label: 'Odsunięcie od krawędzi', type: 'number', def: 5, min: 1, max: 100, unit: 'mm' },
+      RAD(),
     ],
     build: (p) => {
       const W = num(p, 'W'), D = num(p, 'D'), t = num(p, 'T'), d = num(p, 'hole'), e = num(p, 'inset');
-      let m = block(W, D, t);
+      let m = rblock(W, D, t, Number(p.rad) || 0);
       if (d > 0)
         for (const sx of [-1, 1]) for (const sy of [-1, 1]) m = m.subtract(cyl(t + 2, d / 2).translate([sx * (W / 2 - e), sy * (D / 2 - e), -1]));
       return m;

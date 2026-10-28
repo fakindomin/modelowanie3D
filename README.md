@@ -22,6 +22,9 @@ Każda ma własną scenę, historię cofania i autozapis.
   Przegródki są zawsze przycięte do wnętrza pudełka.
 - **Rozbij na płyty:** pudełko albo szufladę można zamienić na dno, ścianki i odcinki przegródek między
   skrzyżowaniami (dalej jedna bryła), żeby zmienić albo usunąć każdą płytę osobno.
+- **Zaokrąglenia i fazki:** każdą bryłę można zaokrąglić albo ściąć na pionowych narożnikach oraz na
+  górnej i dolnej krawędzi. Pudełko, pokrywka, szuflada i płytka mają też pole „Zaokrąglenie narożników”,
+  które zaokrągla także wnętrze (równa ścianka), a pokrywka idzie za tym promieniem.
 - **Miejsca na magnesy:** jeden przycisk przy pudełku (prostokątnym, okrągłym, sześciokątnym, gotowym albo
   złożonym z płyt) lub pokrywce. W okrągłych i sześciokątnych gniazda idą równo po obwodzie (3/4/6/8).
   Szuflady i obudowa mają opcję „Magnes-zatrzask z tyłu”, który domyka szufladę.

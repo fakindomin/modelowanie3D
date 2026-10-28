@@ -7,6 +7,7 @@ export const INFO = {
   rotation: 'Obrót wokół osi X, Y, Z w stopniach. Przyciski obracają o 90° i zostawiają element na tej samej wysokości.',
   pattern: 'Robi powiązane kopie: zmiana wymiarów jednej zmienia wszystkie, a przesunięcie jednej przesuwa resztę według szyku. „Odłącz” wyłącza kopię z szyku.',
   magnets: 'Robi gniazda na magnesy na górnej krawędzi ścianek pudełka. Gdzie ścianka jest za cienka, dokłada słupek; w pokrywce robi lustrzane gniazda.',
+  edges: 'Zaokrągla albo ścina zewnętrzne krawędzie: narożniki widziane z góry oraz brzeg górnej i dolnej ściany. Wewnętrzne krawędzie (wnętrze pudełka) zostają ostre. Zaokrąglenie góry i dołu jest liczone warstwami po 0,2 mm, jak przy druku.',
   texture: 'Wzór na wybranej ściance jako prawdziwa geometria (żeberka, rowki, radełko, kropki, plaster miodu): wypukły albo wycięty.',
   print: 'Bryła = osobny wydruk. Elementy jednej bryły sklejają się, a otwory wycinają tylko swoją bryłę.',
   hole: '„Otwór” wycina materiał z bryły, do której należy; „Bryła” to materiał.',

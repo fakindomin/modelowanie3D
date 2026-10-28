@@ -4,8 +4,9 @@ import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type Param
 import { findLid, type MagnetOptions } from '../geom/magnets';
 import { assembly, bodyBox, groupBody, groupId, isMerged, useStore, type PatternKind } from '../store';
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
+import { DEFAULT_EDGES } from '../geom/edges';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
-import type { Part, Texture, Vec3 } from '../types';
+import type { Edges, Part, Texture, Vec3 } from '../types';
 import { Icon } from './Icon';
 import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
@@ -480,6 +481,45 @@ function TextureTool({ part }: { part: Part }) {
   );
 }
 
+/** Rounded or chamfered outer edges of a solid. */
+function EdgesTool({ part }: { part: Part }) {
+  const setEdges = useStore((s) => s.setEdges);
+  const e = part.edges;
+  const set = (patch: Partial<Edges>) => setEdges(part.id, { ...(e ?? DEFAULT_EDGES), ...patch });
+  const own = DEFS[part.type].params.some((p) => p.key === 'rad');
+  const check = (key: 'vertical' | 'top' | 'bottom', label: string) => (
+    <label className="field">
+      <span>{label}</span>
+      <input type="checkbox" checked={!!e?.[key]} onChange={(ev) => set({ [key]: ev.target.checked })} />
+    </label>
+  );
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Krawędzie</span>
+        <select value={e ? e.kind : 'none'} onChange={(ev) => (ev.target.value === 'none' ? setEdges(part.id, undefined) : set({ kind: ev.target.value as Edges['kind'], ...(own && !e ? { vertical: false } : {}) }))}>
+          <option value="none">Ostre</option>
+          <option value="round">Zaokrąglone</option>
+          <option value="chamfer">Fazowane (ścięte)</option>
+        </select>
+      </label>
+      {e && (
+        <>
+          <label className="field">
+            <span>{e.kind === 'round' ? 'Promień' : 'Szerokość fazki'}</span>
+            <NumberInput value={e.r} min={0.2} max={50} step={0.2} unit="mm" onChange={(v) => set({ r: v })} />
+          </label>
+          {check('vertical', 'Pionowe narożniki')}
+          {check('top', 'Górna krawędź')}
+          {check('bottom', 'Dolna krawędź')}
+          {own && e.vertical && <p className="desc">W pudełku lepiej użyć pola „Zaokrąglenie narożników” wyżej: zaokrągli też wnętrze, więc ścianka zostanie równa.</p>}
+          {e.bottom && e.kind === 'round' && <p className="desc">Zaokrąglony spód drukuje się z nawisem. Na dole lepsza jest fazka.</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 const PATTERN_LABEL = { linear: 'w rzędzie', circle: 'po okręgu', sym: 'symetryczny' } as const;
 
 function Section({ title, children, open = false, info }: { title: string; children: React.ReactNode; open?: boolean; info?: string }) {
@@ -706,6 +746,11 @@ function PartProperties({ part }: { part: Part }) {
       {!part.rigid && (
         <Section title="Szyk i kopie" info={INFO.pattern}>
           <PatternTool part={part} />
+        </Section>
+      )}
+      {!part.hole && part.type !== 'figurine' && (
+        <Section title="◠ Zaokrąglenia i fazki" open={!!part.edges} info={INFO.edges}>
+          <EdgesTool part={part} />
         </Section>
       )}
       {!part.hole && part.type !== 'figurine' && (

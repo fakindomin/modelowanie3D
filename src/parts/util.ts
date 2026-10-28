@@ -1,5 +1,6 @@
 import type { Manifold, CrossSection } from 'manifold-3d';
 import { M, settle } from '../geom/manifold';
+import { roundRect } from '../geom/edges';
 import type { ParamDef, Params } from './def';
 
 export const num = (p: Params, k: string) => Number(p[k]);
@@ -34,6 +35,12 @@ export function cube(x: number, y: number, z: number): Manifold {
 /** Cube centred in X/Y with its bottom at z0. */
 export function block(x: number, y: number, z: number, cx = 0, cy = 0, z0 = 0): Manifold {
   return M().Manifold.cube([x, y, z], true).translate([cx, cy, z0 + z / 2]);
+}
+
+/** block() with rounded vertical corners of radius r. */
+export function rblock(x: number, y: number, z: number, r: number, cx = 0, cy = 0, z0 = 0): Manifold {
+  if (r < 0.01) return block(x, y, z, cx, cy, z0);
+  return roundRect(x, y, r).extrude(z).translate([cx, cy, z0]);
 }
 
 /** Axis-aligned box between two corners. */
