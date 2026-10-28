@@ -18,7 +18,8 @@ interface ParamBase {
 export type ParamDef =
   | (ParamBase & { type: 'number'; def: number; min: number; max: number; step?: number; unit?: string })
   | (ParamBase & { type: 'select'; def: string; options: { value: string; label: string }[] })
-  | (ParamBase & { type: 'bool'; def: boolean });
+  | (ParamBase & { type: 'bool'; def: boolean })
+  | (ParamBase & { type: 'text'; def: string; max?: number });
 
 export type Category = 'ready' | 'profile' | 'basic' | 'joints' | 'threads' | 'hinges' | 'fittings' | 'connectors' | 'figurines';
 

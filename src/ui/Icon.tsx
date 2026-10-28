@@ -1,5 +1,7 @@
 // Small schematic pictograms for the part library (cross-sections / silhouettes).
 const PATHS: Record<string, string> = {
+  text: 'M5 7 H23 M14 7 V23 M10 23 H18',
+  textCut: 'M4 5 H24 V23 H4 Z M8 9 H20 M14 9 V19',
   box: 'M4 9 L4 24 L24 24 L24 9 M7 9 L7 21 L21 21 L21 9 M14 12 L14 21',
   lid: 'M3 10 H25 V14 H3 Z M7 14 V19 H21 V14',
   drawer: 'M4 7 H24 V23 H4 Z M10 12 Q14 17 18 12',

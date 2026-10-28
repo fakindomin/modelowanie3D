@@ -211,6 +211,31 @@ export function NumberInput({ value, onChange, min, max, step = 1, unit }: { val
   );
 }
 
+/** Text field that rebuilds the part when typing pauses, not on every key. */
+function TextInput({ value, max, onChange }: { value: string; max?: number; onChange: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const timer = useRef<number>(undefined);
+  useEffect(() => setDraft(value), [value]);
+  const push = (v: string) => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => v !== value && onChange(v), 350);
+  };
+  return (
+    <input
+      type="text"
+      className="text-in"
+      value={draft}
+      maxLength={max}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        push(e.target.value);
+      }}
+      onBlur={() => draft !== value && onChange(draft)}
+      onKeyDown={(e) => e.stopPropagation()}
+    />
+  );
+}
+
 function ParamField({ def, value, onChange }: { def: ParamDef; value: unknown; onChange: (v: number | string | boolean) => void }) {
   return (
     <label className="field" title={def.hint}>
@@ -226,6 +251,7 @@ function ParamField({ def, value, onChange }: { def: ParamDef; value: unknown; o
         </select>
       )}
       {def.type === 'bool' && <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />}
+      {def.type === 'text' && <TextInput value={String(value ?? '')} max={def.max} onChange={onChange} />}
     </label>
   );
 }
@@ -717,6 +743,18 @@ function PartProperties({ part }: { part: Part }) {
       )}
       <Helpers part={part} />
       {part.type === 'connector' && <ConnectorWalls part={part} />}
+      {(part.type === 'text' || part.type === 'textCut') && (
+        <>
+          <h5>Na którą ściankę</h5>
+          <div className="row">
+            {WALL_SIDES.map((w) => (
+              <button key={w.side} className="small" onClick={() => st.textToWall(part.id, w.side)}>
+                {w.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <h4>
         Położenie <Info text={INFO.position} />

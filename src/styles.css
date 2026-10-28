@@ -322,3 +322,5 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 .div-editor .div-hit:hover { stroke: rgba(91, 185, 116, 0.35); }
 .div-editor .div-front { fill: #8a8f95; text-anchor: middle; }
 .div-editor .row { flex-wrap: wrap; }
+.field .text-in { width: 160px; flex: none; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: inherit; border-radius: 4px; padding: 4px 6px; font: inherit; }
+.field .text-in:focus { outline: none; border-color: var(--accent); }

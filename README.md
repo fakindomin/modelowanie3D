@@ -25,6 +25,9 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Zaokrąglenia i fazki:** każdą bryłę można zaokrąglić albo ściąć na pionowych narożnikach oraz na
   górnej i dolnej krawędzi. Pudełko, pokrywka, szuflada i płytka mają też pole „Zaokrąglenie narożników”,
   które zaokrągla także wnętrze (równa ścianka), a pokrywka idzie za tym promieniem.
+- **Napisy:** „Napis wypukły” i „Napis wycięty” (grawer) z polskimi literami, cztery kroje (DejaVu),
+  wysokość liter, głębokość, pogrubienie kresek, opcjonalna tabliczka. Przyciski „Na którą ściankę”
+  stawiają napis na środku wybranej ściany elementu, czytelny z zewnątrz.
 - **Miejsca na magnesy:** jeden przycisk przy pudełku (prostokątnym, okrągłym, sześciokątnym, gotowym albo
   złożonym z płyt) lub pokrywce. W okrągłych i sześciokątnych gniazda idą równo po obwodzie (3/4/6/8).
   Szuflady i obudowa mają opcję „Magnes-zatrzask z tyłu”, który domyka szufladę.

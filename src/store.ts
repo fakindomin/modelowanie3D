@@ -111,6 +111,8 @@ interface State {
   explode(id: string): void;
   /** Moves a connector cut-out (with its reinforcement) onto another wall of the body it is in. */
   connectorToWall(id: string, side: WallSide): void;
+  /** Puts a label onto a face of the body it belongs to, upright and readable from outside. */
+  textToWall(id: string, side: WallSide): void;
   /** Ready case for a Raspberry Pi board, made of ordinary editable elements. */
   addPiCase(board: string): void;
   applyFixes(fixes: Fix[]): void;
@@ -982,6 +984,25 @@ export const useStore = create<State>((set, get) => {
       const pose = wallPose(box, side, largestSolid(parts, src.body, ids), same ? src.position : undefined);
       const params = pose.wall ? { ...src.params, wall: pose.wall } : src.params;
       commit(parts.map((p) => (ids.has(p.id) ? { ...p, position: r3(pose.position), rotation: pose.rotation, params: { ...params, piece: p.params.piece } } : p)));
+    },
+
+    textToWall(id, side) {
+      const { parts } = get();
+      const src = parts.find((p) => p.id === id);
+      if (!src || (src.type !== 'text' && src.type !== 'textCut')) return;
+      const host = parts.filter((p) => p.body === src.body && !p.hole && p.id !== src.id);
+      if (!host.length) return get().notify('Napis musi być w tej samej bryle co element: zaznacz element, a potem wstaw napis (albo zmień bryłę napisu w sekcji „Wydruk”).');
+      const box = new THREE.Box3();
+      host.forEach((p) => box.union(worldBox(p)));
+      const pose = wallPose(box, side, largestSolid(parts, src.body, new Set([src.id])));
+      // Letters face outward and read upright; a cut label sinks into the face by its depth.
+      const turn: Record<WallSide, number> = { front: 0, back: 180, left: -90, right: 90, top: 0, bottom: 0 };
+      const rotation = side === 'top' ? ([0, 0, 0] as Vec3) : side === 'bottom' ? ([180, 0, 0] as Vec3) : rotationAfter([90, 0, 0], AXES[2], turn[side]);
+      const out: Record<WallSide, Vec3> = { front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0], top: [0, 0, 1], bottom: [0, 0, -1] };
+      const sink = src.hole ? Number(src.params.depth) || 0 : 0;
+      const n = out[side];
+      const position = r3([pose.position[0] - n[0] * sink, pose.position[1] - n[1] * sink, pose.position[2] - n[2] * sink]);
+      commit(parts.map((p) => (p.id === id ? { ...p, position, rotation } : p)));
     },
 
     addPiCase(key) {

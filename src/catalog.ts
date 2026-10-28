@@ -7,6 +7,7 @@ import { JOINT_DEFS } from './parts/joints';
 import { FITTING_DEFS } from './parts/fittings';
 import { CONNECTOR_DEFS } from './parts/connectors';
 import { FIGURINE_DEF } from './parts/figurine';
+import { TEXT_DEFS } from './parts/text';
 import { dividerSolid, segmentsOf } from './geom/dividers';
 
 export type { Category, ParamDef, ParamValue, Params, PartDef } from './parts/def';
@@ -730,7 +731,7 @@ const BASE: PartDef[] = [
   },
 ];
 
-export const CATALOG: PartDef[] = [...BASE, ...THREAD_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...CONNECTOR_DEFS, FIGURINE_DEF];
+export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...THREAD_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...CONNECTOR_DEFS, FIGURINE_DEF];
 
 export const DEFS: Record<string, PartDef> = Object.fromEntries(CATALOG.map((d) => [d.type, d]));
 
