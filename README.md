@@ -40,6 +40,10 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Własny kształt:** „Własny kształt (obrys)” wyciąga narysowany obrys na wysokość (można zwęzić górę
   i skręcić), „Kształt obrotowy (profil)” obraca połowę przekroju wokół osi (wazon, kubek, gałka).
   Przeciągasz punkty, klik w krawędź dodaje punkt, dwuklik usuwa; są gotowe kształty na start.
+  Klik w bok otwiera menu: długość (🔒 trzyma ją przy dalszych zmianach), łuk (wybrzuszenie albo promień),
+  podział, poziomo/pionowo. Klik w punkt: kąt między bokami, zaokrąglenie albo fazka narożnika, X/Y.
+  Punkty, boki i to samo menu są też w modelu 3D po zaznaczeniu kształtu; wymiary, które się wykluczają,
+  świecą na czerwono.
 - **Skorupa:** wydrąża całą bryłę ze ścianką o podanej grubości, zamkniętą albo otwartą od góry lub dołu.
 - **Lustro i skala:** odbicie (X/Y/Z) i skala całej bryły, liczone na końcu; „Lustrzana kopia” robi parę
   lewy/prawy obok.

@@ -8,6 +8,7 @@ import { finishing, warped } from '../geom/modify';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, Vec3 } from '../types';
 import { distance, featureAt, type Feature } from './measure';
+import { SketchHandles } from './SketchHandles';
 
 const DEG = Math.PI / 180;
 const BED = 220;
@@ -258,6 +259,8 @@ function Scene() {
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
+    // A point or edge of the selected sketch takes the press, even behind the solid.
+    if (e.intersections.some((i) => i.object.userData.sketchHandle)) return;
     e.stopPropagation();
     if (gizmoBusy()) return;
     if (useStore.getState().measure) {
@@ -572,6 +575,7 @@ export function Viewport() {
       <Bed />
       {preview ? <PreviewBodies /> : <Scene />}
       {!preview && !measure && <Gizmo />}
+      {!preview && !measure && <SketchHandles />}
       <MeasureMarks />
       <CutPlane />
       <OrbitControls makeDefault enableDamping={false} />

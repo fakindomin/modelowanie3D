@@ -1,17 +1,36 @@
 import type { PartDef, Params } from './def';
-import { M, settle } from '../geom/manifold';
+import { M } from '../geom/manifold';
+import { parseNodes, tessellate, type Pt } from '../geom/sketch2d';
 
-export type Pt = [number, number];
+export type { Pt };
 
-/** Outline points of a sketch part, in mm (x right, y up; for a revolved profile x is the radius). */
+
+/** Corner points of a sketch part, in mm (x right, y up; for a revolved profile x is the radius). */
 export function sketchPoints(p: Params): Pt[] {
-  try {
-    const v = JSON.parse(String(p.pts));
-    if (Array.isArray(v) && v.length >= 3 && v.every((q) => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite))) return v as Pt[];
-  } catch {
-    /* fall through */
-  }
-  return [];
+  return parseNodes(p.pts).map((n) => [n.x, n.y]);
+}
+
+/** Outline as drawn (arcs and roundings included); a revolved profile never crosses the axis. */
+export function sketchOutline(p: Params): Pt[] {
+  const pts = tessellate(parseNodes(p.pts));
+  return p.deg !== undefined ? pts.map(([x, y]) => [Math.max(0, x), y] as Pt) : pts;
+}
+
+/**
+ * Where the drawing sits in the part's own frame: an outline is centred on its box and lies on Z = 0;
+ * a profile stands in the X–Z plane with the axis on Z and its lowest point on Z = 0.
+ */
+export function sketchFrame(p: Params) {
+  const pts = sketchOutline(p);
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+  if (p.deg !== undefined) return { rev: true, cx: 0, cy: Math.min(...ys) };
+  return { rev: false, cx: (Math.min(...xs) + Math.max(...xs)) / 2, cy: (Math.min(...ys) + Math.max(...ys)) / 2 };
+}
+
+/** Sketch point (mm) to the part's own 3D frame, and back. */
+export function sketchTo3D(p: Params, x: number, y: number): [number, number, number] {
+  const f = sketchFrame(p);
+  return f.rev ? [Math.max(0, x), 0, y - f.cy] : [x - f.cx, y - f.cy, 0];
 }
 
 export const encodePts = (pts: Pt[]) => JSON.stringify(pts.map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]));
@@ -52,7 +71,7 @@ export const SKETCH_DEFS: PartDef[] = [
     label: 'Własny kształt (obrys)',
     category: 'basic',
     hole: false,
-    description: 'Narysuj obrys z góry, a powstanie z niego bryła o podanej wysokości. Przeciągaj punkty, klik w krawędź dodaje punkt, dwuklik w punkt go usuwa.',
+    description: 'Narysuj obrys z góry, a powstanie z niego bryła o podanej wysokości. Klik w bok albo punkt (w panelu lub w modelu 3D) otwiera menu: długość, łuk, kąt, zaokrąglenie. Punkty przeciągasz.',
     params: [
       { key: 'pts', label: 'Obrys', type: 'text', def: encodePts(SKETCH_PRESETS.house.pts), show: () => false },
       { key: 'H', label: 'Wysokość', type: 'number', def: 10, min: 0.2, max: 1000, step: 0.5, unit: 'mm' },
@@ -60,12 +79,13 @@ export const SKETCH_DEFS: PartDef[] = [
       { key: 'twist', label: 'Skręt', type: 'number', def: 0, min: -720, max: 720, step: 15, unit: '°' },
     ],
     build: (p) => {
-      const pts = sketchPoints(p);
+      const pts = sketchOutline(p);
+      const f = sketchFrame(p);
       const h = Math.max(0.2, Number(p.H) || 10);
       const k = Math.max(0, Number(p.top ?? 100)) / 100;
       const tw = Number(p.twist) || 0;
       const div = tw ? Math.max(4, Math.ceil(Math.abs(tw) / 5)) : 0;
-      return settle(outline(pts).extrude(h, div, tw, [k, k]));
+      return outline(pts.map(([x, y]) => [x - f.cx, y - f.cy] as Pt)).extrude(h, div, tw, [k, k]);
     },
   },
   {
@@ -73,15 +93,16 @@ export const SKETCH_DEFS: PartDef[] = [
     label: 'Kształt obrotowy (profil)',
     category: 'basic',
     hole: false,
-    description: 'Narysuj połowę przekroju (od osi w prawo), a powstanie bryła obrotowa: wazon, kubek, gałka, kółko. Przeciągaj punkty, klik w krawędź dodaje punkt, dwuklik w punkt go usuwa.',
+    description: 'Narysuj połowę przekroju (od osi w prawo), a powstanie bryła obrotowa: wazon, kubek, gałka, kółko. Klik w bok albo punkt (w panelu lub w modelu 3D) otwiera menu: długość, łuk, kąt, zaokrąglenie. Punkty przeciągasz.',
     params: [
       { key: 'pts', label: 'Profil', type: 'text', def: encodePts(REVOLVE_PRESETS.vase.pts), show: () => false },
       { key: 'deg', label: 'Kąt obrotu', type: 'number', def: 360, min: 10, max: 360, step: 10, unit: '°', hint: 'Mniej niż 360° daje wycinek (np. ćwiartkę).' },
       { key: 'seg', label: 'Gładkość', type: 'number', def: 96, min: 6, max: 256, step: 2, hint: 'Liczba ścianek dookoła; 6 daje sześciokąt.' },
     ],
     build: (p) => {
-      const pts = sketchPoints(p).map(([x, y]) => [Math.max(0, x), y] as Pt);
-      return settle(outline(pts).revolve(Math.round(Number(p.seg) || 96), Math.min(360, Number(p.deg) || 360)));
+      const f = sketchFrame(p);
+      const pts = sketchOutline(p).map(([x, y]) => [x, y - f.cy] as Pt);
+      return outline(pts).revolve(Math.round(Number(p.seg) || 96), Math.min(360, Number(p.deg) || 360));
     },
   },
 ];

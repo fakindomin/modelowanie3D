@@ -10,7 +10,7 @@ import { DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/mo
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
 import type { Bend, Edges, Part, Shell, Texture, Vec3, Xform } from '../types';
 import { Icon } from './Icon';
-import { REVOLVE_PRESETS, SKETCH_PRESETS, encodePts, sketchPoints, type Pt } from '../parts/sketch';
+import { SketchEditor } from './SketchEditor';
 import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
 import { WALL_SIDES, sideOf } from '../parts/connectors';
@@ -681,140 +681,6 @@ function DividerEditor({ part }: { part: Part }) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/** Outline editor of a sketch part: drag points, click an edge to add one, double-click a point to remove it. */
-function SketchEditor({ part }: { part: Part }) {
-  const update = useStore((s) => s.update);
-  const grid = useStore((s) => s.settings.grid);
-  const rev = part.type === 'sketchRev';
-  const saved = sketchPoints(part.params);
-  const [drag, setDrag] = useState<{ i: number; pts: Pt[]; moved: boolean } | null>(null);
-  const [sel, setSel] = useState<number | null>(null);
-  const svg = useRef<SVGSVGElement>(null);
-  const pts = drag?.pts ?? saved;
-  if (pts.length < 3 || saved.length < 3) return null;
-  const save = (next: Pt[]) => update(part.id, { params: { ...part.params, pts: encodePts(next) } });
-  // The view stays put while dragging, so the point does not run away from the cursor.
-  const xs = saved.map((q) => q[0]), ys = saved.map((q) => q[1]);
-  const [x0, x1, y0, y1] = [Math.min(...xs, rev ? 0 : Infinity), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  const size = Math.max(x1 - x0, y1 - y0, 10);
-  const pad = size * 0.12;
-  const r = size / 45;
-  const step = grid > 0 ? grid : 0.5;
-  const snap = (v: number) => Math.round(v / step) * step;
-  const world = (e: React.PointerEvent): Pt => {
-    const m = svg.current?.getScreenCTM();
-    if (!m) return [0, 0];
-    const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
-    return [snap(q.x), snap(-q.y)];
-  };
-  const startDrag = (e: React.PointerEvent, i: number, list: Pt[]) => {
-    e.preventDefault();
-    e.stopPropagation();
-    svg.current?.setPointerCapture(e.pointerId);
-    setSel(i);
-    setDrag({ i, pts: list, moved: false });
-  };
-  const move = (e: React.PointerEvent) => {
-    if (!drag) return;
-    const [x, y] = world(e);
-    const next = drag.pts.map((q, k) => (k === drag.i ? ([rev ? Math.max(0, x) : x, y] as Pt) : q));
-    setDrag({ ...drag, pts: next, moved: true });
-  };
-  const up = () => {
-    if (!drag) return;
-    if (drag.moved) save(drag.pts);
-    setDrag(null);
-  };
-  const remove = (i: number) => {
-    if (pts.length <= 3) return;
-    save(pts.filter((_, k) => k !== i));
-    setSel(null);
-  };
-  const scaleTo = (axis: 0 | 1, v: number) => {
-    const lo = axis ? y0 : rev ? 0 : x0, hi = axis ? y1 : x1;
-    const k = hi - lo > 0.01 ? v / (hi - lo) : 1;
-    save(pts.map((q) => (axis ? [q[0], lo + (q[1] - lo) * k] : [lo + (q[0] - lo) * k, q[1]]) as Pt));
-  };
-  const presets = rev ? REVOLVE_PRESETS : SKETCH_PRESETS;
-  const d = pts.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${-q[1]}`).join(' ') + 'Z';
-  const gridStep = size > 120 ? 20 : size > 50 ? 10 : 5;
-  const lines: React.ReactNode[] = [];
-  for (let gx = Math.ceil((x0 - pad) / gridStep) * gridStep; gx <= x1 + pad; gx += gridStep) lines.push(<line key={'x' + gx} x1={gx} x2={gx} y1={-(y1 + pad)} y2={-(y0 - pad)} />);
-  for (let gy = Math.ceil((y0 - pad) / gridStep) * gridStep; gy <= y1 + pad; gy += gridStep) lines.push(<line key={'y' + gy} y1={-gy} y2={-gy} x1={x0 - pad} x2={x1 + pad} />);
-  const s = sel !== null && sel < pts.length ? sel : null;
-  return (
-    <div className="sketch-editor">
-      <label className="field">
-        <span>Zacznij od</span>
-        <select value="" onChange={(e) => e.target.value && (save(presets[e.target.value].pts), setSel(null))}>
-          <option value="">wybierz gotowy…</option>
-          {Object.entries(presets).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <svg ref={svg} viewBox={`${x0 - pad} ${-(y1 + pad)} ${x1 - x0 + 2 * pad} ${y1 - y0 + 2 * pad}`} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}>
-        <g className="sk-grid" style={{ strokeWidth: size / 400 }}>
-          {lines}
-        </g>
-        {rev && <line className="sk-axis" x1={0} x2={0} y1={-(y1 + pad)} y2={-(y0 - pad)} style={{ strokeWidth: size / 150 }} />}
-        <path className="sk-fill" d={d} style={{ strokeWidth: size / 200 }} />
-        {pts.map((a, i) => {
-          const b = pts[(i + 1) % pts.length];
-          return (
-            <line
-              key={'e' + i}
-              className="sk-edge"
-              x1={a[0]}
-              y1={-a[1]}
-              x2={b[0]}
-              y2={-b[1]}
-              style={{ strokeWidth: r * 2.2 }}
-              onPointerDown={(e) => {
-                const p = world(e);
-                const next = [...pts.slice(0, i + 1), p, ...pts.slice(i + 1)];
-                startDrag(e, i + 1, next);
-                setDrag({ i: i + 1, pts: next, moved: true });
-              }}
-            >
-              <title>Klik: dodaj punkt</title>
-            </line>
-          );
-        })}
-        {pts.map((q, i) => (
-          <circle key={'p' + i} className={i === s ? 'sk-pt sel' : 'sk-pt'} cx={q[0]} cy={-q[1]} r={r} onPointerDown={(e) => startDrag(e, i, pts)} onDoubleClick={() => remove(i)}>
-            <title>Przeciągnij: przesuń · dwuklik: usuń</title>
-          </circle>
-        ))}
-      </svg>
-      <p className="desc">
-        {rev ? 'Pionowa kreska to oś obrotu. ' : 'Widok z góry. '}Przeciągaj punkty (co {String(step).replace('.', ',')} mm), klik w krawędź dodaje punkt, dwuklik w punkt usuwa go.
-      </p>
-      {s !== null && (
-        <div className="row">
-          <span className="desc">Punkt {s + 1}:</span>
-          {[0, 1].map((k) => (
-            <NumberInput key={k} value={pts[s][k]} min={rev && !k ? 0 : -1000} max={1000} step={step} unit={k ? 'Y' : 'X'} onChange={(v) => save(pts.map((q, j) => (j === s ? ((k ? [q[0], v] : [v, q[1]]) as Pt) : q)))} />
-          ))}
-          <button className="small" disabled={pts.length <= 3} onClick={() => remove(s)}>
-            Usuń
-          </button>
-        </div>
-      )}
-      <label className="field">
-        <span>{rev ? 'Promień (od osi)' : 'Szerokość obrysu'}</span>
-        <NumberInput value={Math.round((x1 - (rev ? 0 : x0)) * 10) / 10} min={1} max={1000} step={1} unit="mm" onChange={(v) => scaleTo(0, v)} />
-      </label>
-      <label className="field">
-        <span>{rev ? 'Wysokość profilu' : 'Głębokość obrysu'}</span>
-        <NumberInput value={Math.round((y1 - y0) * 10) / 10} min={1} max={1000} step={1} unit="mm" onChange={(v) => scaleTo(1, v)} />
-      </label>
     </div>
   );
 }

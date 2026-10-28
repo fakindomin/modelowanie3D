@@ -147,6 +147,9 @@ interface State {
   clipWith(body: number, other: number): void;
   /** Extra picks for aligning (Ctrl+click); `selectedId` stays the main one. */
   multi: string[];
+  /** Picked point or edge of a sketch part's outline (its menu is open), from the panel or the 3D view. */
+  sketchSel: { id: string; kind: 'pt' | 'edge'; i: number; from: 'panel' | '3d' } | null;
+  setSketchSel(sel: { id: string; kind: 'pt' | 'edge'; i: number; from: 'panel' | '3d' } | null): void;
   toggleMulti(id: string): void;
   clearMulti(): void;
   align(ids: string[], axis: 0 | 1 | 2, to: 'min' | 'mid' | 'max'): void;
@@ -679,7 +682,7 @@ export const useStore = create<State>((set, get) => {
       });
     },
 
-    select: (id) => set((s) => ({ selectedId: id, multi: [], suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
+    select: (id) => set((s) => ({ selectedId: id, multi: [], sketchSel: s.sketchSel && s.sketchSel.id === id ? s.sketchSel : null, suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
     setHover: (id) => {
       if (get().hoveredId !== id) set({ hoveredId: id });
     },
@@ -1602,6 +1605,8 @@ export const useStore = create<State>((set, get) => {
     },
 
     multi: [],
+    sketchSel: null,
+    setSketchSel: (sel) => set({ sketchSel: sel }),
     toggleMulti(id) {
       const s = get();
       const all = [...new Set([...(s.selectedId ? [s.selectedId] : []), ...s.multi])];
