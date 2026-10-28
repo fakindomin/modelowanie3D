@@ -50,6 +50,20 @@ export interface Bend {
   r: number;
 }
 
+/** Hollowing of a whole body: walls of thickness t, optionally open at the top or bottom. */
+export interface Shell {
+  on: boolean;
+  t: number;
+  open: 'none' | 'top' | 'bottom';
+}
+
+/** Mirror and scale of a whole body, about the centre of its base (kept on one of its solids). */
+export interface Xform {
+  mirror: 'none' | 'x' | 'y' | 'z';
+  /** Percent per axis. */
+  scale: Vec3;
+}
+
 export interface Part {
   id: string;
   type: string;
@@ -73,6 +87,14 @@ export interface Part {
   texture?: Texture;
   edges?: Edges;
   bend?: Bend;
+  shell?: Shell;
+  xform?: Xform;
+  /** Kept in the model and the print, just not drawn. */
+  hidden?: boolean;
+  /** Cannot be moved, rotated or deleted until unlocked. */
+  locked?: boolean;
+  /** With `hole`: instead of cutting, keeps only what lies inside it (intersection). */
+  clip?: boolean;
   /** Lid made for this box: its size (and divider slots) follow the box. */
   fitTo?: string;
   /** Member of a pattern that keeps its rule: move one member and the others follow. */

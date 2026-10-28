@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Edges, GizmoHelper, GizmoViewport, Grid, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { assembly, bodyBox, groupBody, groupId, useStore } from '../store';
+import { assembly, bodyBox, groupBody, groupId, isLocked, useStore } from '../store';
 import { built, buildBodies, worldBox, type BodyResult } from '../geom/parts';
+import { finishing, warped } from '../geom/modify';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, Vec3 } from '../types';
 import { distance, featureAt, type Feature } from './measure';
@@ -95,9 +96,10 @@ function useBodies(parts: Part[], only: number[] | undefined, key: string) {
 function PreviewBodies() {
   const parts = useStore((s) => s.parts);
   const bodies = useBodies(parts, undefined, 'all');
+  const shown = (body: number) => parts.some((p) => p.body === body && !p.hole && !p.hidden);
   return (
     <>
-      {bodies.map((b) => (
+      {bodies.filter((b) => shown(b.body)).map((b) => (
         <mesh key={b.body} geometry={b.geometry} castShadow receiveShadow>
           <meshStandardMaterial color={b.color} roughness={0.5} />
         </mesh>
@@ -108,11 +110,12 @@ function PreviewBodies() {
 
 function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | null; hoveredBody: number | null }) {
   const parts = useStore((s) => s.parts);
-  const merged = useMemo(() => [...new Set(parts.filter((p) => (p.merged || p.bend?.on) && !p.hole).map((p) => p.body))].sort((a, b) => a - b), [parts]);
+  const merged = useMemo(() => [...new Set(parts.filter((p) => (p.merged || finishing(p)) && !p.hole).map((p) => p.body))].sort((a, b) => a - b), [parts]);
   const bodies = useBodies(parts, merged, merged.join(','));
+  const hidden = new Set(merged.filter((b) => parts.filter((p) => p.body === b && !p.hole).every((p) => p.hidden)));
   return (
     <>
-      {bodies.map((b) => (
+      {bodies.filter((b) => !hidden.has(b.body)).map((b) => (
         <mesh key={b.body} geometry={b.geometry} castShadow receiveShadow userData={{ pick: groupId(b.body) }}>
           <meshStandardMaterial
             color={b.color}
@@ -270,7 +273,12 @@ function Scene() {
     gizmo.pick = { prev: sel };
     setTimeout(() => (gizmo.pick = null), 0);
     const target = sel && cands.includes(sel) ? sel : cands[0];
+    if (e.nativeEvent.ctrlKey || e.nativeEvent.metaKey || e.nativeEvent.shiftKey) {
+      st.toggleMulti(cands.find((c) => c !== sel && !st.multi.includes(c)) ?? target);
+      return;
+    }
     st.select(target);
+    if (isLocked(st.parts, target)) return;
     const gb = groupBody(target);
     const members = gb !== null ? assembly(st.parts, gb) : [];
     const part = st.parts.find((p) => p.id === target);
@@ -304,13 +312,14 @@ function Scene() {
     useStore.getState().setHover(cands.length ? (sel && cands.includes(sel) ? sel : cands[0]) : null);
   };
 
+  const multi = useStore((s) => s.multi);
   const selectedPart = parts.find((p) => p.id === selectedId);
   const selBody = groupBody(selectedId);
   const hovBody = groupBody(hoveredId);
-  const mergedBodies = new Set(parts.filter((p) => (p.merged || p.bend?.on) && !p.hole).map((p) => p.body));
-  const bentBodies = new Set(parts.filter((p) => p.bend?.on && !p.hole).map((p) => p.body));
+  const mergedBodies = new Set(parts.filter((p) => (p.merged || finishing(p)) && !p.hole).map((p) => p.body));
+  const bentBodies = new Set(parts.filter(warped).map((p) => p.body));
   const look = (p: Part): Look => ({
-    selected: p.id === selectedId || (selBody !== null && p.body === selBody && !mergedBodies.has(p.body)),
+    selected: p.id === selectedId || multi.includes(p.id) || (((selBody !== null && p.body === selBody) || multi.includes(groupId(p.body))) && !mergedBodies.has(p.body)),
     hovered: p.id === hoveredId || (hovBody !== null && p.body === hovBody && !mergedBodies.has(p.body)),
     sibling: !!selectedPart?.link && p.link === selectedPart.link && p.id !== selectedPart.id,
     snap: snapTargets.includes(p.id),
@@ -326,14 +335,14 @@ function Scene() {
       }}
     >
       {parts.map((p) =>
-        // A bent body's flat holes would float beside the bent shape: shown only when picked.
+        p.hidden && p.id !== selectedId ? null : // A bent body's flat holes would float beside the bent shape: shown only when picked.
         bentBodies.has(p.body) && p.hole && p.id !== selectedId ? null : mergedBodies.has(p.body) && !p.hole ? (
           <MergedMember key={p.id} part={p} look={look(p)} />
         ) : (
           <PartMesh key={p.id} part={p} look={look(p)} ghost={mergedBodies.has(p.body)} />
         ),
       )}
-      <MergedBodies selectedBody={selBody} hoveredBody={hovBody} />
+      <MergedBodies selectedBody={selBody ?? multi.map(groupBody).find((b) => b !== null) ?? null} hoveredBody={hovBody} />
       {selBody !== null && <GroupAnchor body={selBody} />}
     </group>
   );
@@ -360,7 +369,7 @@ function Gizmo() {
     setTarget(selectedId ? (scene.getObjectByName(selectedId) ?? null) : null);
   }, [selectedId, parts, scene]);
 
-  if (!target || !selectedId || scene.getObjectByName(selectedId) !== target) return null;
+  if (!target || !selectedId || scene.getObjectByName(selectedId) !== target || isLocked(parts, selectedId)) return null;
   const gb = groupBody(selectedId);
   return (
     <TransformControls

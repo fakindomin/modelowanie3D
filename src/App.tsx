@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
 import { Library, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
-import { useStore } from './store';
+import { isLocked, useStore } from './store';
 import { buildBodies } from './geom/parts';
 import { export3MF, exportSTL, saveJSON } from './export';
 import { encodeMeshes } from './geom/meshes';
@@ -28,7 +28,8 @@ function Toolbar() {
       b.geometry.dispose();
       b.manifold.delete();
     });
-    st.notify(`Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.`);
+    const hidden = st.parts.filter((p) => p.hidden).length;
+    st.notify(`Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`);
   };
 
   return (
@@ -76,6 +77,9 @@ function Toolbar() {
       <span className="sep" />
       <div className="group">
         <button onClick={st.fit} title="Pokaż cały model (F)">⤢ Całość</button>
+        <button onClick={st.layoutOnBed} title="Ułóż na stole: kładzie każdą bryłę na jej największej płaskiej ściance i rozkłada wszystkie obok siebie na stole drukarki">
+          ⊞ Ułóż
+        </button>
         <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">
           📏 Wymiary
         </button>
@@ -167,6 +171,12 @@ function useShortcuts() {
       const st = useStore.getState();
       const ctrl = e.ctrlKey || e.metaKey;
       const id = st.selectedId;
+      const locked = isLocked(st.parts, id);
+      const moving = e.key === 'Delete' || e.key === 'Backspace' || e.key.toLowerCase() === 'r' || e.key.startsWith('Arrow') || e.key.startsWith('Page');
+      if (locked && moving && !ctrl) {
+        if (e.key.startsWith('Arrow') || e.key.startsWith('Page')) e.preventDefault();
+        return st.notify('Zaznaczony element jest zablokowany (🔒).');
+      }
       if (ctrl && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? st.redo() : st.undo();

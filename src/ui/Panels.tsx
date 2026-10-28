@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type MagnetOptions } from '../geom/magnets';
-import { assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, useStore, type PatternKind } from '../store';
+import { BED_KEY, assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, loadBed, useStore, type PatternKind } from '../store';
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { DEFAULT_EDGES } from '../geom/edges';
 import { DEFAULT_BEND } from '../geom/bend';
+import { DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/modify';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
-import type { Bend, Edges, Part, Texture, Vec3 } from '../types';
+import type { Bend, Edges, Part, Shell, Texture, Vec3, Xform } from '../types';
 import { Icon } from './Icon';
+import { REVOLVE_PRESETS, SKETCH_PRESETS, encodePts, sketchPoints, type Pt } from '../parts/sketch';
 import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
 import { WALL_SIDES, sideOf } from '../parts/connectors';
@@ -282,6 +284,8 @@ function Helpers({ part }: { part: Part }) {
   );
   const out = [];
   if (part.type === 'peg' || part.type === 'pegSquare' || part.type === 'dovetail') out.push(b('+ Dodaj pasujące gniazdo (z luzem)', () => st.matchingHole(part.id), INFO.matchHole));
+  if (part.type === 'angle' || part.type === 'channel' || part.type === 'tee')
+    out.push(b('◣ Dodaj żebra w narożnikach', () => st.addRibs(part.id, Math.max(2, Math.round((Number(part.params.L) || 100) / 50) + 1)), INFO.ribs));
   if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id), INFO.drawers));
   if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id), INFO.lid));
   if ((part.type === 'box' && (!part.params.shape || part.params.shape === 'rect') && !part.params.slide) || part.type === 'drawer')
@@ -681,6 +685,140 @@ function DividerEditor({ part }: { part: Part }) {
   );
 }
 
+/** Outline editor of a sketch part: drag points, click an edge to add one, double-click a point to remove it. */
+function SketchEditor({ part }: { part: Part }) {
+  const update = useStore((s) => s.update);
+  const grid = useStore((s) => s.settings.grid);
+  const rev = part.type === 'sketchRev';
+  const saved = sketchPoints(part.params);
+  const [drag, setDrag] = useState<{ i: number; pts: Pt[]; moved: boolean } | null>(null);
+  const [sel, setSel] = useState<number | null>(null);
+  const svg = useRef<SVGSVGElement>(null);
+  const pts = drag?.pts ?? saved;
+  if (pts.length < 3 || saved.length < 3) return null;
+  const save = (next: Pt[]) => update(part.id, { params: { ...part.params, pts: encodePts(next) } });
+  // The view stays put while dragging, so the point does not run away from the cursor.
+  const xs = saved.map((q) => q[0]), ys = saved.map((q) => q[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs, rev ? 0 : Infinity), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const size = Math.max(x1 - x0, y1 - y0, 10);
+  const pad = size * 0.12;
+  const r = size / 45;
+  const step = grid > 0 ? grid : 0.5;
+  const snap = (v: number) => Math.round(v / step) * step;
+  const world = (e: React.PointerEvent): Pt => {
+    const m = svg.current?.getScreenCTM();
+    if (!m) return [0, 0];
+    const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    return [snap(q.x), snap(-q.y)];
+  };
+  const startDrag = (e: React.PointerEvent, i: number, list: Pt[]) => {
+    e.preventDefault();
+    e.stopPropagation();
+    svg.current?.setPointerCapture(e.pointerId);
+    setSel(i);
+    setDrag({ i, pts: list, moved: false });
+  };
+  const move = (e: React.PointerEvent) => {
+    if (!drag) return;
+    const [x, y] = world(e);
+    const next = drag.pts.map((q, k) => (k === drag.i ? ([rev ? Math.max(0, x) : x, y] as Pt) : q));
+    setDrag({ ...drag, pts: next, moved: true });
+  };
+  const up = () => {
+    if (!drag) return;
+    if (drag.moved) save(drag.pts);
+    setDrag(null);
+  };
+  const remove = (i: number) => {
+    if (pts.length <= 3) return;
+    save(pts.filter((_, k) => k !== i));
+    setSel(null);
+  };
+  const scaleTo = (axis: 0 | 1, v: number) => {
+    const lo = axis ? y0 : rev ? 0 : x0, hi = axis ? y1 : x1;
+    const k = hi - lo > 0.01 ? v / (hi - lo) : 1;
+    save(pts.map((q) => (axis ? [q[0], lo + (q[1] - lo) * k] : [lo + (q[0] - lo) * k, q[1]]) as Pt));
+  };
+  const presets = rev ? REVOLVE_PRESETS : SKETCH_PRESETS;
+  const d = pts.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${-q[1]}`).join(' ') + 'Z';
+  const gridStep = size > 120 ? 20 : size > 50 ? 10 : 5;
+  const lines: React.ReactNode[] = [];
+  for (let gx = Math.ceil((x0 - pad) / gridStep) * gridStep; gx <= x1 + pad; gx += gridStep) lines.push(<line key={'x' + gx} x1={gx} x2={gx} y1={-(y1 + pad)} y2={-(y0 - pad)} />);
+  for (let gy = Math.ceil((y0 - pad) / gridStep) * gridStep; gy <= y1 + pad; gy += gridStep) lines.push(<line key={'y' + gy} y1={-gy} y2={-gy} x1={x0 - pad} x2={x1 + pad} />);
+  const s = sel !== null && sel < pts.length ? sel : null;
+  return (
+    <div className="sketch-editor">
+      <label className="field">
+        <span>Zacznij od</span>
+        <select value="" onChange={(e) => e.target.value && (save(presets[e.target.value].pts), setSel(null))}>
+          <option value="">wybierz gotowy…</option>
+          {Object.entries(presets).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <svg ref={svg} viewBox={`${x0 - pad} ${-(y1 + pad)} ${x1 - x0 + 2 * pad} ${y1 - y0 + 2 * pad}`} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}>
+        <g className="sk-grid" style={{ strokeWidth: size / 400 }}>
+          {lines}
+        </g>
+        {rev && <line className="sk-axis" x1={0} x2={0} y1={-(y1 + pad)} y2={-(y0 - pad)} style={{ strokeWidth: size / 150 }} />}
+        <path className="sk-fill" d={d} style={{ strokeWidth: size / 200 }} />
+        {pts.map((a, i) => {
+          const b = pts[(i + 1) % pts.length];
+          return (
+            <line
+              key={'e' + i}
+              className="sk-edge"
+              x1={a[0]}
+              y1={-a[1]}
+              x2={b[0]}
+              y2={-b[1]}
+              style={{ strokeWidth: r * 2.2 }}
+              onPointerDown={(e) => {
+                const p = world(e);
+                const next = [...pts.slice(0, i + 1), p, ...pts.slice(i + 1)];
+                startDrag(e, i + 1, next);
+                setDrag({ i: i + 1, pts: next, moved: true });
+              }}
+            >
+              <title>Klik: dodaj punkt</title>
+            </line>
+          );
+        })}
+        {pts.map((q, i) => (
+          <circle key={'p' + i} className={i === s ? 'sk-pt sel' : 'sk-pt'} cx={q[0]} cy={-q[1]} r={r} onPointerDown={(e) => startDrag(e, i, pts)} onDoubleClick={() => remove(i)}>
+            <title>Przeciągnij: przesuń · dwuklik: usuń</title>
+          </circle>
+        ))}
+      </svg>
+      <p className="desc">
+        {rev ? 'Pionowa kreska to oś obrotu. ' : 'Widok z góry. '}Przeciągaj punkty (co {String(step).replace('.', ',')} mm), klik w krawędź dodaje punkt, dwuklik w punkt usuwa go.
+      </p>
+      {s !== null && (
+        <div className="row">
+          <span className="desc">Punkt {s + 1}:</span>
+          {[0, 1].map((k) => (
+            <NumberInput key={k} value={pts[s][k]} min={rev && !k ? 0 : -1000} max={1000} step={step} unit={k ? 'Y' : 'X'} onChange={(v) => save(pts.map((q, j) => (j === s ? ((k ? [q[0], v] : [v, q[1]]) as Pt) : q)))} />
+          ))}
+          <button className="small" disabled={pts.length <= 3} onClick={() => remove(s)}>
+            Usuń
+          </button>
+        </div>
+      )}
+      <label className="field">
+        <span>{rev ? 'Promień (od osi)' : 'Szerokość obrysu'}</span>
+        <NumberInput value={Math.round((x1 - (rev ? 0 : x0)) * 10) / 10} min={1} max={1000} step={1} unit="mm" onChange={(v) => scaleTo(0, v)} />
+      </label>
+      <label className="field">
+        <span>{rev ? 'Wysokość profilu' : 'Głębokość obrysu'}</span>
+        <NumberInput value={Math.round((y1 - y0) * 10) / 10} min={1} max={1000} step={1} unit="mm" onChange={(v) => scaleTo(1, v)} />
+      </label>
+    </div>
+  );
+}
+
 function PartProperties({ part }: { part: Part }) {
   const st = useStore();
   const def = DEFS[part.type];
@@ -709,6 +847,14 @@ function PartProperties({ part }: { part: Part }) {
         <input className="name" value={part.name} onChange={(e) => st.updateLive(part.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
       </div>
       <p className="desc">{def.description}</p>
+      {part.locked && (
+        <div className="linkbar">
+          🔒 Zablokowany: nie przesuniesz go ani nie usuniesz.
+          <button className="small" onClick={() => st.setFlags([part.id], { locked: false })}>
+            Odblokuj
+          </button>
+        </div>
+      )}
       {(linked > 0 || patterned > 0) && (
         <div className="linkbar">
           🔗 {linked > 0 ? `Powiązany z ${linked} ${linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.` : ''}
@@ -737,6 +883,7 @@ function PartProperties({ part }: { part: Part }) {
           </button>
         </div>
       )}
+      {(part.type === 'sketch' || part.type === 'sketchRev') && <SketchEditor key={part.id} part={part} />}
       {(part.type === 'box' || part.type === 'drawer') && (
         <Section title="▦ Układ przegródek" info={INFO.dividers} open={typeof part.params.div === 'string' && part.params.div.length > 0}>
           <DividerEditor part={part} />
@@ -787,6 +934,16 @@ function PartProperties({ part }: { part: Part }) {
           <BendTool body={part.body} prefer={part.id} />
         </Section>
       )}
+      {!part.hole && (
+        <Section title="◫ Skorupa (wydrążenie)" open={st.parts.some((p) => p.body === part.body && p.shell)} info={INFO.shell}>
+          <ShellTool body={part.body} prefer={part.id} />
+        </Section>
+      )}
+      {!part.hole && (
+        <Section title="⇋ Lustro i skala" open={st.parts.some((p) => p.body === part.body && p.xform)} info={INFO.xform}>
+          <XformTool body={part.body} prefer={part.id} />
+        </Section>
+      )}
       {!part.hole && <SplitTool body={part.body} />}
       {!part.rigid && (
         <Section title="Szyk i kopie" info={INFO.pattern}>
@@ -811,9 +968,17 @@ function PartProperties({ part }: { part: Part }) {
         <span>
           Rodzaj <Info text={INFO.hole} />
         </span>
-        <select value={part.hole ? 'hole' : 'solid'} onChange={(e) => st.update(part.id, { hole: e.target.value === 'hole', color: e.target.value === 'hole' ? '#8b939e' : part.color === '#8b939e' ? '#a9aeb3' : part.color })}>
+        <select
+          value={part.clip ? 'clip' : part.hole ? 'hole' : 'solid'}
+          onChange={(e) => {
+            const v = e.target.value;
+            const plain = part.color === '#8b939e' || part.color === '#7fb3d5' ? '#a9aeb3' : part.color;
+            st.update(part.id, { hole: v !== 'solid', clip: v === 'clip' ? true : undefined, color: v === 'hole' ? '#8b939e' : v === 'clip' ? '#7fb3d5' : plain });
+          }}
+        >
           <option value="solid">Bryła (materiał)</option>
           <option value="hole">Otwór (wycina)</option>
+          <option value="clip">Część wspólna (zostawia, co w środku)</option>
         </select>
       </label>
       <label className="field" title="Elementy w tej samej bryle są sklejane w jeden wydruk. Otwory wycinają tylko swoją bryłę.">
@@ -845,6 +1010,193 @@ function PartProperties({ part }: { part: Part }) {
         </button>
         <button className="small danger" onClick={() => st.remove(part.id)}>
           Usuń
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Hide and lock toggles for one part or a whole body (group id). */
+function Flags({ id, hidden, locked }: { id: string; hidden: boolean; locked: boolean }) {
+  const setFlags = useStore((s) => s.setFlags);
+  return (
+    <span className={`flags ${hidden || locked ? 'on' : ''}`}>
+      <button className={`flag ${hidden ? 'set' : ''}`} title={hidden ? 'Pokaż' : 'Ukryj (zostaje w wydruku, tylko nie zasłania)'} onClick={(e) => (e.stopPropagation(), setFlags([id], { hidden: !hidden }))}>
+        {hidden ? '◌' : '◉'}
+      </button>
+      <button className={`flag ${locked ? 'set' : ''}`} title={locked ? 'Odblokuj' : 'Zablokuj (nie da się przesunąć ani usunąć)'} onClick={(e) => (e.stopPropagation(), setFlags([id], { locked: !locked }))}>
+        {locked ? '🔒' : '🔓'}
+      </button>
+    </span>
+  );
+}
+
+/** "Skorupa": hollows the whole body, optionally open on one side. */
+function ShellTool({ body, prefer }: { body: number; prefer?: string }) {
+  const st = useStore();
+  const solids = st.parts.filter((p) => p.body === body && !p.hole);
+  const holder = solids.find((p) => p.shell) ?? solids.find((p) => p.id === prefer) ?? solids[0];
+  if (!holder) return null;
+  const sh = holder.shell;
+  const set = (patch: Partial<Shell>) => st.setShell(holder.id, { ...(sh ?? DEFAULT_SHELL), ...patch });
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Wydrąż</span>
+        <select value={sh ? sh.open : 'off'} onChange={(e) => (e.target.value === 'off' ? st.setShell(holder.id, undefined) : set({ open: e.target.value as Shell['open'], on: true }))}>
+          <option value="off">Nie (pełna)</option>
+          <option value="none">Zamknięta w środku</option>
+          <option value="top">Otwarta od góry</option>
+          <option value="bottom">Otwarta od dołu</option>
+        </select>
+      </label>
+      {sh && (
+        <>
+          <label className="field">
+            <span>Grubość ścianki</span>
+            <NumberInput value={sh.t} min={0.4} max={50} step={0.2} unit="mm" onChange={(t) => set({ t })} />
+          </label>
+          <label className="field">
+            <span>Pokaż pełną (do edycji)</span>
+            <input type="checkbox" checked={!sh.on} onChange={(e) => set({ on: !e.target.checked })} />
+          </label>
+          <p className="desc">Ścianka ma wszędzie mniej więcej tę grubość. Otwory dalej wycinają: otwór w ściance otwiera wnętrze.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** "Lustro i skala" of the whole body, plus a mirrored copy beside it. */
+function XformTool({ body, prefer }: { body: number; prefer?: string }) {
+  const st = useStore();
+  const solids = st.parts.filter((p) => p.body === body && !p.hole);
+  const holder = solids.find((p) => p.xform) ?? solids.find((p) => p.id === prefer) ?? solids[0];
+  const [lock, setLock] = useState(true);
+  if (!holder) return null;
+  const x = holder.xform ?? DEFAULT_XFORM;
+  const put = (next: Xform) => st.setXform(holder.id, xformActive(next) ? next : undefined);
+  const setScale = (i: number, v: number) => put({ ...x, scale: (lock ? [v, v, v] : x.scale.map((s, k) => (k === i ? v : s))) as Vec3 });
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Odbicie</span>
+        <select value={x.mirror} onChange={(e) => put({ ...x, mirror: e.target.value as Xform['mirror'] })}>
+          <option value="none">Brak</option>
+          <option value="x">Lewo ↔ prawo (X)</option>
+          <option value="y">Przód ↔ tył (Y)</option>
+          <option value="z">Góra ↔ dół (Z)</option>
+        </select>
+      </label>
+      <label className="field">
+        <span>Skala</span>
+        <span className="row">
+          {lock ? (
+            <NumberInput value={x.scale[0]} min={1} max={1000} step={5} unit="%" onChange={(v) => setScale(0, v)} />
+          ) : (
+            (['X', 'Y', 'Z'] as const).map((a, i) => <NumberInput key={a} value={x.scale[i]} min={1} max={1000} step={5} unit={a} onChange={(v) => setScale(i, v)} />)
+          )}
+        </span>
+      </label>
+      <label className="field">
+        <span>Ta sama w każdą stronę</span>
+        <input type="checkbox" checked={lock} onChange={(e) => setLock(e.target.checked)} />
+      </label>
+      <div className="row">
+        <button className="small" onClick={() => st.mirrorCopy(body, 'x')} title="Kopia odbita lewo-prawo, obok tej bryły">
+          ⇋ Lustrzana kopia (X)
+        </button>
+        <button className="small" onClick={() => st.mirrorCopy(body, 'y')} title="Kopia odbita przód-tył, obok tej bryły">
+          ⇅ Lustrzana kopia (Y)
+        </button>
+      </div>
+      <p className="desc">Liczy się na końcu: wymiary i otwory dalej zmieniasz w zwykłej bryle. Skala zmienia też otwory i gwinty, więc dla śrub zostaw 100%.</p>
+    </div>
+  );
+}
+
+/** "Część wspólna": the body keeps only what it shares with another body. */
+function ClipTool({ body }: { body: number }) {
+  const st = useStore();
+  const others = [...new Set(st.parts.filter((p) => p.body !== body && !p.hole).map((p) => p.body))].sort((a, b) => a - b);
+  const [other, setOther] = useState<number | ''>('');
+  if (!others.length) return <p className="desc">Dodaj drugą bryłę i nałóż ją na tę: zostanie tylko to, co mają wspólne.</p>;
+  const pick = other === '' ? others[0] : other;
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Z bryłą</span>
+        <select value={pick} onChange={(e) => setOther(Number(e.target.value))}>
+          {others.map((b) => (
+            <option key={b} value={b}>
+              Bryła {b}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button className="small" onClick={() => st.clipWith(body, pick)}>
+        ∩ Zostaw tylko część wspólną
+      </button>
+      <p className="desc">Druga bryła staje się niebieskim kształtem przycinającym. Możesz go przesuwać i zmieniać, a w „Rodzaj” wrócić do zwykłej bryły.</p>
+    </div>
+  );
+}
+
+/** Several picks (Ctrl+click): align and spread them. */
+function MultiProperties({ ids }: { ids: string[] }) {
+  const st = useStore();
+  const [gap, setGap] = useState(5);
+  const name = (id: string) => {
+    const gb = groupBody(id);
+    return gb !== null ? `Bryła ${gb}` : (st.parts.find((p) => p.id === id)?.name ?? '');
+  };
+  const AX = ['X', 'Y', 'Z'];
+  const ends: Record<number, [string, string, string]> = { 0: ['⇤ lewo', '↔ środek', 'prawo ⇥'], 1: ['⇣ przód', '↕ środek', 'tył ⇡'], 2: ['⤓ dół', '↕ środek', 'góra ⤒'] };
+  return (
+    <div className="props">
+      <div className="props-head">
+        <b className="name">Zaznaczone: {ids.length}</b>
+        <Info text={INFO.align} />
+      </div>
+      <p className="desc">{ids.map(name).join(', ')}. Ctrl+klik dodaje albo zdejmuje element.</p>
+      <h4>Wyrównaj</h4>
+      {[0, 1, 2].map((a) => (
+        <div key={a} className="align-row">
+          <span>{AX[a]}</span>
+          {(['min', 'mid', 'max'] as const).map((to, k) => (
+            <button key={to} className="small" onClick={() => st.align(ids, a as 0 | 1 | 2, to)}>
+              {ends[a][k]}
+            </button>
+          ))}
+        </div>
+      ))}
+      <h4>Rozłóż</h4>
+      <div className="row">
+        <button className="small" disabled={ids.length < 3} onClick={() => st.distribute(ids, 0, null)} title="Równe odstępy między skrajnymi (3 i więcej)">
+          Równo w X
+        </button>
+        <button className="small" disabled={ids.length < 3} onClick={() => st.distribute(ids, 1, null)} title="Równe odstępy między skrajnymi (3 i więcej)">
+          Równo w Y
+        </button>
+      </div>
+      <div className="row">
+        <NumberInput value={gap} min={0} max={200} step={1} unit="mm" onChange={setGap} />
+        <button className="small" onClick={() => st.distribute(ids, 0, gap)}>
+          Rząd w X co {gap} mm
+        </button>
+        <button className="small" onClick={() => st.distribute(ids, 1, gap)}>
+          w Y
+        </button>
+      </div>
+      <div className="row end">
+        <button className="small" onClick={() => st.setFlags(ids, { hidden: true })}>
+          Ukryj
+        </button>
+        <button className="small" onClick={() => st.setFlags(ids, { locked: true })}>
+          Zablokuj
+        </button>
+        <button className="small" onClick={() => st.select(null)}>
+          Odznacz
         </button>
       </div>
     </div>
@@ -926,17 +1278,6 @@ function BendTool({ body, prefer }: { body: number; prefer?: string }) {
       )}
     </div>
   );
-}
-
-const BED_KEY = 'm3d-bed';
-function loadBed(): Vec3 {
-  try {
-    const v = JSON.parse(localStorage.getItem(BED_KEY) ?? '');
-    if (Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x > 0)) return v as Vec3;
-  } catch {
-    /* default below */
-  }
-  return [220, 220, 250];
 }
 
 /** "Podziel na części": one cut at a chosen plane, or as many as the printer's bed needs. */
@@ -1028,7 +1369,7 @@ function GroupProperties({ body }: { body: number }) {
         {members.length} {members.length === 1 ? 'element' : 'elementów'}, w tym {holes} {holes === 1 ? 'otwór' : 'otworów'}. Wymiary: {size.map((v) => Math.round(v * 10) / 10).join(' × ')} mm.
         {tied > 0 && ' Połączona zawiasem lub złączką z inną bryłą, przesuwa się razem z nią.'}
       </p>
-      {holes > 0 && !members.some((p) => p.bend?.on) && (
+      {holes > 0 && !members.some(finishing) && (
         <button className="action" onClick={() => (merged ? st.unmerge(body) : st.merge(body))}>
           {merged ? '⧈ Rozdziel (pokaż otwory osobno)' : '⧉ Złącz otwory z bryłą (pokaż gotowy element)'}
         </button>
@@ -1038,6 +1379,15 @@ function GroupProperties({ body }: { body: number }) {
       </Section>
       <Section title="↪ Gięcie" open={members.some((p) => p.bend)} info={INFO.bend}>
         <BendTool body={body} />
+      </Section>
+      <Section title="◫ Skorupa (wydrążenie)" open={members.some((p) => p.shell)} info={INFO.shell}>
+        <ShellTool body={body} />
+      </Section>
+      <Section title="⇋ Lustro i skala" open={members.some((p) => p.xform)} info={INFO.xform}>
+        <XformTool body={body} />
+      </Section>
+      <Section title="∩ Część wspólna z inną bryłą" info={INFO.clip}>
+        <ClipTool body={body} />
       </Section>
       <SplitTool body={body} />
       {merged && <p className="desc">Złączona: widać gotowy element. Otwory nadal możesz kliknąć (na liście albo w modelu) i przesuwać w bryle.</p>}
@@ -1075,33 +1425,48 @@ function GroupProperties({ body }: { body: number }) {
   );
 }
 
+/** Badge of a body shown finished: what was done to it. */
+function badgeOf(members: Part[]) {
+  const s = members.filter((p) => !p.hole);
+  const out: string[] = [];
+  if (s.some((p) => p.bend?.on)) out.push('gięta');
+  if (s.some((p) => p.shell?.on)) out.push('skorupa');
+  const x = s.find((p) => xformActive(p.xform))?.xform;
+  if (x && x.mirror !== 'none') out.push('odbita');
+  if (x && x.scale.some((v) => v !== 100)) out.push('skala');
+  return out.length ? out.join(', ') : 'złączona';
+}
+
 /** Always-visible list of everything in the project, grouped by printed body. */
 function Outliner() {
   const parts = useStore((s) => s.parts);
   const selectedId = useStore((s) => s.selectedId);
+  const multi = useStore((s) => s.multi);
   const hoveredId = useStore((s) => s.hoveredId);
   const select = useStore((s) => s.select);
+  const toggleMulti = useStore((s) => s.toggleMulti);
+  const pick = (id: string) => (e: React.MouseEvent) => (e.ctrlKey || e.metaKey || e.shiftKey ? toggleMulti(id) : select(id));
   const setHover = useStore((s) => s.setHover);
   const merge = useStore((s) => s.merge);
   const unmerge = useStore((s) => s.unmerge);
   const mergeAll = useStore((s) => s.mergeAll);
   const bodies = [...new Set(parts.map((p) => p.body))].sort((a, b) => a - b);
   if (!parts.length) return null;
-  const cls = (id: string) => [id === selectedId ? 'sel' : '', id === hoveredId ? 'hov' : ''].join(' ');
+  const cls = (id: string) => [id === selectedId || multi.includes(id) ? 'sel' : '', id === hoveredId ? 'hov' : ''].join(' ');
   return (
     <div className="outliner" onMouseLeave={() => setHover(null)}>
       <h4>Elementy projektu</h4>
       {bodies.map((b) => {
         const members = parts.filter((p) => p.body === b);
         const merged = isMerged(parts, b);
-        const bent = members.some((p) => p.bend?.on);
+        const bent = members.some(finishing);
         const holes = members.some((p) => p.hole) && !bent;
         const g = groupId(b);
         return (
           <div key={b} className="body">
-            <div className={`body-head ${cls(g)}`} onMouseEnter={() => setHover(g)} onClick={() => select(g)}>
+            <div className={`body-head ${cls(g)}`} onMouseEnter={() => setHover(g)} onClick={pick(g)}>
               <b>Bryła {b}</b>
-              {merged && <span className="badge">{bent ? 'gięta' : 'złączona'}</span>}
+              {merged && <span className="badge">{badgeOf(members)}</span>}
               {holes && (
                 <button
                   className="mini"
@@ -1115,13 +1480,15 @@ function Outliner() {
                   {merged ? 'Rozdziel' : 'Złącz'}
                 </button>
               )}
+              <Flags id={g} hidden={members.every((p) => p.hidden)} locked={members.every((p) => p.locked)} />
             </div>
             <ul>
               {members.map((p) => (
-                <li key={p.id} className={`${p.hole ? 'is-hole' : ''} ${cls(p.id)}`} onMouseEnter={() => setHover(p.id)} onClick={() => select(p.id)}>
+                <li key={p.id} className={`${p.hole ? 'is-hole' : ''} ${p.hidden ? 'is-hidden' : ''} ${cls(p.id)}`} onMouseEnter={() => setHover(p.id)} onClick={pick(p.id)}>
                   <span className="dot" style={{ background: p.color }} />
                   <span className="label">{p.name}</span>
                   {p.link && parts.some((q) => q.link === p.link && q.id !== p.id && (!p.rigid || q.rigid !== p.rigid)) && <span title="Powiązana kopia">🔗</span>}
+                  <Flags id={p.id} hidden={!!p.hidden} locked={!!p.locked} />
                 </li>
               ))}
             </ul>
@@ -1221,11 +1588,14 @@ export function Properties() {
     return gb !== null && s.parts.some((p) => p.body === gb) ? gb : null;
   });
   const empty = useStore((s) => !s.parts.length);
+  const multi = useStore((s) => s.multi);
+  const sel = useStore((s) => s.selectedId);
+  const picks = multi.length && sel ? [sel, ...multi] : null;
   return (
     <aside className="properties">
       <CheckPanel />
       <Outliner />
-      {part ? <PartProperties key={part.id} part={part} /> : body !== null ? <GroupProperties key={body} body={body} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
+      {picks ? <MultiProperties ids={picks} /> : part ? <PartProperties key={part.id} part={part} /> : body !== null ? <GroupProperties key={body} body={body} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
     </aside>
   );
 }

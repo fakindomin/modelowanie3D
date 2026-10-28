@@ -233,7 +233,7 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 .suggest button.primary { background: var(--accent-2); border-color: var(--accent-2); color: #10261a; font-weight: 600; }
 
 /* ---- visual pass: grey first, green and orange only as small accents ---- */
-.toolbar { flex-wrap: wrap; gap: 6px 8px; }
+.toolbar { flex-wrap: wrap; gap: 6px 6px; }
 .toolbar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
 .toolbar button { white-space: nowrap; }
 .toolbar button:hover:not(:disabled), .small:hover, .action:hover { border-color: #6a6d72; background: var(--hover); }
@@ -306,7 +306,7 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 }
 .help-pop ul { margin: 0; padding-left: 16px; }
 .help-pop b { color: #f3b47e; font-weight: 600; }
-.toolbar button, .toolbar .tabs button { padding: 5px 9px; }
+.toolbar button, .toolbar .tabs button { padding: 5px 8px; }
 .toolbar .group > button[title^='Cofnij'], .toolbar .group > button[title^='Ponów'] { font-size: 16px; padding: 2px 10px; }
 .variant .vname { min-width: 0; }
 .variant .vname span, .variant .vname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -324,3 +324,25 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 .div-editor .row { flex-wrap: wrap; }
 .field .text-in { width: 160px; flex: none; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: inherit; border-radius: 4px; padding: 4px 6px; font: inherit; }
 .field .text-in:focus { outline: none; border-color: var(--accent); }
+
+/* ---- hide / lock, several picks ---- */
+.flags { display: inline-flex; gap: 2px; margin-left: auto; opacity: 0; transition: opacity 0.1s; }
+.body-head .mini + .flags { margin-left: 4px; }
+.body-head:hover .flags, .body li:hover .flags, .flags.on { opacity: 1; }
+.flag { background: none; border: 0; padding: 0 3px; font-size: 11px; line-height: 16px; color: var(--muted); cursor: pointer; border-radius: 3px; }
+.flag:hover { background: var(--hover); color: #fff; }
+.flags.on .flag:not(.set) { opacity: 0.35; }
+.flag.set { color: var(--accent); }
+.body li.is-hidden .label { opacity: 0.45; font-style: italic; }
+.align-row { display: grid; grid-template-columns: 16px 1fr 1fr 1fr; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ---- sketch editor ---- */
+.sketch-editor { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 4px; }
+.sketch-editor svg { width: 100%; aspect-ratio: 1 / 1; max-height: 280px; background: var(--panel-2); border-radius: 8px; touch-action: none; user-select: none; }
+.sk-grid line { stroke: #34363a; }
+.sk-axis { stroke: #f3b47e; stroke-dasharray: 2 2; }
+.sk-fill { fill: rgba(91, 185, 116, 0.22); stroke: #5bb974; stroke-linejoin: round; }
+.sk-edge { stroke: transparent; cursor: copy; }
+.sk-edge:hover { stroke: rgba(243, 180, 126, 0.35); }
+.sk-pt { fill: #e9e9e7; stroke: #161718; stroke-width: 0.2; cursor: grab; }
+.sk-pt:hover, .sk-pt.sel { fill: #f3b47e; }

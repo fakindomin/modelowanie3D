@@ -156,7 +156,7 @@ export function runCheck(parts: Part[], minWall: number): CheckResult {
         }
         hm.delete();
       }
-      if (!cuts) issues.push({ level: 'warn', text: `„${h.name}” nic nie wycina. Przesuń go w bryłę albo usuń.`, select: h.id });
+      if (!cuts) issues.push({ level: 'warn', text: h.clip ? `„${h.name}” nie obejmuje swojej bryły, więc nic z niej nie zostanie. Nałóż go na bryłę albo zmień „Rodzaj”.` : `„${h.name}” nic nie wycina. Przesuń go w bryłę albo usuń.`, select: h.id });
     }
     issues.push(...magnetIssues(parts));
   } finally {

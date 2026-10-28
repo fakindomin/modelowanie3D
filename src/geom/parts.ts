@@ -6,6 +6,7 @@ import { M, matrixToMat4, toGeometry } from './manifold';
 import { applyTexture } from './texture';
 import { applyEdges } from './edges';
 import { applyBend } from './bend';
+import { applyShell, applyXform } from './modify';
 
 interface Built {
   manifold: Manifold;
@@ -103,10 +104,33 @@ export function buildBodies(parts: Part[], only?: number[]): BodyResult[] {
     const members = parts.filter((p) => p.body === body);
     const solids = members.filter((p) => !p.hole);
     if (!solids.length) continue;
-    const holes = members.filter((p) => p.hole);
+    const holes = members.filter((p) => p.hole && !p.clip);
+    const clips = members.filter((p) => p.hole && p.clip);
     const solidMs = solids.map(worldManifold);
     let result = M().Manifold.union(solidMs);
     solidMs.forEach((m) => m.delete());
+    const step = (fn: (m: Manifold) => Manifold, what: string) => {
+      try {
+        const next = fn(result);
+        if (next !== result) {
+          result.delete();
+          result = next;
+        }
+      } catch (e) {
+        console.warn(what + ' failed', e);
+      }
+    };
+    if (clips.length)
+      step((m) => {
+        const cm = clips.map(worldManifold);
+        const keep = M().Manifold.union(cm);
+        cm.forEach((x) => x.delete());
+        const out = m.intersect(keep);
+        keep.delete();
+        return out;
+      }, 'clip');
+    const shell = solids.find((p) => p.shell?.on)?.shell;
+    if (shell) step((m) => applyShell(m, shell), 'shell');
     if (holes.length) {
       const holeMs = holes.map(worldManifold);
       const cut = M().Manifold.union(holeMs);
@@ -118,17 +142,9 @@ export function buildBodies(parts: Part[], only?: number[]): BodyResult[] {
     }
     if (result.isEmpty()) continue;
     const bend = solids.find((p) => p.bend?.on)?.bend;
-    if (bend) {
-      try {
-        const bent = applyBend(result, bend);
-        if (bent !== result) {
-          result.delete();
-          result = bent;
-        }
-      } catch (e) {
-        console.warn('bend failed', e);
-      }
-    }
+    if (bend) step((m) => applyBend(m, bend), 'bend');
+    const xform = solids.find((p) => p.xform)?.xform;
+    if (xform) step((m) => applyXform(m, xform), 'xform');
     out.push({ body, manifold: result, geometry: toGeometry(result), color: solids[0].color });
   }
   return out;

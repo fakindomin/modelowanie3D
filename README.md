@@ -37,6 +37,21 @@ Każda ma własną scenę, historię cofania i autozapis.
   (kąt, miejsce zgięcia, promień wewnętrzny). Płaska wersja zostaje do edycji, gięcie można wyłączyć.
   „Sprawdź model” ostrzega, gdy gwint albo magnes wypada w strefie gięcia. Gotowe: siodełko, klips i obejma
   dwudzielna na rurę (w „Okuciach”).
+- **Własny kształt:** „Własny kształt (obrys)” wyciąga narysowany obrys na wysokość (można zwęzić górę
+  i skręcić), „Kształt obrotowy (profil)” obraca połowę przekroju wokół osi (wazon, kubek, gałka).
+  Przeciągasz punkty, klik w krawędź dodaje punkt, dwuklik usuwa; są gotowe kształty na start.
+- **Skorupa:** wydrąża całą bryłę ze ścianką o podanej grubości, zamkniętą albo otwartą od góry lub dołu.
+- **Lustro i skala:** odbicie (X/Y/Z) i skala całej bryły, liczone na końcu; „Lustrzana kopia” robi parę
+  lewy/prawy obok.
+- **Część wspólna:** „Rodzaj” → „Część wspólna” przy elemencie albo „∩ Część wspólna z inną bryłą”: zostaje
+  tylko to, co bryły mają wspólne.
+- **Żebra:** przy kątowniku, ceowniku i teowniku „◣ Dodaj żebra w narożnikach” (powiązane kliny).
+- **Wyrównaj i rozłóż:** Ctrl+klik (w modelu albo na liście) zaznacza kilka elementów; panel wyrównuje je
+  do krawędzi lub środka i rozkłada równo albo co podany odstęp.
+- **Ukryj i zablokuj:** ◉ i 🔓 na liście elementów. Ukryty element nadal jest w wydruku; zablokowanego nie
+  przesuniesz ani nie usuniesz.
+- **Ułóż na stole:** „⊞ Ułóż” kładzie każdą bryłę na jej największej płaskiej ściance i rozkłada wszystkie
+  obok siebie na stole drukarki.
 - **Miejsca na magnesy:** jeden przycisk przy pudełku (prostokątnym, okrągłym, sześciokątnym, gotowym albo
   złożonym z płyt) lub pokrywce. W okrągłych i sześciokątnych gniazda idą równo po obwodzie (3/4/6/8).
   Szuflady i obudowa mają opcję „Magnes-zatrzask z tyłu”, który domyka szufladę.

@@ -3,10 +3,11 @@ import * as THREE from 'three';
 import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from './catalog';
 import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
 import { buildBodies, built, partMatrix, worldBox, worldManifold } from './geom/parts';
+import { finishing } from './geom/modify';
 import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
-import type { Bend, Edges, Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
+import type { Bend, Edges, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, Xform } from './types';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
@@ -133,6 +134,25 @@ interface State {
   setEdges(id: string, edges: Edges | undefined): void;
   /** Bending of a whole body, kept on one of its solids (`id`); other solids of the body lose theirs. */
   setBend(id: string, bend: Bend | undefined): void;
+  /** Body modifiers kept on one solid of the body (the others are cleared). */
+  setShell(id: string, shell: Shell | undefined): void;
+  /** Triangular ribs in the inside corners of an angle, channel or tee profile. */
+  addRibs(id: string, count: number): void;
+  setXform(id: string, xform: Xform | undefined): void;
+  /** Mirrored copy of a body placed beside it. */
+  mirrorCopy(body: number, axis: 'x' | 'y'): void;
+  /** Hide or lock parts; a group id ("g:3") means every member of that body. */
+  setFlags(ids: string[], patch: { hidden?: boolean; locked?: boolean }): void;
+  /** Keeps only what the solids of `body` share with the solids of `other` (other becomes a clip). */
+  clipWith(body: number, other: number): void;
+  /** Extra picks for aligning (Ctrl+click); `selectedId` stays the main one. */
+  multi: string[];
+  toggleMulti(id: string): void;
+  clearMulti(): void;
+  align(ids: string[], axis: 0 | 1 | 2, to: 'min' | 'mid' | 'max'): void;
+  distribute(ids: string[], axis: 0 | 1 | 2, gap: number | null): void;
+  /** Turns every body onto its largest flat face and packs them on the bed. */
+  layoutOnBed(): void;
   fitFigurine(id: string, height: number): void;
   merge(body: number): void;
   unmerge(body: number): void;
@@ -176,9 +196,18 @@ function nextBody(parts: Part[]) {
   return parts.reduce((m, p) => Math.max(m, p.body), 0) + 1;
 }
 
+/** A locked part (or a body with a locked member) stays put: no dragging, keys, gizmo or delete. */
+export function isLocked(parts: Part[], id: string | null) {
+  if (!id) return false;
+  const gb = groupBody(id);
+  if (gb !== null) return parts.some((p) => p.body === gb && p.locked);
+  const p = parts.find((x) => x.id === id);
+  return !!p && mates(parts, p).some((x) => x.locked);
+}
+
 /** Shown as the finished piece: merged by the user, or bent (bending needs the finished solid). */
 export function isMerged(parts: Part[], body: number) {
-  return parts.some((p) => p.body === body && !p.hole && (p.merged || p.bend?.on));
+  return parts.some((p) => p.body === body && !p.hole && (p.merged || finishing(p)));
 }
 
 function overlaps(a: THREE.Box3, b: THREE.Box3, eps = 0.01) {
@@ -650,7 +679,7 @@ export const useStore = create<State>((set, get) => {
       });
     },
 
-    select: (id) => set((s) => ({ selectedId: id, suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
+    select: (id) => set((s) => ({ selectedId: id, multi: [], suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
     setHover: (id) => {
       if (get().hoveredId !== id) set({ hoveredId: id });
     },
@@ -739,6 +768,7 @@ export const useStore = create<State>((set, get) => {
       const { parts } = get();
       const p = parts.find((x) => x.id === id);
       if (!p) return;
+      if (isLocked(parts, id)) return get().notify('Ten element jest zablokowany. Odblokuj go (🔒 na liście), żeby usunąć.');
       const gone = new Set(mates(parts, p).map((x) => x.id));
       commit(
         parts.filter((x) => !gone.has(x.id)),
@@ -1463,6 +1493,218 @@ export const useStore = create<State>((set, get) => {
       commit(get().parts.map((p) => (p.id === id ? { ...p, bend } : p.body === src.body && p.bend ? { ...p, bend: undefined } : p)));
     },
 
+    addRibs(id, count) {
+      const { parts } = get();
+      const src = parts.find((p) => p.id === id);
+      if (!src || !['angle', 'channel', 'tee'].includes(src.type)) return;
+      const n = (k: string) => Number(src.params[k]) || 0;
+      const L = n('L'), t = n('T');
+      // Inside corners in the profile's own frame: Y of the wall face, which way the rib points, free height.
+      let corners: { y: number; dir: 1 | -1; reach: number; up: number }[] = [];
+      if (src.type === 'angle') corners = [{ y: -n('A') / 2 + t, dir: 1, reach: n('A') - t, up: n('B') - t }];
+      if (src.type === 'channel') {
+        const w = n('W');
+        corners = [
+          { y: -w / 2 + t, dir: 1, reach: (w - 2 * t) / 2, up: n('H') - t },
+          { y: w / 2 - t, dir: -1, reach: (w - 2 * t) / 2, up: n('H') - t },
+        ];
+      }
+      if (src.type === 'tee') {
+        const w = n('W');
+        corners = [
+          { y: t / 2, dir: 1, reach: w / 2 - t / 2, up: n('H') - t },
+          { y: -t / 2, dir: -1, reach: w / 2 - t / 2, up: n('H') - t },
+        ];
+      }
+      const leg = Math.min(...corners.map((c) => Math.min(c.reach, c.up))) * 0.8;
+      if (leg < 2) return get().notify('Profil jest za mały na żebra.');
+      const k = Math.max(1, Math.round(count));
+      const thick = Math.max(1.2, t);
+      const xs = k === 1 ? [0] : Array.from({ length: k }, (_, i) => -L / 2 + thick / 2 + 2 + (i * (L - thick - 4)) / (k - 1));
+      const R = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(src.rotation.map((r) => r * DEG) as Vec3)));
+      const link = uid();
+      const OV = 0.2;
+      const next = [...parts];
+      let first = '';
+      for (const c of corners)
+        for (const x of xs) {
+          // The wedge's right angle sits at its -Y side; a rib pointing to -Y is the wedge turned 180° about Z.
+          const local = new THREE.Vector3(x, c.y + c.dir * ((leg + OV) / 2 - OV), t - OV);
+          const pos = local.applyQuaternion(R).add(new THREE.Vector3(...src.position));
+          const q = c.dir === 1 ? R.clone() : R.clone().multiply(new THREE.Quaternion().setFromAxisAngle(AXES[2], Math.PI));
+          const e = new THREE.Euler().setFromQuaternion(q);
+          const rib = makePart('wedge', next, {
+            name: `Żebro ${next.filter((p) => p.type === 'wedge').length + 1}`,
+            params: { W: thick, D: round(leg + OV, 2), H: round(leg + OV, 2) },
+            position: r3(pos.toArray() as Vec3),
+            rotation: [e.x, e.y, e.z].map((r) => round(r / DEG, 2)) as Vec3,
+            body: src.body,
+            color: src.color,
+            link,
+          });
+          first ||= rib.id;
+          next.push(rib);
+        }
+      commit(next, { selectedId: first });
+      get().notify(`Dodano ${next.length - parts.length} żeber w narożnikach. Są powiązane: zmień wymiary jednego, zmienią się wszystkie.`);
+    },
+
+    setShell(id, shell) {
+      const src = get().parts.find((p) => p.id === id);
+      if (!src) return;
+      commit(get().parts.map((p) => (p.id === id ? { ...p, shell } : p.body === src.body && p.shell ? { ...p, shell: undefined } : p)));
+    },
+
+    setXform(id, xform) {
+      const src = get().parts.find((p) => p.id === id);
+      if (!src) return;
+      commit(get().parts.map((p) => (p.id === id ? { ...p, xform } : p.body === src.body && p.xform ? { ...p, xform: undefined } : p)));
+    },
+
+    mirrorCopy(body, axis) {
+      get().duplicateBody(body);
+      const { parts, selectedId } = get();
+      const nb = groupBody(selectedId);
+      if (nb === null) return;
+      const holder = parts.find((p) => p.body === nb && !p.hole && p.xform) ?? parts.find((p) => p.body === nb && !p.hole);
+      if (!holder) return;
+      const x = holder.xform ?? { mirror: 'none' as const, scale: [100, 100, 100] as Vec3 };
+      const mirror = x.mirror === axis ? 'none' : x.mirror === 'none' ? axis : x.mirror;
+      // Same undo step as the copy itself.
+      set({ parts: parts.map((p) => (p.id === holder.id ? { ...p, xform: { ...x, mirror } } : p.body === nb && p.xform ? { ...p, xform: undefined } : p)) });
+      get().notify(`Lustrzana kopia jako bryła ${nb}. Wymiary i otwory zmieniasz w niej jak zwykle, odbicie liczy się na końcu.`);
+    },
+
+    setFlags(ids, patch) {
+      const { parts } = get();
+      const hit = new Set<string>();
+      for (const id of ids) {
+        const gb = groupBody(id);
+        parts.forEach((p) => (gb !== null ? p.body === gb : p.id === id) && hit.add(p.id));
+      }
+      const clean = (p: Part): Part => {
+        const q = { ...p, ...patch };
+        if (!q.hidden) delete q.hidden;
+        if (!q.locked) delete q.locked;
+        return q;
+      };
+      commit(parts.map((p) => (hit.has(p.id) ? clean(p) : p)));
+    },
+
+    clipWith(body, other) {
+      const { parts } = get();
+      if (body === other || !parts.some((p) => p.body === other && !p.hole)) return;
+      commit(
+        parts.map((p) => (p.body !== other ? p : p.hole ? { ...p, body } : { ...p, body, hole: true, clip: true, color: '#7fb3d5', bend: undefined, shell: undefined, xform: undefined, merged: undefined })),
+        { selectedId: groupId(body) },
+      );
+      get().notify(`Z bryły ${body} zostaje tylko część wspólna z bryłą ${other}. Niebieski kształt możesz przesuwać; „Rodzaj” → „Bryła” cofa przycięcie.`);
+    },
+
+    multi: [],
+    toggleMulti(id) {
+      const s = get();
+      const all = [...new Set([...(s.selectedId ? [s.selectedId] : []), ...s.multi])];
+      const next = all.includes(id) ? all.filter((x) => x !== id) : [...all, id];
+      set({ selectedId: next[0] ?? null, multi: next.slice(1) });
+    },
+    clearMulti: () => set({ multi: [] }),
+
+    align(ids, axis, to) {
+      const { parts } = get();
+      const items = ids.map((id) => pickItem(parts, id)).filter((x): x is PickItem => !!x);
+      if (items.length < 2) return;
+      const all = new THREE.Box3();
+      items.forEach((it) => all.union(it.box));
+      const target = to === 'min' ? all.min.getComponent(axis) : to === 'max' ? all.max.getComponent(axis) : (all.min.getComponent(axis) + all.max.getComponent(axis)) / 2;
+      const shift = new Map<string, number>();
+      for (const it of items) {
+        const cur = to === 'min' ? it.box.min.getComponent(axis) : to === 'max' ? it.box.max.getComponent(axis) : (it.box.min.getComponent(axis) + it.box.max.getComponent(axis)) / 2;
+        it.ids.forEach((id) => shift.set(id, target - cur));
+      }
+      commit(movedBy(parts, shift, axis));
+    },
+
+    distribute(ids, axis, gap) {
+      const { parts } = get();
+      const items = ids
+        .map((id) => pickItem(parts, id))
+        .filter((x): x is PickItem => !!x)
+        .sort((a, b) => a.box.min.getComponent(axis) + a.box.max.getComponent(axis) - (b.box.min.getComponent(axis) + b.box.max.getComponent(axis)));
+      if (items.length < 2 || (gap === null && items.length < 3)) return;
+      const size = (it: PickItem) => it.box.max.getComponent(axis) - it.box.min.getComponent(axis);
+      const first = items[0].box.min.getComponent(axis);
+      // Equal gaps between the outer two, or the given gap from the first one on.
+      const g = gap ?? (items[items.length - 1].box.max.getComponent(axis) - first - items.reduce((a, it) => a + size(it), 0)) / (items.length - 1);
+      const shift = new Map<string, number>();
+      let at = first;
+      for (const it of items) {
+        const d = at - it.box.min.getComponent(axis);
+        it.ids.forEach((id) => shift.set(id, d));
+        at += size(it) + g;
+      }
+      commit(movedBy(parts, shift, axis));
+    },
+
+    layoutOnBed() {
+      let parts = get().parts;
+      const units: number[][] = [];
+      const seen = new Set<number>();
+      for (const b of [...new Set(parts.map((p) => p.body))].sort((a, c) => a - c)) {
+        if (seen.has(b) || !parts.some((p) => p.body === b && !p.hole)) continue;
+        const bs = [...new Set(assembly(parts, b).map((p) => p.body))];
+        bs.forEach((x) => seen.add(x));
+        units.push(bs);
+      }
+      if (!units.length) return get().notify('Nie ma czego układać.');
+      let turned = 0;
+      for (const u of units) {
+        // Only single printed bodies turn: a box on its hinge with the lid stays as built.
+        if (u.length !== 1) continue;
+        const best = bestFaceDown(parts, u[0]);
+        if (!best) continue;
+        parts = turnBody(parts, u[0], best[0], best[1]);
+        turned++;
+      }
+      const bed = loadBed();
+      const GAP = 6;
+      const boxes = units.map((u) => {
+        const b = new THREE.Box3();
+        u.forEach((x) => b.union(finishedBox(parts, x)));
+        return { u, b, w: b.max.x - b.min.x, d: b.max.y - b.min.y };
+      });
+      boxes.sort((a, b) => b.d - a.d || b.w - a.w);
+      // Rows across the bed, deepest first.
+      const place: { u: number[]; b: THREE.Box3; x: number; y: number }[] = [];
+      let x = 0, y = 0, row = 0, width = 0;
+      for (const it of boxes) {
+        if (x > 0 && x + it.w > bed[0]) {
+          y += row + GAP;
+          x = 0;
+          row = 0;
+        }
+        place.push({ u: it.u, b: it.b, x, y });
+        x += it.w + GAP;
+        width = Math.max(width, x - GAP);
+        row = Math.max(row, it.d);
+      }
+      const depth = y + row;
+      const shift = new Map<string, Vec3>();
+      for (const pl of place) {
+        const d: Vec3 = [pl.x - width / 2 - pl.b.min.x, pl.y - depth / 2 - pl.b.min.y, -pl.b.min.z];
+        parts.filter((p) => pl.u.includes(p.body)).forEach((p) => shift.set(p.id, d));
+      }
+      parts = parts.map((p) => {
+        const d = shift.get(p.id);
+        return d ? { ...p, position: r3([p.position[0] + d[0], p.position[1] + d[1], p.position[2] + d[2]]) } : p;
+      });
+      commit(parts, { fitRequest: get().fitRequest + 1 });
+      const fits = width <= bed[0] && depth <= bed[1];
+      get().notify(
+        `Ułożono ${units.length} ${units.length === 1 ? 'bryłę' : few(units.length) ? 'bryły' : 'brył'}${turned ? ', każda na największej płaskiej ściance' : ''}. Zajmują ${Math.round(width)} × ${Math.round(depth)} mm${fits ? '' : `: nie mieszczą się na stole ${bed[0]} × ${bed[1]} mm, wydrukuj je w kilku partiach`}.`,
+      );
+    },
+
     fitFigurine(id, height) {
       const p = get().parts.find((x) => x.id === id);
       if (!p) return;
@@ -1495,20 +1737,8 @@ export const useStore = create<State>((set, get) => {
 
     rotateBody(body, axis, degrees) {
       const { parts } = get();
-      const ids = new Set(assembly(parts, body).map((p) => p.id));
-      const box = bodyBox(parts, body);
-      if (box.isEmpty()) return;
-      const c = box.getCenter(new THREE.Vector3());
-      const q = new THREE.Quaternion().setFromAxisAngle(AXES[axis], degrees * DEG);
-      let next = parts.map((p) => {
-        if (!ids.has(p.id)) return p;
-        const pos = new THREE.Vector3(...p.position).sub(c).applyQuaternion(q).add(c);
-        // Mirror signs and angles no longer match after a turn, so the pattern rule is dropped (the link stays).
-        return { ...p, position: r3(pos.toArray() as Vec3), rotation: rotationAfter(p.rotation, AXES[axis], degrees), pattern: undefined };
-      });
-      const dz = box.min.z - bodyBox(next, body).min.z;
-      next = next.map((p) => (ids.has(p.id) ? { ...p, position: r3([p.position[0], p.position[1], p.position[2] + dz]) } : p));
-      commit(next);
+      const next = turnBody(parts, body, axis, degrees);
+      if (next !== parts) commit(next);
     },
 
     dropBody(body) {
@@ -1544,6 +1774,7 @@ export const useStore = create<State>((set, get) => {
     },
 
     removeBody(body) {
+      if (isLocked(get().parts, groupId(body))) return get().notify('Ta bryła ma zablokowane elementy. Odblokuj je (🔒 na liście), żeby ją usunąć.');
       commit(
         get().parts.filter((p) => p.body !== body),
         { selectedId: null },
@@ -1714,6 +1945,105 @@ function syncLids(prev: Part[], parts: Part[]): Part[] {
     return q;
   });
   return changed ? next : parts;
+}
+
+/** Turns a body (and what is tied to it) about its centre, keeping its lowest point where it was. */
+function turnBody(parts: Part[], body: number, axis: 0 | 1 | 2, degrees: number): Part[] {
+  const ids = new Set(assembly(parts, body).map((p) => p.id));
+  const box = bodyBox(parts, body);
+  if (box.isEmpty()) return parts;
+  const c = box.getCenter(new THREE.Vector3());
+  const q = new THREE.Quaternion().setFromAxisAngle(AXES[axis], degrees * DEG);
+  let next = parts.map((p) => {
+    if (!ids.has(p.id)) return p;
+    const pos = new THREE.Vector3(...p.position).sub(c).applyQuaternion(q).add(c);
+    // Mirror signs and angles no longer match after a turn, so the pattern rule is dropped (the link stays).
+    return { ...p, position: r3(pos.toArray() as Vec3), rotation: rotationAfter(p.rotation, AXES[axis], degrees), pattern: undefined };
+  });
+  const dz = box.min.z - bodyBox(next, body).min.z;
+  next = next.map((p) => (ids.has(p.id) ? { ...p, position: r3([p.position[0], p.position[1], p.position[2] + dz]) } : p));
+  return next;
+}
+
+/**
+ * The turn that puts the largest flat face of the finished body on the bed, or null when the way
+ * it stands now is as good (ties keep the current pose, then the lower one wins).
+ */
+function bestFaceDown(parts: Part[], body: number): [0 | 1 | 2, number] | null {
+  if (parts.some((p) => p.body === body && (p.bend?.on || p.xform))) return null;
+  const [res] = buildBodies(parts, [body]);
+  if (!res) return null;
+  const mesh = res.manifold.getMesh();
+  res.geometry.dispose();
+  res.manifold.delete();
+  const turns: [0 | 1 | 2, number][] = [[0, 0], [0, 90], [0, -90], [0, 180], [1, 90], [1, -90]];
+  const v = mesh.vertProperties, np = mesh.numProp, tri = mesh.triVerts;
+  let best: { t: [0 | 1 | 2, number]; area: number; h: number } | null = null;
+  for (const t of turns) {
+    const q = new THREE.Quaternion().setFromAxisAngle(AXES[t[0]], t[1] * DEG);
+    const pts: THREE.Vector3[] = [];
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < v.length; i += np) {
+      const p = new THREE.Vector3(v[i], v[i + 1], v[i + 2]).applyQuaternion(q);
+      pts.push(p);
+      lo = Math.min(lo, p.z);
+      hi = Math.max(hi, p.z);
+    }
+    let area = 0;
+    const e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+    for (let i = 0; i < tri.length; i += 3) {
+      const a = pts[tri[i]], b = pts[tri[i + 1]], c = pts[tri[i + 2]];
+      if (a.z - lo > 0.05 || b.z - lo > 0.05 || c.z - lo > 0.05) continue;
+      area += e1.subVectors(b, a).cross(e2.subVectors(c, a)).length() / 2;
+    }
+    const h = hi - lo;
+    if (!best || area > best.area * 1.02 || (area > best.area * 0.98 && h < best.h - 0.5)) best = { t, area, h };
+  }
+  return best && best.t[1] !== 0 ? best.t : null;
+}
+
+interface PickItem {
+  ids: string[];
+  box: THREE.Box3;
+}
+
+/** What moves when one pick is aligned: a part with its fitting, or a whole body with what it carries. */
+function pickItem(parts: Part[], id: string): PickItem | null {
+  const gb = groupBody(id);
+  if (gb !== null) {
+    const group = assembly(parts, gb);
+    if (!group.length) return null;
+    const box = new THREE.Box3();
+    group.filter((p) => !p.hole).forEach((p) => box.union(worldBox(p)));
+    return { ids: group.map((p) => p.id), box };
+  }
+  const p = parts.find((x) => x.id === id);
+  if (!p) return null;
+  const group = mates(parts, p);
+  const box = new THREE.Box3();
+  group.forEach((x) => box.union(worldBox(x)));
+  return { ids: group.map((x) => x.id), box };
+}
+
+function movedBy(parts: Part[], shift: Map<string, number>, axis: 0 | 1 | 2): Part[] {
+  return parts.map((p) => {
+    const d = shift.get(p.id);
+    if (!d || p.locked) return p;
+    const position = [...p.position] as Vec3;
+    position[axis] = round(position[axis] + d);
+    return { ...p, position, pattern: undefined };
+  });
+}
+
+export const BED_KEY = 'm3d-bed';
+export function loadBed(): Vec3 {
+  try {
+    const v = JSON.parse(localStorage.getItem(BED_KEY) ?? '');
+    if (Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x > 0)) return v as Vec3;
+  } catch {
+    /* default below */
+  }
+  return [220, 220, 250];
 }
 
 function fixHolesIn(parts: Part[]): Part[] {
