@@ -31,13 +31,13 @@ const EDGE_LIMIT = 60000;
 function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolean }) {
   const { geometry } = built(part);
   const heavy = geometry.attributes.position.count > EDGE_LIMIT;
-  const edge = heavy ? null : look.selected ? '#ffffff' : look.snap ? '#3ddc84' : look.hovered ? '#9cc6ff' : look.sibling ? '#6f9ad8' : null;
-  const tint = look.selected && heavy ? '#3c5f99' : look.hovered ? '#30507a' : '#000000';
+  const edge = heavy ? null : look.selected ? '#ffffff' : look.snap ? '#5bb974' : look.hovered ? '#f3b47e' : look.sibling ? '#c99a6e' : null;
+  const tint = look.selected && heavy ? '#5a3c22' : look.hovered ? '#3e3a36' : '#000000';
   return (
     <group name={part.id} position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
       <mesh geometry={geometry} castShadow={!part.hole} receiveShadow renderOrder={part.hole ? 2 : 1} userData={{ pick: part.id }}>
         {part.hole ? (
-          <meshStandardMaterial color={look.hovered || look.selected ? '#b9c4d4' : part.color} transparent opacity={ghost ? (look.hovered || look.selected ? 0.3 : 0.1) : look.hovered ? 0.6 : 0.42} depthWrite={false} roughness={0.6} />
+          <meshStandardMaterial color={look.hovered || look.selected ? '#d6d8da' : part.color} transparent opacity={ghost ? (look.hovered || look.selected ? 0.3 : 0.1) : look.hovered ? 0.6 : 0.42} depthWrite={false} roughness={0.6} />
         ) : (
           <meshStandardMaterial color={part.color} roughness={0.55} metalness={0.05} emissive={tint} emissiveIntensity={tint === '#000000' ? 0 : 0.55} />
         )}
@@ -56,7 +56,7 @@ function MergedMember({ part, look }: { part: Part; look: Look }) {
       {(look.selected || look.hovered) && geometry.attributes.position.count <= EDGE_LIMIT && (
         <mesh geometry={geometry} raycast={noRaycast}>
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-          <Edges threshold={20} color={look.selected ? '#ffffff' : '#9cc6ff'} lineWidth={1.5} />
+          <Edges threshold={20} color={look.selected ? '#ffffff' : '#f3b47e'} lineWidth={1.5} />
         </mesh>
       )}
     </group>
@@ -117,7 +117,7 @@ function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | nu
           <meshStandardMaterial
             color={b.color}
             roughness={0.5}
-            emissive={selectedBody === b.body && b.geometry.attributes.position.count > EDGE_LIMIT ? '#3c5f99' : hoveredBody === b.body ? '#30507a' : '#000000'}
+            emissive={selectedBody === b.body && b.geometry.attributes.position.count > EDGE_LIMIT ? '#5a3c22' : hoveredBody === b.body ? '#3e3a36' : '#000000'}
             emissiveIntensity={hoveredBody === b.body || selectedBody === b.body ? 0.55 : 0}
           />
           {selectedBody === b.body && b.geometry.attributes.position.count <= EDGE_LIMIT && <Edges threshold={20} color="#ffffff" lineWidth={2} />}
@@ -410,7 +410,7 @@ function Gizmo() {
 }
 
 const HOVER_COLOR = '#ffd54a';
-const PIN_COLOR = '#3ddc84';
+const PIN_COLOR = '#5bb974';
 
 /** Highlight of one measured feature: its faces, or its edge line. */
 function FeatureMark({ f, color }: { f: Feature; color: string }) {
@@ -499,8 +499,8 @@ function Bed() {
         args={[BED, BED]}
         cellSize={5}
         sectionSize={50}
-        cellColor="#3b4250"
-        sectionColor="#5b6578"
+        cellColor="#3a3c3f"
+        sectionColor="#585b60"
         cellThickness={0.6}
         sectionThickness={1.1}
         fadeDistance={2000}
@@ -508,7 +508,7 @@ function Bed() {
       />
       <mesh position={[0, 0, -0.05]} receiveShadow raycast={noRaycast}>
         <planeGeometry args={[BED, BED]} />
-        <meshStandardMaterial color="#232833" roughness={1} />
+        <meshStandardMaterial color="#252628" roughness={1} />
       </mesh>
     </group>
   );
@@ -521,7 +521,7 @@ export function Viewport() {
   const lights = useMemo(
     () => (
       <>
-        <hemisphereLight args={['#ffffff', '#445066', 1.6]} />
+        <hemisphereLight args={['#ffffff', '#4a4946', 1.6]} />
         <directionalLight position={[150, -200, 300]} intensity={1.6} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-250} shadow-camera-right={250} shadow-camera-top={250} shadow-camera-bottom={-250} shadow-bias={-0.0004} shadow-normalBias={0.6} />
         <directionalLight position={[-200, 150, 120]} intensity={0.5} />
       </>
@@ -536,7 +536,7 @@ export function Viewport() {
       onPointerMissed={(e) => e.button === 0 && !gizmoBusy() && select(null)}
       gl={{ antialias: true, preserveDrawingBuffer: true }}
     >
-      <color attach="background" args={['#1a1e26']} />
+      <color attach="background" args={['#1c1d1f']} />
       {lights}
       <Bed />
       {preview ? <PreviewBodies /> : <Scene />}

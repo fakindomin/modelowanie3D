@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type MagnetOptions } from '../geom/magnets';
@@ -22,47 +22,104 @@ export function Library() {
     return gb !== null ? `Bryła ${gb}` : s.parts.find((p) => p.id === s.selectedId)?.name;
   });
   const [open, setOpen] = useState<string | null>('box');
+  const [q, setQ] = useState('');
+  const [closed, setClosed] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '[]') as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggleCat = (id: string) => {
+    const next = new Set(closed);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setClosed(next);
+    try {
+      localStorage.setItem(CLOSED_KEY, JSON.stringify([...next]));
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = 0;
+  }, [tab]);
+  const query = norm(q.trim());
+  const hit = (...texts: string[]) => !query || texts.some((t) => norm(t).includes(query));
   const cats = tab === 'fig' ? FIG_TOOLS.map((id) => CATEGORIES.find((c) => c.id === id)!) : CATEGORIES;
+  const figs = tab === 'fig' ? FIG_ORDER.filter((id) => hit(FIG_MODELS[id].n)) : [];
+  const sections = cats.map((c) => {
+    const fams = tab === 'tech' ? FAMILIES.filter((f) => f.category === c.id).map((f) => ({ f, only: f.variants.filter((v) => hit(f.label, v.label)) })).filter((x) => x.only.length) : [];
+    const tiles = CATALOG.filter((d) => d.category === c.id && !d.hidden && (tab !== 'tech' || !IN_FAMILY.has(d.type)) && hit(d.label));
+    return { c, fams, tiles };
+  });
+  const nothing = !figs.length && sections.every((x) => !x.fams.length && !x.tiles.length);
+  const head = (id: string, label: string) => (
+    <h3 className={!query && closed.has(id) ? 'closed' : ''} onClick={() => toggleCat(id)}>
+      {label}
+    </h3>
+  );
+  const shown = (id: string) => !!query || !closed.has(id);
   return (
-    <aside className="library">
+    <aside className="library" ref={ref}>
+      <input className="lib-search" placeholder="Szukaj elementu…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} />
       {selName && (
         <div className="hint">
           Nowy element pojawi się na górze: <b>{selName}</b>
         </div>
       )}
-      {tab === 'fig' && (
+      {figs.length > 0 && (
         <section>
-          <h3>Żebrowana kolekcja</h3>
-          <div className="grid">
-            {FIG_ORDER.map((id) => (
-              <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => addFigurine(id)}>
-                <Icon type="figurine" hole={false} />
-                <span>{FIG_MODELS[id].n}</span>
-              </button>
-            ))}
-          </div>
+          {head('figs', 'Żebrowana kolekcja')}
+          {shown('figs') && (
+            <div className="grid">
+              {figs.map((id) => (
+                <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => addFigurine(id)}>
+                  <Icon type="figurine" hole={false} />
+                  <span>{FIG_MODELS[id].n}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       )}
-      {cats.map((c) => (
-        <section key={c.id}>
-          <h3>{tab === 'fig' && c.id === 'joints' ? 'Narzędzia: otwory, magnesy, czopy' : c.label}</h3>
-          <div className="grid">
-            {tab === 'tech' && FAMILIES.filter((f) => f.category === c.id).map((f) => <FamilyTile key={f.id} family={f} open={open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />)}
-            {CATALOG.filter((d) => d.category === c.id && !d.hidden && (tab !== 'tech' || !IN_FAMILY.has(d.type))).map((d) => (
-              <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={d.description} onClick={() => add(d.type)}>
-                <Icon type={d.type} hole={d.hole} />
-                <span>{d.label}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+      {sections
+        .filter((x) => x.fams.length || x.tiles.length)
+        .map(({ c, fams, tiles }) => (
+          <section key={c.id}>
+            {head(`${tab}:${c.id}`, tab === 'fig' && c.id === 'joints' ? 'Otwory, magnesy, czopy' : c.label)}
+            {shown(`${tab}:${c.id}`) && (
+              <div className="grid">
+                {fams.map(({ f, only }) => (
+                  <FamilyTile key={f.id} family={f} only={query ? only : undefined} open={!!query || open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />
+                ))}
+                {tiles.map((d) => (
+                  <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={d.description} onClick={() => add(d.type)}>
+                    <Icon type={d.type} hole={d.hole} />
+                    <span>{d.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        ))}
+      {nothing && <p className="lib-empty">Nic nie pasuje do „{q}”.</p>}
     </aside>
   );
 }
 
+const CLOSED_KEY = 'modelowanie3d.closedCategories';
+/** Lower case without Polish diacritics, for the library search. */
+const norm = (t: string) =>
+  t
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ł/g, 'l');
+
 /** A family of ready elements: click adds the first variant (size M), the arrow shows all variants with S/M/L. */
-function FamilyTile({ family, open, onToggle }: { family: Family; open: boolean; onToggle: () => void }) {
+function FamilyTile({ family, open, onToggle, only }: { family: Family; open: boolean; onToggle: () => void; only?: Family['variants'] }) {
   const addVariant = useStore((s) => s.addVariant);
   const recent = useStore((s) => s.recent);
   const first = family.variants[0];
@@ -80,7 +137,7 @@ function FamilyTile({ family, open, onToggle }: { family: Family; open: boolean;
       </div>
       {open && (
         <div className="variants">
-          {family.variants.map((v) => (
+          {(only ?? family.variants).map((v) => (
             <div key={v.label} className="variant" title={v.hint ?? DEFS[v.type].description}>
               <span className="vname">
                 <Icon type={v.type} hole={false} />
@@ -199,7 +256,7 @@ function Helpers({ part }: { part: Part }) {
   if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id), INFO.drawers));
   if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id), INFO.lid));
   if ((part.type === 'box' && (!part.params.shape || part.params.shape === 'rect') && !part.params.slide) || part.type === 'drawer')
-    out.push(b('⊞ Rozbij na płyty (każdą zmienisz osobno)', () => st.explode(part.id), INFO.explode));
+    out.push(b('⊞ Rozbij na płyty', () => st.explode(part.id), INFO.explode));
   if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id), INFO.bolt));
   if (part.type === 'bolt') {
     out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id), INFO.nut));
@@ -208,7 +265,7 @@ function Helpers({ part }: { part: Part }) {
   const fitBox = part.fitTo ? st.parts.find((p) => p.id === part.fitTo) : undefined;
   if (fitBox) out.push(b(`⛓ Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit));
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
-    out.push(b(`⧉ Złącz z bryłą ${part.body} (pokaż gotowy element)`, () => st.merge(part.body), INFO.merge));
+    out.push(b(`⧉ Pokaż gotowy element (bryła ${part.body})`, () => st.merge(part.body), INFO.merge));
   return <>{out}</>;
 }
 
@@ -504,7 +561,7 @@ function PartProperties({ part }: { part: Part }) {
         </Section>
       )}
       {!part.rigid && (
-        <Section title="Szyk: kopiuj, okrąg, narożniki, lustro" info={INFO.pattern}>
+        <Section title="Szyk i kopie" info={INFO.pattern}>
           <PatternTool part={part} />
         </Section>
       )}
@@ -521,7 +578,7 @@ function PartProperties({ part }: { part: Part }) {
         <span>
           Rodzaj <Info text={INFO.hole} />
         </span>
-        <select value={part.hole ? 'hole' : 'solid'} onChange={(e) => st.update(part.id, { hole: e.target.value === 'hole', color: e.target.value === 'hole' ? '#8b939e' : part.color === '#8b939e' ? '#4f8edc' : part.color })}>
+        <select value={part.hole ? 'hole' : 'solid'} onChange={(e) => st.update(part.id, { hole: e.target.value === 'hole', color: e.target.value === 'hole' ? '#8b939e' : part.color === '#8b939e' ? '#a9aeb3' : part.color })}>
           <option value="solid">Bryła (materiał)</option>
           <option value="hole">Otwór (wycina)</option>
         </select>

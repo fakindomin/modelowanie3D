@@ -11,7 +11,7 @@ import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
 
-const PALETTE = ['#4f8edc', '#e0864a', '#5bb37a', '#c96bc4', '#d9b84a', '#53b6c4', '#d76565', '#8a8fdc'];
+export const PALETTE = ['#a9aeb3', '#e8873a', '#5bb974', '#c9b48a', '#7f8c99', '#d97757', '#8fbf9f', '#b8a07a'];
 const FIG_PALETTE = ['#e9d8c4', '#f0b6a8', '#b9d7a8', '#a8c8e8', '#f2d68a', '#d8b8e8'];
 export const HOLE_COLOR = '#8b939e';
 const STORAGE_KEY = 'modelowanie3d.project';

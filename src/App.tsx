@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
 import { Library, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
@@ -40,10 +40,12 @@ function Toolbar() {
           </button>
         ))}
       </div>
+      <span className="sep" />
       <div className="group">
-        <button onClick={st.undo} disabled={!st.past.length} title="Cofnij (Ctrl+Z)">↶ Cofnij</button>
-        <button onClick={st.redo} disabled={!st.future.length} title="Ponów (Ctrl+Y)">↷ Ponów</button>
+        <button onClick={st.undo} disabled={!st.past.length} title="Cofnij (Ctrl+Z)">↶</button>
+        <button onClick={st.redo} disabled={!st.future.length} title="Ponów (Ctrl+Y)">↷</button>
       </div>
+      <span className="sep" />
       <div className="group">
         <button onClick={() => { st.reset(); st.notify('Scena wyczyszczona. „Cofnij” przywróci poprzedni model.'); }}>Nowy</button>
         <button onClick={() => file.current?.click()}>Otwórz</button>
@@ -65,39 +67,88 @@ function Toolbar() {
           }}
         />
       </div>
+      <span className="sep" />
       <div className="group">
-        <label title="Krok przesuwania">
-          Siatka
-          <select value={st.settings.grid} onChange={(e) => st.setSettings({ grid: Number(e.target.value) })}>
-            <option value={0}>wył.</option>
-            <option value={0.5}>0,5 mm</option>
-            <option value={1}>1 mm</option>
-            <option value={5}>5 mm</option>
-            <option value={10}>10 mm</option>
-          </select>
-        </label>
-        <label className="check" title="Przyciąganie ścianek do sąsiednich elementów (przytrzymaj Alt, by chwilowo wyłączyć)">
-          <input type="checkbox" checked={st.settings.snap} onChange={(e) => st.setSettings({ snap: e.target.checked })} /> Przyciąganie
-        </label>
-        <label className="check" title="Przeciągany element kładzie się na tym, co jest pod nim (przytrzymaj Shift, by chwilowo wyłączyć)">
-          <input type="checkbox" checked={st.settings.stick} onChange={(e) => st.setSettings({ stick: e.target.checked })} /> Kładź na wierzchu
-        </label>
-      </div>
-      <div className="group">
-        <button onClick={st.fit} title="Pokaż cały model (F)">⤢ Widok całości</button>
+        <button onClick={st.fit} title="Pokaż cały model (F)">⤢ Całość</button>
         <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">
           📏 Wymiary
         </button>
+        <Settings />
       </div>
       <div className="group right">
-        <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Pokazuje wynik po wycięciu otworów i sklejeniu brył">
-          {st.preview ? '✓ Podgląd wydruku' : 'Podgląd wydruku'}
+        <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Podgląd wydruku: wynik po wycięciu otworów i sklejeniu brył">
+          {st.preview ? '✓ Podgląd' : 'Podgląd'}
         </button>
         <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają">Sprawdź model</button>
         <button className="primary" onClick={() => exportAs('stl')}>Eksport STL</button>
         <button className="primary" onClick={() => exportAs('3mf')}>Eksport 3MF</button>
       </div>
     </header>
+  );
+}
+
+/** Grid step, snapping and stacking, tucked behind ⚙. */
+function Settings() {
+  const st = useStore();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open]);
+  return (
+    <div className="settings" ref={ref}>
+      <button className={open ? 'toggle on' : 'toggle'} onClick={() => setOpen(!open)} title="Siatka, przyciąganie, kładzenie na wierzchu">
+        ⚙
+      </button>
+      {open && (
+        <div className="settings-pop">
+          <label title="Krok przesuwania">
+            Siatka
+            <select value={st.settings.grid} onChange={(e) => st.setSettings({ grid: Number(e.target.value) })}>
+              <option value={0}>wył.</option>
+              <option value={0.5}>0,5 mm</option>
+              <option value={1}>1 mm</option>
+              <option value={5}>5 mm</option>
+              <option value={10}>10 mm</option>
+            </select>
+          </label>
+          <label className="check" title="Przytrzymaj Alt, by chwilowo wyłączyć">
+            Przyciąganie do ścianek
+            <input type="checkbox" checked={st.settings.snap} onChange={(e) => st.setSettings({ snap: e.target.checked })} />
+          </label>
+          <label className="check" title="Przytrzymaj Shift, by chwilowo wyłączyć">
+            Kładź na wierzchu
+            <input type="checkbox" checked={st.settings.stick} onChange={(e) => st.setSettings({ stick: e.target.checked })} />
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Mouse and keyboard hints behind a small "?" in the corner of the scene. */
+function Help() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={open ? 'help open' : 'help'} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button className="help-btn" onClick={() => setOpen(!open)} aria-label="Podpowiedzi">
+        ?
+      </button>
+      {open && (
+        <div className="help-pop">
+          <ul>
+            <li><b>Przeciągnij</b> element: przesuń. <b>Shift</b>: bez kładzenia, <b>Alt</b>: bez przyciągania</li>
+            <li><b>Kliknij ponownie</b>: wybierz to, co leży pod spodem (np. otwór w bryle)</li>
+            <li><b>Tło</b>: obrót widoku · <b>prawy przycisk</b>: przesuń widok · <b>kółko</b>: zoom</li>
+            <li><b>Strzałki, PgUp/PgDn</b>: przesuń o krok siatki · <b>R</b>: obróć o 90°</li>
+            <li><b>F</b>: widok całości · <b>W</b>: wymiary · <b>Ctrl+Z / Ctrl+D / Delete</b></li>
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -190,9 +241,7 @@ export function App() {
       <Library />
       <main className="viewport">
         <Viewport />
-        <div className="help">
-          Kliknij ponownie, by wybrać to, co leży pod spodem (np. otwór w bryle) · Przeciągnij: przesuń · Tło: obrót widoku · Prawy: przesuń widok · Kółko: zoom · Strzałki/PgUp/PgDn · R: obróć · Shift: bez kładzenia · Alt: bez przyciągania
-        </div>
+        <Help />
         {toast && <div className="toast">{toast}</div>}
         <MeasurePanel />
         <CornerSuggest />
