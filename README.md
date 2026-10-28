@@ -22,7 +22,9 @@ Każda ma własną scenę, historię cofania i autozapis.
   Przegródki są zawsze przycięte do wnętrza pudełka.
 - **Rozbij na płyty:** pudełko albo szufladę można zamienić na dno, ścianki i odcinki przegródek między
   skrzyżowaniami (dalej jedna bryła), żeby zmienić albo usunąć każdą płytę osobno.
-- **Miejsca na magnesy:** jeden przycisk przy pudełku (gotowym albo złożonym z płyt) lub pokrywce.
+- **Miejsca na magnesy:** jeden przycisk przy pudełku (prostokątnym, okrągłym, sześciokątnym, gotowym albo
+  złożonym z płyt) lub pokrywce. W okrągłych i sześciokątnych gniazda idą równo po obwodzie (3/4/6/8).
+  Szuflady i obudowa mają opcję „Magnes-zatrzask z tyłu”, który domyka szufladę.
   Silnik robi gniazda (luz 0,2 mm, min. 1,2 mm ścianki), dokłada słupki tam, gdzie ścianka jest za
   cienka, i lustrzane gniazda w pokrywce. Opcje: 4/6/8 magnesów, magnesy ukryte (z wysokością pauzy
   w druku), dodanie płaskiej pokrywki albo z rantem (z wcięciami na słupki). Gniazda ustawione ręcznie

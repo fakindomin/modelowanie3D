@@ -301,9 +301,14 @@ function MagnetTool({ target, body }: { target: string; body: number }) {
   const set = (p: Partial<MagnetOptions>) => setOpt((o) => ({ ...o, ...p }));
   const isLid = st.parts.find((p) => p.id === target)?.type === 'lid';
   const lid = isLid ? null : findLid(st.parts, body);
+  const targetPart = st.parts.find((p) => p.id === target);
+  const boxPart = targetPart?.type === 'lid' && targetPart.fitTo ? st.parts.find((p) => p.id === targetPart.fitTo) : st.parts.find((p) => p.body === body && p.type === 'box');
+  const shape = isLid ? targetPart?.params.shape : boxPart?.params.shape;
+  const ring = shape === 'round' || shape === 'hex';
+  const layout = !ring && opt.layout === '3' ? '4' : opt.layout;
   return (
     <div className="tool">
-      <p className="desc">Silnik znajdzie górną krawędź ścianek i narożniki. Gdzie ścianka jest za cienka, dołoży słupek. W pokrywce zrobi lustrzane gniazda.</p>
+      <p className="desc">Silnik znajdzie górną krawędź ścianek{ring ? ' i rozłoży gniazda równo po obwodzie' : ' i narożniki'}. Gdzie ścianka jest za cienka, dołoży słupek. W pokrywce zrobi lustrzane gniazda.</p>
       <label className="field">
         <span>Magnes (średnica × grubość)</span>
         <select value={opt.size} onChange={(e) => set({ size: e.target.value })}>
@@ -316,10 +321,21 @@ function MagnetTool({ target, body }: { target: string; body: number }) {
       </label>
       <label className="field">
         <span>Ile i gdzie</span>
-        <select value={opt.layout} onChange={(e) => set({ layout: e.target.value as MagnetOptions['layout'] })}>
-          <option value="4">4 w narożnikach</option>
-          <option value="6">6: narożniki i środki dłuższych boków</option>
-          <option value="8">8: narożniki i środki wszystkich boków</option>
+        <select value={layout} onChange={(e) => set({ layout: e.target.value as MagnetOptions['layout'] })}>
+          {ring ? (
+            <>
+              <option value="3">3 równo po obwodzie</option>
+              <option value="4">4 równo po obwodzie</option>
+              <option value="6">{shape === 'hex' ? '6 w narożnikach' : '6 równo po obwodzie'}</option>
+              <option value="8">8 równo po obwodzie</option>
+            </>
+          ) : (
+            <>
+              <option value="4">4 w narożnikach</option>
+              <option value="6">6: narożniki i środki dłuższych boków</option>
+              <option value="8">8: narożniki i środki wszystkich boków</option>
+            </>
+          )}
         </select>
       </label>
       <label className="field" title="Magnes zamknięty pod warstwą 0,6 mm. W slicerze ustaw pauzę na podanej wysokości i włóż magnesy.">
@@ -340,7 +356,7 @@ function MagnetTool({ target, body }: { target: string; body: number }) {
           </select>
         </label>
       )}
-      <button className="action" onClick={() => st.addMagnets(target, opt)}>
+      <button className="action" onClick={() => st.addMagnets(target, { ...opt, layout })}>
         🧲 Dodaj miejsca na magnesy
       </button>
     </div>

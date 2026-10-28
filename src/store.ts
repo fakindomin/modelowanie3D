@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from './catalog';
 import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
 import { buildBodies, built, partMatrix, worldBox, worldManifold } from './geom/parts';
-import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planSpots, wallThickness, type LidRef, type MagnetOptions } from './geom/magnets';
+import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
 import type { Part, PatternRule, Project, ProjectV1, Tab, Texture, Vec3 } from './types';
@@ -415,7 +415,7 @@ export const useStore = create<State>((set, get) => {
   const lidPockets = (
     next: Part[],
     lid: LidRef,
-    spots: { x: number; y: number; s: [number, number]; set: string; notch?: number }[],
+    spots: { x: number; y: number; s: [number, number]; set: string; notch?: number; ring?: { i: number; n: number } }[],
     c: [number, number],
     size: string,
     hidden: boolean,
@@ -474,7 +474,10 @@ export const useStore = create<State>((set, get) => {
           rotation,
           body: part.body,
           link,
-          pattern: { id, kind: 'sym', i: k, n: spots.length, s, c: [round(center[0] - p3[0]), round(center[1] - p3[1])] },
+          // A ring seen from the other side runs the other way round.
+          pattern: sp.ring
+            ? { id, kind: 'circle', i: lid.resting ? sp.ring.i : (sp.ring.n - sp.ring.i) % sp.ring.n, n: sp.ring.n, s: [1, 1], c: [round(center[0] - p3[0]), round(center[1] - p3[1])] }
+            : { id, kind: 'sym', i: k, n: spots.length, s, c: [round(center[0] - p3[0]), round(center[1] - p3[1])] },
         }),
       );
     });
@@ -772,7 +775,7 @@ export const useStore = create<State>((set, get) => {
         const local = new THREE.Vector3(op.cx, -o.D / 2 + D / 2, op.z0 + c).applyMatrix4(mat);
         next.push(
           makePart('drawer', next, {
-            params: { ...defaultParams(DEFS.drawer), W: round(w - 2 * c, 2), H: round(h - 2 * c, 2), D: round(D, 2) },
+            params: { ...defaultParams(DEFS.drawer), W: round(w - 2 * c, 2), H: round(h - 2 * c, 2), D: round(D, 2), catch: cab.params.catch ?? 'none' },
             position: [round(local.x), round(local.y), round(local.z)],
             rotation: [...cab.rotation],
             link,
@@ -822,11 +825,13 @@ export const useStore = create<State>((set, get) => {
       }
       if (body === null) return;
       const boxPart = parts.find((p) => p.body === body && p.type === 'box');
-      if (boxPart && boxPart.params.shape && boxPart.params.shape !== 'rect') return get().notify('Magnesy dodam na razie tylko do prostokątnego pudełka.');
+      const shape = boxPart?.params.shape;
+      const ringBox = shape === 'round' || shape === 'hex' ? shape : null;
       const box = bodyBox(parts, body);
       const [res] = buildBodies(parts, [body]);
       if (!res || box.isEmpty()) return;
-      const spots = planSpots(res.manifold, box, opt);
+      // Round and hexagonal boxes get pockets evenly around the rim instead of corners and sides.
+      const spots = ringBox ? planRingSpots(res.manifold, box, opt, ringBox, Number(boxPart!.params.W)) : planSpots(res.manifold, box, opt);
       const wall = boxPart ? Number(boxPart.params.T) : wallThickness(res.manifold, box);
       res.geometry.dispose();
       res.manifold.delete();
@@ -839,7 +844,16 @@ export const useStore = create<State>((set, get) => {
       const pats: Record<string, string> = {}, colPats: Record<string, string> = {};
       const next = [...parts];
       let columns = 0;
+      const rule = (sp: Spot, pos: Vec3, set: Record<string, string>): PatternRule =>
+        sp.ring
+          ? { id: (set.ring ??= uid()), kind: 'circle', i: sp.ring.i, n: sp.ring.n, s: [1, 1], c: [round(c[0] - pos[0]), round(c[1] - pos[1])] }
+          : { id: (set[sp.set] ??= uid()), kind: 'sym', i: spots.indexOf(sp), n: spots.length, s: sp.s, c: [round(c[0] - pos[0]), round(c[1] - pos[1])] };
       spots.forEach((sp, k) => {
+        if (sp.post) {
+          const pos: Vec3 = r3([sp.post.cx, sp.post.cy, box.min.z]);
+          columns++;
+          next.push(makePart('cylinder', next, { name: `Słupek pod magnes ${k + 1}`, params: { D: sp.post.d, H: round(top - box.min.z, 2) }, position: pos, body, color, link: colLink, pattern: rule(sp, pos, colPats) }));
+        }
         if (sp.column) {
           const col = sp.column;
           const pos: Vec3 = r3([col.cx, col.cy, box.min.z]);
@@ -852,7 +866,7 @@ export const useStore = create<State>((set, get) => {
               body,
               color,
               link: colLink,
-              pattern: { id: (colPats[sp.set] ??= uid()), kind: 'sym', i: k, n: spots.length, s: sp.s, c: [round(c[0] - pos[0]), round(c[1] - pos[1])] },
+              pattern: rule(sp, pos, colPats),
             }),
           );
         }
@@ -864,7 +878,7 @@ export const useStore = create<State>((set, get) => {
             position: pos,
             body,
             link,
-            pattern: { id: (pats[sp.set] ??= uid()), kind: 'sym', i: k, n: spots.length, s: sp.s, c: [round(c[0] - pos[0]), round(c[1] - pos[1])] },
+            pattern: rule(sp, pos, pats),
           }),
         );
       });
@@ -875,6 +889,12 @@ export const useStore = create<State>((set, get) => {
           params: { ...defaultParams(DEFS.lid), W, D, wall, R: opt.lid === 'rim' ? 4 : 0 },
           position: [round(box.max.x + 10 + W / 2), c[1], 0],
         });
+        // A round or hexagonal box's lid takes its shape and follows it like "Dodaj pasującą pokrywkę".
+        if (ringBox && boxPart) {
+          made.fitTo = boxPart.id;
+          made.params = { ...made.params, ...lidParams(boxPart, made) };
+          made.position = [round(box.max.x + 10 + Number(made.params.W) / 2), c[1], 0];
+        }
         next.push(made);
         lid = { part: made, resting: false };
         lidMsg = opt.lid === 'rim' ? ' Dodałem pokrywkę z rantem.' : ' Dodałem płaską pokrywkę.';
@@ -888,8 +908,8 @@ export const useStore = create<State>((set, get) => {
           spots.map((sp) => {
             // Distance of the pocket centre from the outer edge it sits at; beyond the wall the lid's rim is in the way.
             const ex = box.max.x - c[0] - Math.abs(sp.x - c[0]), ey = box.max.y - c[1] - Math.abs(sp.y - c[1]);
-            const edge = sp.set === 'sideX' ? ex : sp.set === 'sideY' ? ey : Math.min(ex, ey);
-            return { ...sp, notch: sp.column || edge + r + MAGNET_WALL > wall ? notch : undefined };
+            const edge = sp.edge ?? (sp.set === 'sideX' ? ex : sp.set === 'sideY' ? ey : Math.min(ex, ey));
+            return { ...sp, notch: sp.column || sp.post || edge + r + MAGNET_WALL > wall ? notch : undefined };
           }),
           c,
           opt.size,

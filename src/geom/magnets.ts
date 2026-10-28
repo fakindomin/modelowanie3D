@@ -12,7 +12,7 @@ export const MAGNET_WALL = 1.2;
 /** Layer over a hidden magnet (printed after a pause). */
 export const MAGNET_COVER = 0.6;
 
-export type MagnetLayout = '4' | '6' | '8';
+export type MagnetLayout = '3' | '4' | '6' | '8';
 
 export interface MagnetOptions {
   size: string;
@@ -36,7 +36,13 @@ export interface Spot {
   column?: { cx: number; cy: number; w: number; d: number };
   /** Mirror signs around the box centre, and which symmetric set the spot belongs to. */
   s: [number, number];
-  set: 'corner' | 'sideX' | 'sideY';
+  set: 'corner' | 'sideX' | 'sideY' | 'ring';
+  /** Round column under the pocket (round and hexagonal boxes). */
+  post?: { cx: number; cy: number; d: number };
+  /** Place in an even ring of pockets (round and hexagonal boxes). */
+  ring?: { i: number; n: number };
+  /** Distance from the pocket centre to the outer edge. */
+  edge?: number;
 }
 
 /** Is a circle (centre, radius) fully inside material at every slice height? */
@@ -106,6 +112,61 @@ export function planSpots(body: Manifold, box: THREE.Box3, opt: MagnetOptions): 
         spots.push({ x: c.cx, y: c.cy, column: c, s, set });
       }
     }
+  slices.forEach((s) => s.delete());
+  return spots;
+}
+
+/**
+ * Pockets spaced evenly around the top edge of a round or hexagonal box (centre of `box`; `W` is the
+ * diameter or the size across flats). A hexagon's pockets start in its corners. Where the wall is too
+ * thin, a round column is planned against the wall under the pocket.
+ */
+export function planRingSpots(body: Manifold, box: THREE.Box3, opt: MagnetOptions, shape: 'round' | 'hex', W: number): Spot[] {
+  const { r, depth } = magnetDims(opt.size);
+  const R = r + MAGNET_WALL;
+  const top = box.max.z;
+  const sunk = depth + (opt.hidden ? MAGNET_COVER : 0);
+  const zs = [top - 0.1, top - sunk / 2, top - sunk + 0.05, top - sunk - 0.4].filter((z) => z > box.min.z + 0.05);
+  const slices = zs.map((z) => body.slice(z));
+  const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2;
+  const n = Number(opt.layout) || 4;
+  const a0 = shape === 'hex' ? 0 : n === 4 ? Math.PI / 4 : 0;
+  // Distance from the centre to the outer edge along angle a.
+  const reachAt = (a: number) => {
+    if (shape === 'round') return W / 2;
+    // Angle past the nearest flat's normal (the normals point at 30°, 90°, …).
+    const g = (((a - Math.PI / 6) % (Math.PI / 3)) + Math.PI / 3) % (Math.PI / 3);
+    return W / 2 / Math.cos(Math.min(g, Math.PI / 3 - g));
+  };
+  // Is a disc of radius q at (x, y) inside the outline?
+  const inside = (x: number, y: number, q: number) => {
+    if (shape === 'round') return Math.hypot(x, y) <= W / 2 - q;
+    for (let j = 0; j < 6; j++) {
+      const f = Math.PI / 6 + (j * Math.PI) / 3;
+      if (x * Math.cos(f) + y * Math.sin(f) > W / 2 - q) return false;
+    }
+    return true;
+  };
+  const S = Math.ceil(2 * R * 5) / 5;
+  const spots: Spot[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i * 2 * Math.PI) / n;
+    const ux = Math.cos(a), uy = Math.sin(a);
+    const out = reachAt(a);
+    let hit: [number, number, number] | null = null;
+    for (let rho = out - R; rho >= Math.max(0, out - R - 8); rho -= 0.25)
+      if (fits(slices, cx + ux * rho, cy + uy * rho, R)) {
+        hit = [cx + ux * rho, cy + uy * rho, out - rho];
+        break;
+      }
+    if (hit) spots.push({ x: hit[0], y: hit[1], s: [1, 1], set: 'ring', ring: { i, n }, edge: hit[2] });
+    else {
+      let rho = out - S / 2;
+      while (rho > 0 && !inside(ux * rho, uy * rho, S / 2 + 0.05)) rho -= 0.1;
+      const x = cx + ux * rho, y = cy + uy * rho;
+      spots.push({ x, y, post: { cx: x, cy: y, d: S }, s: [1, 1], set: 'ring', ring: { i, n }, edge: out - rho });
+    }
+  }
   slices.forEach((s) => s.delete());
   return spots;
 }

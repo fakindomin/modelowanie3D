@@ -61,6 +61,22 @@ export function cabinetOpenings(p: Params) {
   return { W, H: rows * h + (rows + 1) * t, D: d, depth: d - t, openings };
 }
 
+/**
+ * Catch magnet between a drawer's back and the cabinet's back wall: pocket centre height above the
+ * opening's floor, pocket radius and depth, and the material ring around it.
+ */
+export function catchMagnet(size: unknown) {
+  const m = MAGNETS[String(size)];
+  if (!m) return null;
+  const [d, h] = m;
+  const r = (d + 0.2) / 2;
+  const ring = r + 1.2;
+  return { r, depth: h + 0.2, ring, z: ring + 2.5 };
+}
+
+const CATCH = select('catch', 'Magnes-zatrzask z tyłu', 'none', [['none', 'Brak'], ...Object.keys(MAGNETS).map((k) => [k, `${k.replace('x', '×')} mm`] as [string, string])]);
+CATCH.hint = 'Gniazdo na magnes w tylnej ściance: w obudowie i w szufladzie na tej samej wysokości, więc szuflada sama się domyka. Szuflady dodane przyciskiem „Dodaj dopasowane szuflady” dostają to samo. Magnesy wklej parami, żeby się przyciągały.';
+
 const SHAPE = select('shape', 'Kształt', 'rect', [
   ['rect', 'Prostokątny'],
   ['round', 'Okrągły'],
@@ -256,6 +272,7 @@ const BASE: PartDef[] = [
       { key: 'B', label: 'Grubość dna', type: 'number', def: 1.6, min: 0.4, max: 10, step: 0.2, unit: 'mm' },
       { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1 },
       { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1 },
+      CATCH,
       {
         key: 'handle',
         label: 'Uchwyt',
@@ -274,6 +291,14 @@ const BASE: PartDef[] = [
       // Dividers stay 2 mm under the top so the drawer slides into its opening.
       const div = boxDividers(p, b, H - 2);
       if (div) m = m.add(div);
+      const mag = catchMagnet(p.catch);
+      // Same height as the cabinet's pocket: the drawer stands 0.3 mm above the opening's floor.
+      const mz = mag ? mag.z - 0.3 : 0;
+      if (mag && mz + mag.ring <= H) {
+        const pad = mag.depth + 1 - t;
+        if (pad > 0) m = m.add(block(2 * mag.ring, pad + 0.01, mz + mag.ring - b, 0, D / 2 - t - pad / 2 + 0.005, b));
+        m = m.subtract(cyl(mag.depth + 0.01, mag.r).rotate([90, 0, 0]).translate([0, D / 2 + 0.01, mz]));
+      }
       if (p.handle === 'notch') {
         const r = Math.min(12, H / 2.5, W / 4);
         m = m.subtract(cyl(4 * t, r).rotate([90, 0, 0]).translate([0, -D / 2 + 2 * t, H]));
@@ -297,12 +322,24 @@ const BASE: PartDef[] = [
       { key: 'cols', label: 'Kolumny', type: 'number', def: 2, min: 1, max: 10, step: 1 },
       { key: 'rows', label: 'Rzędy', type: 'number', def: 3, min: 1, max: 20, step: 1 },
       T(2),
+      CATCH,
     ],
     build: (p) => {
       const o = cabinetOpenings(p);
       const w = num(p, 'w'), h = num(p, 'h'), t = num(p, 'T');
       const cut = o.openings.map((op) => block(w, o.depth + 1, h, op.cx, -o.D / 2 + (o.depth + 1) / 2 - 1, op.z0));
-      return block(o.W, o.D, o.H).subtract(M().Manifold.union(cut));
+      let m = block(o.W, o.D, o.H).subtract(M().Manifold.union(cut));
+      const mag = catchMagnet(p.catch);
+      if (mag && h >= 2 * mag.z) {
+        // Pocket in the back wall, open toward the drawer; a pad on the back where the wall is too thin.
+        const face = -o.D / 2 + o.depth, pad = mag.depth + 1 - t;
+        for (const op of o.openings) {
+          const z = op.z0 + mag.z;
+          if (pad > 0) m = m.add(block(2 * mag.ring, pad + 0.01, 2 * mag.ring, op.cx, o.D / 2 + pad / 2 - 0.005, z - mag.ring));
+          m = m.subtract(cyl(mag.depth + 0.01, mag.r).rotate([-90, 0, 0]).translate([op.cx, face - 0.01, z]));
+        }
+      }
+      return m;
     },
   },
   {
