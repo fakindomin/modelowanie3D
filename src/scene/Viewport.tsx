@@ -9,6 +9,7 @@ import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, Vec3 } from '../types';
 import { distance, featureAt, type Feature } from './measure';
 import { SketchHandles } from './SketchHandles';
+import { DimHandles } from './DimHandles';
 
 const DEG = Math.PI / 180;
 const BED = 220;
@@ -175,6 +176,7 @@ function Scene() {
   const hoveredId = useStore((s) => s.hoveredId);
   const snapTargets = useStore((s) => s.snapTargets);
   const { camera, gl, controls } = useThree();
+  if (import.meta.env.DEV) (globalThis as unknown as { __camera: THREE.Camera }).__camera = camera;
   const drag = useRef<Drag | null>(null);
   cancelDrag = () => (drag.current = null);
 
@@ -260,7 +262,7 @@ function Scene() {
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
     // A point or edge of the selected sketch takes the press, even behind the solid.
-    if (e.intersections.some((i) => i.object.userData.sketchHandle)) return;
+    if (e.intersections.some((i) => i.object.userData.sketchHandle || i.object.userData.handle)) return;
     e.stopPropagation();
     if (gizmoBusy()) return;
     if (useStore.getState().measure) {
@@ -576,6 +578,7 @@ export function Viewport() {
       {preview ? <PreviewBodies /> : <Scene />}
       {!preview && !measure && <Gizmo />}
       {!preview && !measure && <SketchHandles />}
+      {!preview && !measure && <DimHandles />}
       <MeasureMarks />
       <CutPlane />
       <OrbitControls makeDefault enableDamping={false} />

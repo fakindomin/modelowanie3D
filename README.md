@@ -44,6 +44,13 @@ Każda ma własną scenę, historię cofania i autozapis.
   podział, poziomo/pionowo. Klik w punkt: kąt między bokami, zaokrąglenie albo fazka narożnika, X/Y.
   Punkty, boki i to samo menu są też w modelu 3D po zaznaczeniu kształtu; wymiary, które się wykluczają,
   świecą na czerwono.
+  W 3D widać też obrys góry i pionowe krawędzie; chwycenie ścianki bocznej przesuwa jej bok obrysu
+  (przeciwległy stoi w miejscu), punkty pokazują się dopiero, gdy kursor jest blisko.
+- **Uchwyty wymiarów:** na zaznaczonym albo wskazanym elemencie przy każdej ściance (przód/tył, lewo/prawo,
+  góra/dół) pojawia się mała kropka, gdy kursor się zbliży. Przeciągnięcie zmienia szerokość, głębokość
+  albo wysokość, a przeciwległa ścianka stoi w miejscu („Szerokość 80 → 92 mm”). Klik w kropkę pozwala
+  wpisać wartość, Shift wyłącza przyciąganie do siatki, Esc anuluje. Zablokowane elementy nie mają uchwytów.
+- **Faktura a dodatki:** faktura ścianki trafia na płaską ściankę, a nie na wystającą gałkę czy uchwyt.
 - **Skorupa:** wydrąża całą bryłę ze ścianką o podanej grubości, zamkniętą albo otwartą od góry lub dołu.
 - **Lustro i skala:** odbicie (X/Y/Z) i skala całej bryły, liczone na końcu; „Lustrzana kopia” robi parę
   lewy/prawy obok.
