@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Edges, GizmoHelper, GizmoViewport, Grid, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { assembly, groupBody, groupId, useStore } from '../store';
+import { assembly, bodyBox, groupBody, groupId, useStore } from '../store';
 import { built, buildBodies, worldBox, type BodyResult } from '../geom/parts';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, Vec3 } from '../types';
@@ -468,6 +468,26 @@ function MeasureMarks() {
 }
 
 /** Frames all parts (or the bed when empty) whenever a fit is requested. */
+/** The plane where the split tool will cut, across the body it cuts. */
+function CutPlane() {
+  const cut = useStore((s) => s.cutPlane);
+  const parts = useStore((s) => s.parts);
+  if (!cut) return null;
+  const b = bodyBox(parts, cut.body);
+  if (b.isEmpty()) return null;
+  const c = b.getCenter(new THREE.Vector3());
+  const sz = b.getSize(new THREE.Vector3()).addScalar(16);
+  c.setComponent(cut.axis, cut.at);
+  const size: [number, number] = cut.axis === 0 ? [sz.z, sz.y] : cut.axis === 1 ? [sz.x, sz.z] : [sz.x, sz.y];
+  const rot: [number, number, number] = cut.axis === 0 ? [0, Math.PI / 2, 0] : cut.axis === 1 ? [Math.PI / 2, 0, 0] : [0, 0, 0];
+  return (
+    <mesh position={c.toArray()} rotation={rot} raycast={noRaycast} renderOrder={5}>
+      <planeGeometry args={size} />
+      <meshBasicMaterial color="#e8873a" transparent opacity={0.28} side={THREE.DoubleSide} depthWrite={false} />
+    </mesh>
+  );
+}
+
 function CameraFit() {
   const fitRequest = useStore((s) => s.fitRequest);
   const { camera, controls } = useThree();
@@ -542,6 +562,7 @@ export function Viewport() {
       {preview ? <PreviewBodies /> : <Scene />}
       {!preview && !measure && <Gizmo />}
       <MeasureMarks />
+      <CutPlane />
       <OrbitControls makeDefault enableDamping={false} />
       <CameraFit />
       <GizmoHelper alignment="bottom-right" margin={[70, 70]}>

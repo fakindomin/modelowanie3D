@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type MagnetOptions } from '../geom/magnets';
-import { assembly, bodyBox, groupBody, groupId, isMerged, useStore, type PatternKind } from '../store';
+import { assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, useStore, type PatternKind } from '../store';
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { DEFAULT_EDGES } from '../geom/edges';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
@@ -781,6 +781,7 @@ function PartProperties({ part }: { part: Part }) {
           <MagnetTool target={part.id} body={part.body} />
         </Section>
       )}
+      {!part.hole && <SplitTool body={part.body} />}
       {!part.rigid && (
         <Section title="Szyk i kopie" info={INFO.pattern}>
           <PatternTool part={part} />
@@ -844,6 +845,85 @@ function PartProperties({ part }: { part: Part }) {
   );
 }
 
+const BED_KEY = 'm3d-bed';
+function loadBed(): Vec3 {
+  try {
+    const v = JSON.parse(localStorage.getItem(BED_KEY) ?? '');
+    if (Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x > 0)) return v as Vec3;
+  } catch {
+    /* default below */
+  }
+  return [220, 220, 250];
+}
+
+/** "Podziel na części": one cut at a chosen plane, or as many as the printer's bed needs. */
+function SplitTool({ body }: { body: number }) {
+  const st = useStore();
+  const [open, setOpen] = useState(false);
+  const [axis, setAxis] = useState<0 | 1 | 2>(0);
+  const [dowels, setDowels] = useState(true);
+  const [bed, setBed] = useState<Vec3>(loadBed);
+  const box = useMemo(() => finishedBox(st.parts, body), [st.parts, body]);
+  const lo = box.isEmpty() ? 0 : box.min.getComponent(axis), hi = box.isEmpty() ? 0 : box.max.getComponent(axis);
+  const [at, setAt] = useState<number | null>(null);
+  const pos = at === null || at <= lo || at >= hi ? Math.round(((lo + hi) / 2) * 10) / 10 : at;
+  const setCut = st.setCutPlane;
+  useEffect(() => {
+    setCut(open && !box.isEmpty() ? { body, axis, at: pos } : null);
+  }, [open, body, axis, pos, setCut, box.isEmpty()]);
+  useEffect(() => () => setCut(null), [setCut]);
+  const size = box.isEmpty() ? [0, 0, 0] : box.getSize(new THREE.Vector3()).toArray();
+  const fits = size.every((v, i) => v <= bed[i] - 2);
+  const saveBed = (i: number, v: number) => {
+    const b = [...bed] as Vec3;
+    b[i] = v;
+    setBed(b);
+    try {
+      localStorage.setItem(BED_KEY, JSON.stringify(b));
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  return (
+    <details className="section" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary>
+        ✂ Podziel na części <Info text={INFO.split} />
+      </summary>
+      <div className="tool">
+        <label className="field">
+          <span>Cięcie w poprzek osi</span>
+          <select value={axis} onChange={(e) => (setAxis(Number(e.target.value) as 0 | 1 | 2), setAt(null))}>
+            <option value={0}>X (lewo / prawo)</option>
+            <option value={1}>Y (przód / tył)</option>
+            <option value={2}>Z (dół / góra)</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>
+            Miejsce cięcia ({Math.round(lo)}…{Math.round(hi)})
+          </span>
+          <NumberInput value={pos} min={Math.ceil(lo + 1)} max={Math.floor(hi - 1)} step={1} unit="mm" onChange={setAt} />
+        </label>
+        <label className="field">
+          <span>Kołki łączące</span>
+          <input type="checkbox" checked={dowels} onChange={(e) => setDowels(e.target.checked)} />
+        </label>
+        <button className="action" onClick={() => st.splitBody(body, axis, pos, dowels)}>
+          ✂ Przetnij tutaj
+        </button>
+        <h5>Stół drukarki</h5>
+        <XYZ value={bed} step={10} unit="mm" onChange={(i, v) => saveBed(i, v)} />
+        <p className="desc">
+          Bryła: {size.map((v) => Math.round(v)).join(' × ')} mm. {fits ? 'Mieści się na stole.' : 'Nie mieści się na stole.'}
+        </p>
+        <button className="action" disabled={fits} onClick={() => st.splitToBed(body, bed, dowels)}>
+          ⊞ Podziel, żeby zmieściła się na stole
+        </button>
+      </div>
+    </details>
+  );
+}
+
 function GroupProperties({ body }: { body: number }) {
   const st = useStore();
   const members = st.parts.filter((p) => p.body === body);
@@ -873,6 +953,7 @@ function GroupProperties({ body }: { body: number }) {
       <Section title="🧲 Miejsca na magnesy (pudełko z płyt)" info={INFO.magnets}>
         <MagnetTool target={groupId(body)} body={body} />
       </Section>
+      <SplitTool body={body} />
       {merged && <p className="desc">Złączona: widać gotowy element. Otwory nadal możesz kliknąć (na liście albo w modelu) i przesuwać w bryle.</p>}
 
       <h4>Położenie</h4>

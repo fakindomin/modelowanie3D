@@ -11,6 +11,7 @@ import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
 import { gridSegments, layoutOf } from './geom/dividers';
+import { DOWEL_LUZ, dowelSpots } from './geom/split';
 
 export const PALETTE = ['#a9aeb3', '#e8873a', '#5bb974', '#c9b48a', '#7f8c99', '#d97757', '#8fbf9f', '#b8a07a'];
 const FIG_PALETTE = ['#e9d8c4', '#f0b6a8', '#b9d7a8', '#a8c8e8', '#f2d68a', '#d8b8e8'];
@@ -113,6 +114,13 @@ interface State {
   connectorToWall(id: string, side: WallSide): void;
   /** Puts a label onto a face of the body it belongs to, upright and readable from outside. */
   textToWall(id: string, side: WallSide): void;
+  /** Cuts a body in two at a plane across `axis`, with dowel holes in both halves and loose dowels. */
+  splitBody(body: number, axis: 0 | 1 | 2, at: number, dowels: boolean): void;
+  /** Cuts a body into pieces that each fit on the printer's bed. */
+  splitToBed(body: number, bed: Vec3, dowels: boolean): void;
+  /** Cut plane shown in the scene while the split tool is open. */
+  cutPlane: { body: number; axis: 0 | 1 | 2; at: number } | null;
+  setCutPlane(c: { body: number; axis: 0 | 1 | 2; at: number } | null): void;
   /** Ready case for a Raspberry Pi board, made of ordinary editable elements. */
   addPiCase(board: string): void;
   applyFixes(fixes: Fix[]): void;
@@ -294,6 +302,28 @@ function followers(parts: Part[], src: Part, to: Vec3): Map<string, { position: 
   return out;
 }
 
+function boxOf(m: { boundingBox(): { min: number[]; max: number[] } }) {
+  const b = m.boundingBox();
+  return new THREE.Box3(new THREE.Vector3(...b.min), new THREE.Vector3(...b.max));
+}
+
+/** Extent of a body as printed (holes cut), not just of its solids. */
+export function finishedBox(parts: Part[], body: number) {
+  const [res] = buildBodies(parts, [body]);
+  if (!res) return new THREE.Box3();
+  const b = boxOf(res.manifold);
+  res.geometry.dispose();
+  res.manifold.delete();
+  return b;
+}
+
+function dowelNote(pins: Part[], dowel: { d: number; len: number } | null) {
+  if (!pins.length) return ' Bez kołków: przekrój jest za cienki, części skleisz na płasko.';
+  const n = pins.length;
+  const len = dowel ? String(round(dowel.len - 0.6, 1)).replace('.', ',') : '';
+  return ` ${n} ${n === 1 ? 'kołek' : few(n) ? 'kołki' : 'kołków'} Ø${dowel?.d} × ${len} mm jako osobna bryła, otwory w obu częściach z luzem ${String(DOWEL_LUZ).replace('.', ',')} mm.`;
+}
+
 export const useStore = create<State>((set, get) => {
   const commit = (parts: Part[], extra: Partial<State> = {}) =>
     set((s) => ({ past: [...s.past.slice(-99), s.parts], future: [], parts: fixHolesIn(syncLids(s.parts, syncFigurines(parts))), check: null, ...extra }));
@@ -314,6 +344,76 @@ export const useStore = create<State>((set, get) => {
       ...overrides,
       params: { ...defaultParams(def), ...(overrides.params ?? {}) },
     };
+  };
+
+  /**
+   * Cuts `body` at a plane across `axis`: the part below stays, a copy of every member (holes too)
+   * becomes a new body above, and each side gets a box-shaped cut removing the other half.
+   * Dowel holes go through the cut into both halves; matching dowels are collected in `pins`.
+   */
+  const splitAt = (parts: Part[], body: number, axis: 0 | 1 | 2, at: number, dowels: boolean, pins: Part[]) => {
+    const [res] = buildBodies(parts, [body]);
+    if (!res) return null;
+    // The finished solid's extent: earlier cuts already took material away.
+    const bb = boxOf(res.manifold);
+    let plan: ReturnType<typeof dowelSpots> = null;
+    if (at > bb.min.getComponent(axis) + 0.5 && at < bb.max.getComponent(axis) - 0.5 && dowels) plan = dowelSpots(res.manifold, axis, at);
+    res.geometry.dispose();
+    res.manifold.delete();
+    if (at <= bb.min.getComponent(axis) + 0.5 || at >= bb.max.getComponent(axis) - 0.5) return null;
+    // Each side keeps only the members that reach into it; the rest would be cut away anyway.
+    const side = (p: Part) => worldBox(p);
+    const below = new Set(parts.filter((p) => p.body === body && side(p).min.getComponent(axis) < at - 0.01).map((p) => p.id));
+    const next = parts.filter((p) => p.body !== body || below.has(p.id));
+    const nb = nextBody(parts);
+    const members = parts.filter((p) => p.body === body && side(p).max.getComponent(axis) > at + 0.01);
+    const ids = new Map(members.map((p) => [p.id, uid()]));
+    const fresh = new Map<string, string>();
+    const remap = (k: string | undefined) => (k ? (fresh.get(k) ?? fresh.set(k, uid()).get(k)) : undefined);
+    for (const p of members)
+      next.push({ ...p, id: ids.get(p.id)!, body: nb, rigid: remap(p.rigid), fitTo: p.fitTo ? (ids.get(p.fitTo) ?? p.fitTo) : undefined, pattern: p.pattern ? { ...p.pattern, id: remap(p.pattern.id)! } : undefined });
+    // Box-shaped cuts reaching 2 mm past every solid of the body (earlier cuts may hide some of them).
+    const all = bodyBox(parts, body).union(bb);
+    const lo = all.min.clone().subScalar(2), hi = all.max.clone().addScalar(2);
+    const cutBox = (from: number, to: number, b: number, k: number) => {
+      const a = lo.clone(), z = hi.clone();
+      a.setComponent(axis, from);
+      z.setComponent(axis, to);
+      next.push(
+        makePart('holeBox', next, {
+          name: `Cięcie ${k}`,
+          params: { W: round(z.x - a.x, 2), D: round(z.y - a.y, 2), H: round(z.z - a.z, 2), luz: 0 },
+          position: r3([(a.x + z.x) / 2, (a.y + z.y) / 2, a.z]),
+          body: b,
+        }),
+      );
+    };
+    const cuts = parts.filter((p) => p.type === 'holeBox' && p.name.startsWith('Cięcie')).length / 2 + 1;
+    cutBox(at, hi.getComponent(axis), body, cuts);
+    cutBox(lo.getComponent(axis), at, nb, cuts);
+    if (plan) {
+      const rot: Vec3 = axis === 0 ? [0, 90, 0] : axis === 1 ? [-90, 0, 0] : [0, 0, 0];
+      const reach = plan.len / 2 + 0.5;
+      plan.spots.forEach((sp, k) => {
+        const pos = [...sp] as Vec3;
+        pos[axis] -= reach;
+        for (const b of [body, nb])
+          next.push(makePart('hole', next, { name: `Otwór na kołek ${k + 1}`, params: { D: plan!.d, H: round(2 * reach, 2), luz: DOWEL_LUZ }, position: r3(pos), rotation: rot, body: b }));
+        pins.push({ id: uid(), type: 'cylinder', name: `Kołek ${plan!.d}×${plan!.len - 0.6}`, params: { D: plan!.d, H: round(plan!.len - 0.6, 2) }, position: [0, 0, 0], rotation: [0, 0, 0], color: PALETTE[3], hole: false, body: -1, edges: { kind: 'chamfer', r: 0.5, vertical: false, top: true, bottom: true } });
+      });
+    }
+    return { parts: next, body: nb, dowel: plan ? { d: plan.d, len: plan.len } : null };
+  };
+
+  /** Loose dowels as one more body, in a row next to the model. */
+  const addDowelPins = (parts: Part[], pins: Part[]) => {
+    if (!pins.length) return parts;
+    const body = nextBody(parts);
+    const d = Number(pins[0].params.D), gap = d + 4;
+    // A square-ish grid of dowels standing on the bed.
+    const cols = Math.ceil(Math.sqrt(pins.length));
+    const start = besideAll(parts, new THREE.Vector3(cols * gap, Math.ceil(pins.length / cols) * gap, 0));
+    return [...parts, ...pins.map((p, i) => ({ ...p, body, position: r3([start[0] - (cols * gap) / 2 + (i % cols) * gap + gap / 2, start[1] + Math.floor(i / cols) * gap, 0]) }))];
   };
 
   /** The selection as something to build on: its world box and body. */
@@ -502,6 +602,8 @@ export const useStore = create<State>((set, get) => {
     settings: { grid: 1, snap: true, stick: true, minWall: 0.8 },
     preview: false,
     snapTargets: [],
+    cutPlane: null,
+    setCutPlane: (c) => set({ cutPlane: c }),
     toast: null,
     fitRequest: 0,
     check: null,
@@ -984,6 +1086,77 @@ export const useStore = create<State>((set, get) => {
       const pose = wallPose(box, side, largestSolid(parts, src.body, ids), same ? src.position : undefined);
       const params = pose.wall ? { ...src.params, wall: pose.wall } : src.params;
       commit(parts.map((p) => (ids.has(p.id) ? { ...p, position: r3(pose.position), rotation: pose.rotation, params: { ...params, piece: p.params.piece } } : p)));
+    },
+
+    splitBody(body, axis, at, dowels) {
+      const pins: Part[] = [];
+      const r = splitAt(get().parts, body, axis, at, dowels, pins);
+      if (!r) return get().notify('Tu nie da się przeciąć: płaszczyzna jest poza bryłą albo za blisko jej brzegu.');
+      // The piece beyond the cut moves 10 mm away, so both halves are easy to see and click.
+      // An upper half goes onto the bed beside the lower one, cut face down.
+      const lower = finishedBox(r.parts, body), upper = finishedBox(r.parts, r.body);
+      const d: Vec3 = [0, 0, 0];
+      if (axis === 2) {
+        d[0] = round(lower.max.x - upper.min.x + 10);
+        d[2] = round(lower.min.z - upper.min.z);
+      } else d[axis] = 10;
+      let next = r.parts.map((p) => (p.body === r.body ? { ...p, position: r3([p.position[0] + d[0], p.position[1] + d[1], p.position[2] + d[2]]) } : p));
+      next = addDowelPins(next, pins);
+      commit(next, { selectedId: groupId(r.body), cutPlane: null });
+      get().notify(`Przecięto bryłę ${body}: druga część to bryła ${r.body}, ${axis === 2 ? 'postawiona obok cięciem do stołu' : 'odsunięta o 10 mm'}.${dowelNote(pins, r.dowel)}`);
+    },
+
+    splitToBed(body, bed, dowels) {
+      const parts = get().parts;
+      const box = finishedBox(parts, body);
+      if (box.isEmpty()) return;
+      const size = box.getSize(new THREE.Vector3()).toArray();
+      const min = box.min.toArray();
+      // Even cuts along every axis that does not fit, 2 mm short of the bed for the brim and play.
+      const cuts: [0 | 1 | 2, number][] = [];
+      ([0, 1, 2] as const).forEach((a) => {
+        const n = Math.ceil(size[a] / Math.max(10, bed[a] - 2));
+        for (let i = 1; i < n; i++) cuts.push([a, round(min[a] + (size[a] * i) / n, 2)]);
+      });
+      if (!cuts.length) return get().notify(`Bryła ${body} mieści się na stole (${size.map((v) => Math.round(v)).join(' × ')} mm), nie trzeba jej dzielić.`);
+      let next = parts;
+      const pins: Part[] = [];
+      let pieces = [body];
+      let dowel: { d: number; len: number } | null = null;
+      for (const [a, at] of cuts) {
+        const grown: number[] = [];
+        for (const b of pieces) {
+          const r = splitAt(next, b, a, at, dowels, pins);
+          if (r) {
+            next = r.parts;
+            grown.push(r.body);
+            dowel ??= r.dowel;
+          }
+        }
+        pieces = [...pieces, ...grown];
+      }
+      // Spread the pieces 10 mm apart per cut, so each one is easy to see and pick. Pieces above a
+      // horizontal cut go down onto the bed, in a row of their own beside the model.
+      const shift = new Map<number, Vec3>();
+      for (const b of pieces) {
+        const pb = finishedBox(next, b);
+        const c = pb.getCenter(new THREE.Vector3()).toArray();
+        const v: Vec3 = [0, 0, 0];
+        let level = 0;
+        for (const [a, at] of cuts) if (c[a] > at) a === 2 ? level++ : (v[a] += 10);
+        if (level) {
+          v[0] += level * (size[0] + 10 * cuts.filter((q) => q[0] === 0).length + 20);
+          v[2] = round(min[2] - pb.min.z);
+        }
+        shift.set(b, v);
+      }
+      next = next.map((p) => {
+        const v = shift.get(p.body);
+        return v && (v[0] || v[1] || v[2]) ? { ...p, position: r3([p.position[0] + v[0], p.position[1] + v[1], p.position[2] + v[2]]) } : p;
+      });
+      next = addDowelPins(next, pins);
+      commit(next, { selectedId: groupId(body), cutPlane: null });
+      get().notify(`Podzielono bryłę ${body} na ${pieces.length} części, każda mieści się na stole ${bed.join(' × ')} mm.${dowelNote(pins, dowel)}`);
     },
 
     textToWall(id, side) {
