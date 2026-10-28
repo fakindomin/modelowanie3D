@@ -98,6 +98,8 @@ interface State {
   matchingThreadHole(id: string): void;
   addDrawers(id: string): void;
   addLid(id: string): void;
+  /** Stops a lid from following its box. */
+  unfitLid(id: string): void;
   /** Magnet pockets on the top edge of a box (ready-made or built from plates) and mirrored ones in its lid. */
   addMagnets(id: string, opt: MagnetOptions): void;
   /** Adds a family variant in size S/M/L or with the dimensions last used for its type. */
@@ -288,7 +290,7 @@ function followers(parts: Part[], src: Part, to: Vec3): Map<string, { position: 
 
 export const useStore = create<State>((set, get) => {
   const commit = (parts: Part[], extra: Partial<State> = {}) =>
-    set((s) => ({ past: [...s.past.slice(-99), s.parts], future: [], parts: fixHolesIn(syncFigurines(parts)), check: null, ...extra }));
+    set((s) => ({ past: [...s.past.slice(-99), s.parts], future: [], parts: fixHolesIn(syncLids(s.parts, syncFigurines(parts))), check: null, ...extra }));
 
   const makePart = (type: string, parts: Part[], overrides: Partial<Part> = {}): Part => {
     const def = DEFS[type];
@@ -785,14 +787,24 @@ export const useStore = create<State>((set, get) => {
       const box = parts.find((x) => x.id === id);
       if (!box) return;
       const b = worldBox(box);
-      const lid = makePart('lid', parts, {
-        params: { ...defaultParams(DEFS.lid), shape: box.params.shape ?? 'rect', W: box.params.W, D: box.params.D, wall: box.params.T },
-        position: [round(b.max.x + 10 + Number(box.params.W) / 2), round(box.position[1]), 0],
+      const slide = !!box.params.slide;
+      const lid = makePart(slide ? 'slab' : 'lid', parts, {
+        ...(slide ? { name: `Wsuwana pokrywka do: ${box.name}` } : {}),
+        fitTo: box.id,
+        params: slide ? {} : { ...defaultParams(DEFS.lid) },
       });
+      lid.params = { ...lid.params, ...lidParams(box, lid) };
+      lid.position = [round(b.max.x + 10 + Number(lid.params.W) / 2), round(box.position[1]), 0];
       commit([...parts, lid], { selectedId: lid.id });
+      if (slide) get().notify('Pudełko ma rowki, więc pokrywka jest wsuwana: wsuwa się od przodu (luz 0,3 mm na stronę).');
       // Pockets placed by hand in the box: check them now that a lid is coming and offer fixes.
       const issues = magnetIssues(get().parts).filter((i) => i.fix);
       if (issues.length) set({ check: { issues, bodies: 0, title: 'Gniazda na magnesy' } });
+    },
+
+    unfitLid(id) {
+      commit(get().parts.map((p) => (p.id === id ? { ...p, fitTo: undefined } : p)));
+      get().notify('Pokrywka odłączona: jej wymiary nie zmieniają się już razem z pudełkiem.');
     },
 
     addMagnets(id, opt) {
@@ -920,21 +932,15 @@ export const useStore = create<State>((set, get) => {
         const lid = makePart('lid', parts, {
           params: { ...defaultParams(DEFS.lid), W: part.params.W, D: part.params.D, T: 2, R: 0 },
           position: [part.position[0], part.position[1], round(b.max.z)],
+          fitTo: part.id,
         });
         commit([...parts, lid], { selectedId: id });
         get().add('hingePip');
         get().notify('Pudełko z pokrywką na zawiasie print-in-place: drukuje się w całości, zawias jest od razu ruchomy.');
       } else if (variant.extra === 'slide') {
-        const parts = get().parts;
-        const g = slideGroove(part.params);
-        const b = worldBox(part);
-        const lid = makePart('slab', parts, {
-          name: `Wsuwana pokrywka do: ${part.name}`,
-          params: { W: round(g.lidW, 2), D: round(g.lidD, 2), T: g.lidT },
-          position: [round(b.max.x + 10 + g.lidW / 2), part.position[1], 0],
-        });
-        commit([...parts, lid], { selectedId: id, fitRequest: get().fitRequest + 1 });
-        get().notify('Pokrywka wsuwa się od przodu w rowki pod górną krawędzią (luz 0,3 mm na stronę).');
+        get().addLid(id);
+        get().select(id);
+        set({ fitRequest: get().fitRequest + 1 });
       }
     },
 
@@ -999,7 +1005,7 @@ export const useStore = create<State>((set, get) => {
         const z = b.sd.side < 0 ? top - b.t - 1.5 : top + 0.8;
         next.push(makePart('holeBox', next, { name: `${b.label}: karta microSD`, body, position: r3([wb.min.x + T / 2, y0 + b.sd.at, z - 1.75]), params: { W: T + 2, D: 13, H: 3.5, luz: 0 } }));
       }
-      const lid = makePart('lid', next, { name: `Pokrywka ${b.label}`, params: { ...defaultParams(DEFS.lid), W, D, T: 2, wall: T, R: rim } });
+      const lid = makePart('lid', next, { name: `Pokrywka ${b.label}`, fitTo: box.id, params: { ...defaultParams(DEFS.lid), W, D, T: 2, wall: T, R: rim } });
       lid.position = [round(wb.max.x + 10 + W / 2), cy, 0];
       next.push(lid);
       commit(next, { selectedId: box.id, fitRequest: get().fitRequest + 1 });
@@ -1384,6 +1390,55 @@ function syncFigurines(parts: Part[]): Part[] {
     }
   }
   return next;
+}
+
+/** Parameters a lid needs to fit its box: size, wall, shape and slots for the dividers (a sliding lid: the groove). */
+function lidParams(box: Part, lid: Part): Params {
+  if (lid.type === 'slab') {
+    const g = slideGroove(box.params);
+    return { W: round(g.lidW, 2), D: round(g.lidD, 2), T: g.lidT };
+  }
+  const p: Params = { shape: box.params.shape ?? 'rect', W: box.params.W, D: box.params.D, wall: box.params.T };
+  // Dividers lowered at least by the rim height don't reach it: no slots needed.
+  const clear = (Number(box.params.low) || 0) >= (Number(lid.params.R) || 0);
+  p.nx = clear ? 1 : (box.params.nx ?? 1);
+  p.ny = clear ? 1 : (box.params.ny ?? 1);
+  return p;
+}
+
+/**
+ * Keeps lids sized to their boxes after every change. A lid lying on the box moves with its top;
+ * a lid next to the box is pushed aside when the grown box would reach it.
+ */
+function syncLids(prev: Part[], parts: Part[]): Part[] {
+  if (!parts.some((p) => p.fitTo)) return parts;
+  let changed = false;
+  const next = parts.map((lid) => {
+    if (!lid.fitTo) return lid;
+    const box = parts.find((p) => p.id === lid.fitTo);
+    if (!box || box.type !== 'box') {
+      changed = true;
+      return { ...lid, fitTo: undefined };
+    }
+    const want = lidParams(box, lid);
+    if (Object.entries(want).every(([k, v]) => lid.params[k] === v)) return lid;
+    changed = true;
+    const q: Part = { ...lid, params: { ...lid.params, ...want } };
+    const oldBox = prev.find((p) => p.id === box.id);
+    const oldLid = prev.find((p) => p.id === lid.id);
+    if (oldBox && oldLid) {
+      const ob = worldBox(oldBox), lb = worldBox(oldLid), nb = worldBox(box);
+      const above = lb.min.x < ob.max.x && lb.max.x > ob.min.x && lb.min.y < ob.max.y && lb.max.y > ob.min.y;
+      if (above && Math.abs(lb.min.z - ob.max.z) < 0.6) q.position = r3([q.position[0], q.position[1], q.position[2] + nb.max.z - ob.max.z]);
+      else {
+        const qb = worldBox(q);
+        if (qb.min.x < nb.max.x + 2 && qb.max.x > nb.min.x && qb.min.y < nb.max.y && qb.max.y > nb.min.y)
+          q.position = r3([nb.max.x + 10 + (q.position[0] - qb.min.x), q.position[1], q.position[2]]);
+      }
+    }
+    return q;
+  });
+  return changed ? next : parts;
 }
 
 function fixHolesIn(parts: Part[]): Part[] {

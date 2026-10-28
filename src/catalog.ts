@@ -105,6 +105,18 @@ const BASE: PartDef[] = [
       { key: 'nx', label: 'Przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: rectOnly },
       { key: 'ny', label: 'Przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: rectOnly },
       { key: 'slide', label: 'Rowki na wsuwaną pokrywkę', type: 'bool', def: false, show: rectOnly, hint: 'Rowki w ściankach pod górną krawędzią; pokrywka wsuwa się od przodu (ścianka min. 2 mm).' },
+      {
+        key: 'low',
+        label: 'Przegródki niższe o',
+        type: 'number',
+        def: 0,
+        min: 0,
+        max: 200,
+        step: 0.5,
+        unit: 'mm',
+        show: (p) => rectOnly(p) && (num(p, 'nx') > 1 || num(p, 'ny') > 1),
+        hint: 'Obniża przegródki pod górną krawędzią, np. o wysokość rantu pokrywki. Przy wsuwanej pokrywce przegródki same kończą się pod rowkiem.',
+      },
     ],
     build: (p) => {
       const W = num(p, 'W'), H = num(p, 'H'), t = num(p, 'T'), b = num(p, 'B');
@@ -113,8 +125,12 @@ const BASE: PartDef[] = [
       const D = num(p, 'D');
       let m = block(W, D, H).subtract(block(W - 2 * t, D - 2 * t, H, 0, 0, b));
       const nx = Math.round(num(p, 'nx')), ny = Math.round(num(p, 'ny'));
-      for (let i = 1; i < nx; i++) m = m.add(block(t, D - 2 * t, H - b, -W / 2 + t + ((W - 2 * t) * i) / nx, 0, b));
-      for (let i = 1; i < ny; i++) m = m.add(block(W - 2 * t, t, H - b, 0, -D / 2 + t + ((D - 2 * t) * i) / ny, b));
+      // Dividers stop under a sliding lid's groove so the lid can pass over them.
+      const top = Math.min(H - (Number(p.low) || 0), p.slide ? slideGroove(p).z0 - 0.3 : H);
+      if (top > b + 0.2) {
+        for (let i = 1; i < nx; i++) m = m.add(block(t, D - 2 * t, top - b, -W / 2 + t + ((W - 2 * t) * i) / nx, 0, b));
+        for (let i = 1; i < ny; i++) m = m.add(block(W - 2 * t, t, top - b, 0, -D / 2 + t + ((D - 2 * t) * i) / ny, b));
+      }
       if (p.slide) {
         const g = slideGroove(p);
         // Groove in the side and back walls, open at the front; the front wall drops to the groove's bottom.
@@ -138,6 +154,8 @@ const BASE: PartDef[] = [
       { key: 'wall', label: 'Ścianka pudełka', type: 'number', def: 2, min: 0.4, max: 20, step: 0.2, unit: 'mm' },
       { key: 'R', label: 'Wysokość rantu', type: 'number', def: 4, min: 0, max: 50, unit: 'mm' },
       clearance(0.3),
+      { key: 'nx', label: 'Szczeliny na przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => rectOnly(p) && num(p, 'R') > 0, hint: 'Tyle samo co przegródek w pudełku: rant dostaje szczeliny tam, gdzie stoją przegródki.' },
+      { key: 'ny', label: 'Szczeliny na przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => rectOnly(p) && num(p, 'R') > 0 },
     ],
     build: (p) => {
       const W = num(p, 'W'), t = num(p, 'T'), wall = num(p, 'wall'), R = num(p, 'R'), c = num(p, 'luz'), lip = 1.6;
@@ -153,6 +171,10 @@ const BASE: PartDef[] = [
       if (R > 0) {
         const ow = W - 2 * wall - c, od = D - 2 * wall - c;
         m = m.add(block(ow, od, R, 0, 0, t).subtract(block(ow - 2 * lip, od - 2 * lip, R + 1, 0, 0, t)));
+        // Slots where the box dividers meet the rim (the dividers are as thick as the box wall).
+        const nx = Math.round(Number(p.nx) || 1), ny = Math.round(Number(p.ny) || 1), sw = wall + 2 * c;
+        for (let i = 1; i < nx; i++) m = m.subtract(block(sw, D, R + 1, -W / 2 + wall + ((W - 2 * wall) * i) / nx, 0, t + 0.01));
+        for (let i = 1; i < ny; i++) m = m.subtract(block(W, sw, R + 1, 0, -D / 2 + wall + ((D - 2 * wall) * i) / ny, t + 0.01));
       }
       return m;
     },

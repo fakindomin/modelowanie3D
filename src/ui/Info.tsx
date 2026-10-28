@@ -20,6 +20,7 @@ export const INFO = {
   nut: 'Dodaje nakrętkę pasującą do tej śruby jako osobną bryłę.',
   threadHole: 'Dodaje otwór z gwintem pasujący do tej śruby, wycinany w bryle, w której stoi.',
   merge: 'Pokazuje gotowy element z wyciętymi otworami. Otwory dalej możesz kliknąć i przesuwać; „Rozdziel” cofa.',
+  lidFit: 'Ta pokrywka idzie za pudełkiem: zmiana szerokości, głębokości, ścianki albo przegródek w pudełku zmienia ją sama (z szczelinami na przegródki). Odłączona zostaje taka, jaka jest.',
   connector: 'Otwór pod złącze z luzem i ramką wzmacniającą od środka. „Wtyczka” robi większy otwór, przez który wtyczka sięga do gniazda na płytce w środku. Wymiary są typowe: zmierz swoje złącze suwmiarką.',
   connWall: 'Przenosi otwór (razem ze wzmocnieniem) na środek wybranej ścianki bryły, w której stoi, i ustawia grubość ścianki.',
   measure: 'Najedź na ściankę, krawędź albo otwór, żeby zobaczyć wymiar. Kliknij dwa elementy, żeby zmierzyć odległość.',

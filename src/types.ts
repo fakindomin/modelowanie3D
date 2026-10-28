@@ -41,6 +41,8 @@ export interface Part {
   /** Pieces of one fitting (hinge leaves, gland parts, figurine pieces) move together. */
   rigid?: string;
   texture?: Texture;
+  /** Lid made for this box: its size (and divider slots) follow the box. */
+  fitTo?: string;
   /** Member of a pattern that keeps its rule: move one member and the others follow. */
   pattern?: PatternRule;
 }

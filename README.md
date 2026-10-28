@@ -13,6 +13,9 @@ Każda ma własną scenę, historię cofania i autozapis.
   wszystkie odmiany z rozmiarami S/M/L i ↺ (ostatnio użyte wymiary). Pudełka: prostokątne, okrągłe,
   sześciokątne, z przegródkami, z pokrywką, z pokrywką na zawiasie, z wsuwaną pokrywką. Pokrywki:
   płaska, z rantem, okrągła. Szuflady z obudową. Płyty: pełna, z otworami montażowymi, perforowana.
+- **Pokrywka idzie za pudełkiem:** pokrywka dodana do pudełka sama zmienia wymiary razem z nim. Przy
+  przegródkach rant dostaje szczeliny, a przy rowkach pokrywka jest wsuwana. Przegródki można obniżyć
+  („Przegródki niższe o”). „Odłącz od pudełka” zostawia pokrywkę taką, jaka jest.
 - **Rozbij na płyty:** pudełko albo szufladę można zamienić na dno, ścianki i przegródki (dalej jedna
   bryła), żeby zmienić każdą płytę osobno.
 - **Miejsca na magnesy:** jeden przycisk przy pudełku (gotowym albo złożonym z płyt) lub pokrywce.

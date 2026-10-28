@@ -205,6 +205,8 @@ function Helpers({ part }: { part: Part }) {
     out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id), INFO.nut));
     out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id), INFO.threadHole));
   }
+  const fitBox = part.fitTo ? st.parts.find((p) => p.id === part.fitTo) : undefined;
+  if (fitBox) out.push(b(`⛓ Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit));
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
     out.push(b(`⧉ Złącz z bryłą ${part.body} (pokaż gotowy element)`, () => st.merge(part.body), INFO.merge));
   return <>{out}</>;
