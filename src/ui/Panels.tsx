@@ -6,9 +6,11 @@ import { BED_KEY, assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, 
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { DEFAULT_EDGES } from '../geom/edges';
 import { DEFAULT_BEND } from '../geom/bend';
-import { DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/modify';
+import { DEFAULT_INFILL, DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/modify';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
-import type { Bend, Edges, Part, Shell, Texture, Vec3, Xform } from '../types';
+import type { Bend, Edges, Infill, Part, Shell, Texture, Vec3, Xform } from '../types';
+import { LATTICE_LABELS } from '../geom/lattice';
+import { buildBodies } from '../geom/parts';
 import { Icon } from './Icon';
 import { SketchEditor } from './SketchEditor';
 import { INFO, Info, PATTERN_INFO } from './Info';
@@ -291,6 +293,20 @@ function Helpers({ part }: { part: Part }) {
   if ((part.type === 'box' && (!part.params.shape || part.params.shape === 'rect') && !part.params.slide) || part.type === 'drawer')
     out.push(b('⊞ Rozbij na płyty', () => st.explode(part.id), INFO.explode));
   if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id), INFO.bolt));
+  if (part.type === 'gear' || part.type === 'rack') out.push(b('+ Dodaj pasującą zębatkę', () => st.matingGear(part.id, 'gear'), INFO.mateGear));
+  if (part.type === 'gear' && part.params.kind === 'spur') out.push(b('+ Dodaj listwę zębatą', () => st.matingGear(part.id, 'rack'), INFO.mateGear));
+  if (part.type === 'bevelGear') out.push(b('+ Dodaj pasującą zębatkę stożkową', () => st.matingGear(part.id, 'bevel'), INFO.mateGear));
+  if (part.type === 'worm') out.push(b('+ Dodaj ślimacznicę', () => st.matingGear(part.id, 'wheel'), INFO.mateGear));
+  if (part.type === 'wormWheel') out.push(b('+ Dodaj ślimak', () => st.matingGear(part.id, 'worm'), INFO.mateGear));
+  const driver = part.gearMate ? st.parts.find((p) => p.id === part.gearMate!.of) : undefined;
+  if (driver) out.push(b(`⛓ Odepnij od „${driver.name}”`, () => st.update(part.id, { gearMate: undefined }), INFO.mateGear));
+  if (driver && driver.type === 'gear' && part.type === 'gear')
+    out.push(
+      <label key="mate-angle" className="field">
+        <span>Położenie wokół pary</span>
+        <NumberInput value={part.gearMate!.angle} min={-360} max={360} step={15} unit="°" onChange={(angle) => st.update(part.id, { gearMate: { of: driver.id, angle } })} />
+      </label>,
+    );
   if (part.type === 'bolt') {
     out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id), INFO.nut));
     out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id), INFO.threadHole));
@@ -806,6 +822,11 @@ function PartProperties({ part }: { part: Part }) {
         </Section>
       )}
       {!part.hole && (
+        <Section title="▦ Wypełnienie (ażur)" open={st.parts.some((p) => p.body === part.body && p.infill)} info={INFO.infill}>
+          <InfillTool body={part.body} prefer={part.id} />
+        </Section>
+      )}
+      {!part.hole && (
         <Section title="⇋ Lustro i skala" open={st.parts.some((p) => p.body === part.body && p.xform)} info={INFO.xform}>
           <XformTool body={part.body} prefer={part.id} />
         </Section>
@@ -895,6 +916,92 @@ function Flags({ id, hidden, locked }: { id: string; hidden: boolean; locked: bo
       </button>
     </span>
   );
+}
+
+/** "Wypełnienie": a see-through pattern cut into the whole body, with a solid frame. */
+function InfillTool({ body, prefer }: { body: number; prefer?: string }) {
+  const st = useStore();
+  const solids = st.parts.filter((p) => p.body === body && !p.hole);
+  const holder = solids.find((p) => p.infill) ?? solids.find((p) => p.id === prefer) ?? solids[0];
+  const saved = useInfillSaving(body, !!holder?.infill?.on);
+  if (!holder) return null;
+  const f = holder.infill;
+  const set = (patch: Partial<Infill>) => st.setInfill(holder.id, { ...(f ?? DEFAULT_INFILL), ...patch });
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Wzór</span>
+        <select value={f ? f.pattern : 'off'} onChange={(e) => (e.target.value === 'off' ? st.setInfill(holder.id, undefined) : set({ pattern: e.target.value as Infill['pattern'], on: true }))}>
+          <option value="off">Pełne (bez ażuru)</option>
+          {Object.entries(LATTICE_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </label>
+      {f && (
+        <>
+          <label className="field">
+            <span>Kierunek</span>
+            <select value={f.axis} onChange={(e) => set({ axis: e.target.value as Infill['axis'] })}>
+              <option value="z">Z góry (płyta, dno)</option>
+              <option value="x">Na wylot X (ścianki lewa/prawa)</option>
+              <option value="y">Na wylot Y (ścianki przód/tył)</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Wielkość oczka</span>
+            <NumberInput value={f.cell} min={3} max={200} step={1} unit="mm" onChange={(cell) => set({ cell })} />
+          </label>
+          <label className="field">
+            <span>Grubość żebra</span>
+            <NumberInput value={f.rib} min={0.8} max={50} step={0.2} unit="mm" onChange={(rib) => set({ rib })} />
+          </label>
+          <label className="field">
+            <span>Pełna ramka</span>
+            <NumberInput value={f.margin} min={0.4} max={100} step={0.5} unit="mm" onChange={(margin) => set({ margin })} />
+          </label>
+          <label className="field">
+            <span>Rodzaj</span>
+            <select value={f.mode} onChange={(e) => set({ mode: e.target.value as Infill['mode'] })}>
+              <option value="through">Otwory na wylot</option>
+              <option value="pocket">Kieszenie od spodu</option>
+            </select>
+          </label>
+          {f.mode === 'pocket' && (
+            <label className="field">
+              <span>Głębokość kieszeni</span>
+              <NumberInput value={f.depth} min={0.2} max={500} step={0.2} unit="mm" onChange={(depth) => set({ depth })} />
+            </label>
+          )}
+          <label className="field">
+            <span>Pokaż pełną (do edycji)</span>
+            <input type="checkbox" checked={!f.on} onChange={(e) => set({ on: !e.target.checked })} />
+          </label>
+          {saved !== null && <p className="desc">Oszczędność materiału: ok. {saved}% objętości.</p>}
+          <p className="desc">Przy krawędziach i wokół otworów, magnesów i gwintów zostaje pełna ramka. Żebro co najmniej 0,8 mm (2 ścieżki dyszy 0,4).</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Percent of volume the pattern removes from the body (null while off). */
+function useInfillSaving(body: number, on: boolean): number | null {
+  const parts = useStore((s) => s.parts);
+  return useMemo(() => {
+    if (!on) return null;
+    try {
+      const members = parts.filter((p) => p.body === body);
+      const plain = members.map((p) => (p.infill ? { ...p, infill: undefined } : p));
+      const a = buildBodies(members)[0]?.manifold.volume() ?? 0;
+      const b = buildBodies(plain)[0]?.manifold.volume() ?? 0;
+      return b > 0 ? Math.max(0, Math.round((1 - a / b) * 100)) : null;
+    } catch {
+      return null;
+    }
+  }, [parts, body, on]);
 }
 
 /** "Skorupa": hollows the whole body, optionally open on one side. */
@@ -1249,6 +1356,9 @@ function GroupProperties({ body }: { body: number }) {
       <Section title="◫ Skorupa (wydrążenie)" open={members.some((p) => p.shell)} info={INFO.shell}>
         <ShellTool body={body} />
       </Section>
+      <Section title="▦ Wypełnienie (ażur)" open={members.some((p) => p.infill)} info={INFO.infill}>
+        <InfillTool body={body} />
+      </Section>
       <Section title="⇋ Lustro i skala" open={members.some((p) => p.xform)} info={INFO.xform}>
         <XformTool body={body} />
       </Section>
@@ -1297,6 +1407,7 @@ function badgeOf(members: Part[]) {
   const out: string[] = [];
   if (s.some((p) => p.bend?.on)) out.push('gięta');
   if (s.some((p) => p.shell?.on)) out.push('skorupa');
+  if (s.some((p) => p.infill?.on)) out.push('ażur');
   const x = s.find((p) => xformActive(p.xform))?.xform;
   if (x && x.mirror !== 'none') out.push('odbita');
   if (x && x.scale.some((v) => v !== 100)) out.push('skala');

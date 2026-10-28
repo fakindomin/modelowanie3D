@@ -6,6 +6,7 @@ import { bendZone } from './bend';
 import { buildBodies, failed, worldBox, worldManifold } from './parts';
 import { surfaceAbove, surfaceBelow } from './snap';
 import { findLid, ringOk } from './magnets';
+import { planetLayout } from '../parts/gears';
 
 /** A correction "Popraw wszystkie" may apply. */
 export type Fix = { kind: 'move'; id: string; position: Vec3 } | { kind: 'mirror'; body: number; lid: string; resting: boolean };
@@ -78,12 +79,15 @@ function thinWall(m: Manifold, w: number): Box | null {
 }
 
 /** Features that only work while round and straight. */
+const GEAR_TYPES = new Set(['gear', 'ringGear', 'rack', 'bevelGear', 'worm', 'wormWheel', 'planetary', 'gt2Pulley']);
 const FRAGILE = ['magnet', 'threadHole', 'threadNut', 'bolt', 'insert'];
 
 export function runCheck(parts: Part[], minWall: number): CheckResult {
   const issues: Issue[] = [];
   for (const p of parts)
     if (failed(p)) issues.push({ level: 'error', text: `„${p.name}” ma wymiary, z których nie da się zbudować bryły (pokazany jako mały sześcian).`, select: p.id });
+
+  issues.push(...gearIssues(parts));
 
   // Threads and magnet pockets in a bend come out warped.
   for (const body of new Set(parts.map((p) => p.body))) {
@@ -130,7 +134,9 @@ export function runCheck(parts: Part[], minWall: number): CheckResult {
       const size = [0, 1, 2].map((k) => box.max[k] - box.min[k]);
       if (size[0] > 220 || size[1] > 220 || size[2] > 250)
         issues.push({ level: 'info', text: `Bryła ${b.body} ma ${size.map((s) => fmt(s, 0)).join(' × ')} mm i może nie zmieścić się na stole drukarki.`, select: `g:${b.body}` });
-      const thin = thinWall(b.manifold, minWall);
+      // Tooth tips are narrow by design; gears get their own checks below.
+      const gearsOnly = parts.filter((p) => p.body === b.body && !p.hole).every((p) => GEAR_TYPES.has(p.type));
+      const thin = gearsOnly ? null : thinWall(b.manifold, minWall);
       if (thin)
         issues.push({
           level: 'warn',
@@ -249,3 +255,39 @@ export function magnetIssues(parts: Part[]): Issue[] {
   return issues;
 }
 
+
+/** Gear sizes that print or mesh badly: tiny tooth counts, crowded planets, meshing gears that overlap. */
+function gearIssues(parts: Part[]): Issue[] {
+  const out: Issue[] = [];
+  const n = (p: Part, k: string) => Number(p.params[k]);
+  for (const p of parts) {
+    const z = n(p, 'z');
+    if ((p.type === 'gear' || p.type === 'bevelGear' || p.type === 'wormWheel') && z < 13)
+      out.push({ level: 'warn', text: `„${p.name}” ma ${z} zębów. Poniżej 13 ząb jest podcięty u podstawy i łatwo się łamie; dodaj zębów albo zmniejsz moduł.`, select: p.id });
+    if ((p.type === 'gear' || p.type === 'rack' || p.type === 'ringGear' || p.type === 'planetary') && n(p, 'm') < 0.8)
+      out.push({ level: 'info', text: `„${p.name}” ma moduł ${fmt(n(p, 'm'), 2)} mm: tak drobne zęby wyjdą tylko z dyszy 0,2–0,25 mm.`, select: p.id });
+    if (p.type === 'planetary' && p.params.piece === 'planets') {
+      const L = planetLayout(p.params);
+      const tip = (L.m * L.zp) / 2 + L.m;
+      const close = L.angles.some((t, i) => {
+        const u = L.angles[(i + 1) % L.angles.length] + (i + 1 === L.angles.length ? 2 * Math.PI : 0);
+        return 2 * L.a * Math.sin((u - t) / 2) < 2 * tip + 0.5;
+      });
+      if (close) out.push({ level: 'error', text: `Satelity w „${p.name}” zachodzą na siebie. Zmniejsz ich liczbę albo liczbę zębów satelity.`, select: p.id });
+      if (L.zs < 10) out.push({ level: 'warn', text: `Słońce w „${p.name}” ma ${L.zs} zębów: będzie się zacinać. Daj co najmniej 12.`, select: p.id });
+    }
+  }
+  // Gears paired with "Dodaj pasującą" must not run into each other.
+  for (const p of parts) {
+    const d = p.gearMate && parts.find((q) => q.id === p.gearMate!.of);
+    if (!d || p.body === d.body) continue;
+    try {
+      const a = worldManifold(p), b = worldManifold(d);
+      const v = a.intersect(b).volume();
+      if (v > 0.5) out.push({ level: 'warn', text: `„${p.name}” wchodzi w „${d.name}” (${fmt(v, 1)} mm³). Zębatki zachodzą na siebie: sprawdź moduł i luz.`, select: p.id });
+    } catch {
+      /* geometry not ready */
+    }
+  }
+  return out;
+}

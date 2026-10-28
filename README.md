@@ -75,6 +75,17 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Bryły podstawowe:** prostopadłościan, walec, stożek, klin, kula.
 - **Otwory i połączenia:** otwór okrągły i prostokątny, czop okrągły i kwadratowy, gniazdo magnesu,
   otwór pod insert, otwór na śrubę z pogłębieniem, gniazdo nakrętki. Wszystkie z ustawianym luzem.
+- **Zębatki:** walcowa z zębem ewolwentowym (prosta, skośna, jodełka), wieniec wewnętrzny, listwa zębata,
+  stożkowa, ślimak i ślimacznica, przekładnia planetarna (słońce, satelity, wieniec, jarzmo z bolcami) i koło
+  pasowe GT2. Rozmiar to moduł i liczba zębów, luz zębów ciasny/normalny/luźny, otwór okrągły, ze
+  spłaszczeniem, sześciokątny albo gniazdo łożyska 608/625, piasta z otworem na śrubę M3. „Dodaj pasującą
+  zębatkę” (też listwę, stożkową, ślimak, ślimacznicę) ustawia drugą część tak, że zęby się zazębiają; po
+  zmianie liczby zębów albo modułu para sama się przesuwa. Wypełnienie koła: pełne, szprychy, otwory albo
+  kratownica, na wylot albo z cienkim środnikiem. „Sprawdź model” ostrzega o zbyt małej liczbie zębów,
+  zachodzących satelitach i zębatkach, które wchodzą w siebie.
+- **Wypełnienie (ażur):** każdą bryłę można zamienić w kratownicę, plaster miodu, romby, szczeliny albo koła
+  (na wylot z góry albo przez ścianki X/Y, albo kieszenie od spodu). Przy krawędziach i wokół otworów,
+  magnesów i gwintów zostaje pełna ramka; panel pokazuje, ile materiału to oszczędza.
 - **Gwinty i śruby:** otwór z drukowanym gwintem (M6–M30, drobnozwojne, PG, rurowe G, własny skok),
   śruba / pręt gwintowany / króciec, nakrętka, otwór pod wkręcenie M2–M5. Przyciski „Dodaj pasującą
   śrubę / nakrętkę / otwór z gwintem” dobierają drugą część z luzem.

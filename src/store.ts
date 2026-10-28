@@ -7,7 +7,8 @@ import { finishing } from './geom/modify';
 import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
-import type { Bend, Edges, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, Xform } from './types';
+import { placeMates } from './geom/gearMates';
+import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, Xform } from './types';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
@@ -98,6 +99,8 @@ interface State {
   dropToFloor(id: string): void;
   matchingHole(id: string): void;
   matchingBolt(id: string): void;
+  /** Adds a gear (or rack, worm, wheel) meshing with this one; `kind` picks the partner. */
+  matingGear(id: string, kind: 'gear' | 'rack' | 'bevel' | 'worm' | 'wheel'): void;
   matchingNut(id: string): void;
   matchingThreadHole(id: string): void;
   addDrawers(id: string): void;
@@ -136,6 +139,7 @@ interface State {
   setBend(id: string, bend: Bend | undefined): void;
   /** Body modifiers kept on one solid of the body (the others are cleared). */
   setShell(id: string, shell: Shell | undefined): void;
+  setInfill(id: string, infill: Infill | undefined): void;
   /** Triangular ribs in the inside corners of an angle, channel or tee profile. */
   addRibs(id: string, count: number): void;
   setXform(id: string, xform: Xform | undefined): void;
@@ -293,13 +297,15 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
   let params = patch.params;
   if (params && def.normalize) params = def.normalize(src.params, params);
   const own = { ...src, ...patch, ...(params ? { params } : {}) };
+  // Moving a following gear by hand unhooks it from its driver.
+  if (src.gearMate && (patch.position || patch.rotation) && !('gearMate' in patch)) own.gearMate = undefined;
   const shareParams = !!params && !!src.link;
   const shareTexture = 'texture' in patch && !!src.link;
   const shareEdges = 'edges' in patch && !!src.link;
   const sharePose = !!src.rigid && (patch.position !== undefined || patch.rotation !== undefined);
   const follow = src.pattern && patch.position && patch.pattern === undefined ? followers(parts, src, own.position) : null;
   if (follow) own.pattern = follow.get(src.id)!.pattern;
-  return parts.map((p) => {
+  return placeMates(parts.map((p) => {
     if (p.id === id) return own;
     let q = p;
     if (shareParams && p.link === src.link) {
@@ -313,7 +319,7 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
     const f = follow?.get(p.id);
     if (f) q = { ...q, position: f.position, pattern: f.pattern };
     return q;
-  });
+  }));
 }
 
 /** New positions of every member of `src`'s pattern after `src` moves to `to` (rule kept). */
@@ -862,6 +868,33 @@ export const useStore = create<State>((set, get) => {
           ? 'Gniazdo gotowe. Postaw drugą część na czopie, a gniazdo wytnie się w niej samo.'
           : `Gniazdo wycięte w bryle ${target} (luz 0,3 mm).`,
       );
+    },
+
+    matingGear(id, kind) {
+      const { parts } = get();
+      const src = parts.find((x) => x.id === id);
+      if (!src) return;
+      const p = src.params;
+      const shared = { m: p.m, fit: p.fit };
+      const flip = p.hand === 'left' ? 'right' : 'left';
+      let made: Part | null = null;
+      if (kind === 'gear' && (src.type === 'gear' || src.type === 'rack')) {
+        const kindOf = src.type === 'gear' ? p.kind : 'spur';
+        made = makePart('gear', parts, { params: { ...shared, z: src.type === 'gear' ? p.z : 20, h: p.h, kind: kindOf, beta: p.beta ?? 20, hand: flip, boreT: p.boreT ?? 'round', bore: p.bore ?? 5 } });
+      } else if (kind === 'rack' && src.type === 'gear') {
+        made = makePart('rack', parts, { params: { ...shared, n: Math.max(10, Math.round(Number(p.z))), h: p.h } });
+      } else if (kind === 'bevel' && src.type === 'bevelGear') {
+        made = makePart('bevelGear', parts, { params: { ...shared, z: p.zMate, zMate: p.z, b: p.b, back: p.back, boreT: p.boreT, bore: p.bore } });
+      } else if (kind === 'wheel' && src.type === 'worm') {
+        made = makePart('wormWheel', parts, { params: { ...shared, z: 30, h: Math.max(4, Math.round(Number(p.dw) * 0.6)), dw: p.dw, starts: p.starts, hand: p.hand } });
+      } else if (kind === 'worm' && src.type === 'wormWheel') {
+        made = makePart('worm', parts, { params: { ...shared, dw: p.dw, starts: p.starts, hand: p.hand, L: Math.max(10, Math.round(Number(p.dw) * 1.6)) } });
+      }
+      if (!made) return;
+      made.name = `${made.name} (para do: ${src.name})`;
+      made.gearMate = { of: src.id, angle: 0 };
+      commit(placeMates([...parts, made]), { selectedId: made.id });
+      get().notify('Pasująca część stoi tam, gdzie zęby się zazębiają. Zmieniasz liczbę zębów, a para sama się rozsuwa; przesunięcie jej ręcznie odpina ją.');
     },
 
     matchingBolt(id) {
@@ -1550,6 +1583,12 @@ export const useStore = create<State>((set, get) => {
         }
       commit(next, { selectedId: first });
       get().notify(`Dodano ${next.length - parts.length} żeber w narożnikach. Są powiązane: zmień wymiary jednego, zmienią się wszystkie.`);
+    },
+
+    setInfill(id, infill) {
+      const src = get().parts.find((p) => p.id === id);
+      if (!src) return;
+      commit(get().parts.map((p) => (p.id === id ? { ...p, infill } : p.body === src.body && p.infill ? { ...p, infill: undefined } : p)));
     },
 
     setShell(id, shell) {

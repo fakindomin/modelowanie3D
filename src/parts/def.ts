@@ -21,7 +21,7 @@ export type ParamDef =
   | (ParamBase & { type: 'bool'; def: boolean })
   | (ParamBase & { type: 'text'; def: string; max?: number });
 
-export type Category = 'ready' | 'profile' | 'basic' | 'joints' | 'threads' | 'hinges' | 'fittings' | 'connectors' | 'figurines';
+export type Category = 'ready' | 'profile' | 'basic' | 'joints' | 'threads' | 'hinges' | 'fittings' | 'connectors' | 'gears' | 'figurines';
 
 /** One printed piece of a multi-piece fitting (hinge leaf, gland nut…). */
 export interface PieceDef {

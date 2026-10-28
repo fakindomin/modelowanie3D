@@ -6,7 +6,7 @@ import { M, matrixToMat4, toGeometry } from './manifold';
 import { applyTexture } from './texture';
 import { applyEdges } from './edges';
 import { applyBend } from './bend';
-import { applyShell, applyXform } from './modify';
+import { applyInfill, applyShell, applyXform } from './modify';
 
 interface Built {
   manifold: Manifold;
@@ -131,6 +131,15 @@ export function buildBodies(parts: Part[], only?: number[]): BodyResult[] {
       }, 'clip');
     const shell = solids.find((p) => p.shell?.on)?.shell;
     if (shell) step((m) => applyShell(m, shell), 'shell');
+    const infill = solids.find((p) => p.infill?.on)?.infill;
+    if (infill)
+      step((m) => {
+        const keep = holes.map((h) => {
+          const bb = worldBox(h);
+          return { min: bb.min.toArray(), max: bb.max.toArray() };
+        });
+        return applyInfill(m, infill, keep);
+      }, 'infill');
     if (holes.length) {
       const holeMs = holes.map(worldManifold);
       const cut = M().Manifold.union(holeMs);

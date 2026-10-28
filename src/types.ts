@@ -57,6 +57,22 @@ export interface Shell {
   open: 'none' | 'top' | 'bottom';
 }
 
+/** See-through pattern cut into a whole body to save filament, with a solid frame left at edges and holes. */
+export interface Infill {
+  on: boolean;
+  pattern: 'tri' | 'hex' | 'diamond' | 'slot' | 'circle';
+  /** Direction the openings go through: Z = seen from above (plates, floors), X/Y = side walls. */
+  axis: 'x' | 'y' | 'z';
+  /** Repeat of the pattern and width of the struts, mm. */
+  cell: number;
+  rib: number;
+  /** Solid border kept along the edges and around holes, mm. */
+  margin: number;
+  /** through: openings; pocket: blind pockets from the bottom (or the -X / -Y side), `depth` deep. */
+  mode: 'through' | 'pocket';
+  depth: number;
+}
+
 /** Mirror and scale of a whole body, about the centre of its base (kept on one of its solids). */
 export interface Xform {
   mirror: 'none' | 'x' | 'y' | 'z';
@@ -88,6 +104,7 @@ export interface Part {
   edges?: Edges;
   bend?: Bend;
   shell?: Shell;
+  infill?: Infill;
   xform?: Xform;
   /** Kept in the model and the print, just not drawn. */
   hidden?: boolean;
@@ -97,6 +114,8 @@ export interface Part {
   clip?: boolean;
   /** Lid made for this box: its size (and divider slots) follow the box. */
   fitTo?: string;
+  /** Gear meshing with another one: it stays where its teeth fit the driver's, also after edits. */
+  gearMate?: { of: string; angle: number };
   /** Member of a pattern that keeps its rule: move one member and the others follow. */
   pattern?: PatternRule;
 }
