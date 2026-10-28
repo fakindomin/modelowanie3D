@@ -157,6 +157,25 @@ function useShortcuts() {
   }, []);
 }
 
+/** "Skopiować do pozostałych 3 narożników?" after placing an element in a corner of its body. */
+function CornerSuggest() {
+  const suggest = useStore((s) => s.suggest);
+  const part = useStore((s) => (s.suggest ? s.parts.find((p) => p.id === s.suggest!.id) : undefined));
+  const st = useStore.getState();
+  if (!suggest || !part) return null;
+  return (
+    <div className="suggest">
+      <span>
+        Skopiować „{part.name}” do pozostałych 3 narożników? Odsunięcie od rogu zostanie takie samo, a kopie będą się przesuwać symetrycznie.
+      </span>
+      <button className="primary" onClick={() => st.pattern(part.id, 'corners', { count: 4, distance: 0, axis: 0, inset: 0, radius: 0 })}>
+        Tak, skopiuj
+      </button>
+      <button onClick={st.dismissSuggest}>Nie</button>
+    </div>
+  );
+}
+
 export function App() {
   useShortcuts();
   useEffect(() => {
@@ -176,6 +195,7 @@ export function App() {
         </div>
         {toast && <div className="toast">{toast}</div>}
         <MeasurePanel />
+        <CornerSuggest />
       </main>
       <Properties />
     </div>

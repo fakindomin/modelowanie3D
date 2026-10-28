@@ -7,6 +7,7 @@ import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
 import type { Part, Texture, Vec3 } from '../types';
 import { Icon } from './Icon';
+import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
@@ -179,24 +180,27 @@ function XYZ({ value, onChange, step, unit }: { value: Vec3; onChange: (i: numbe
 
 function Helpers({ part }: { part: Part }) {
   const st = useStore();
-  const b = (label: string, fn: () => void) => (
-    <button key={label} className="action" onClick={fn}>
-      {label}
-    </button>
+  const b = (label: string, fn: () => void, info?: string) => (
+    <div key={label} className="action-row">
+      <button className="action" onClick={fn}>
+        {label}
+      </button>
+      {info && <Info text={info} />}
+    </div>
   );
   const out = [];
-  if (part.type === 'peg' || part.type === 'pegSquare' || part.type === 'dovetail') out.push(b('+ Dodaj pasujące gniazdo (z luzem)', () => st.matchingHole(part.id)));
-  if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id)));
-  if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id)));
+  if (part.type === 'peg' || part.type === 'pegSquare' || part.type === 'dovetail') out.push(b('+ Dodaj pasujące gniazdo (z luzem)', () => st.matchingHole(part.id), INFO.matchHole));
+  if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id), INFO.drawers));
+  if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id), INFO.lid));
   if ((part.type === 'box' && (!part.params.shape || part.params.shape === 'rect') && !part.params.slide) || part.type === 'drawer')
-    out.push(b('⊞ Rozbij na płyty (każdą zmienisz osobno)', () => st.explode(part.id)));
-  if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id)));
+    out.push(b('⊞ Rozbij na płyty (każdą zmienisz osobno)', () => st.explode(part.id), INFO.explode));
+  if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id), INFO.bolt));
   if (part.type === 'bolt') {
-    out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id)));
-    out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id)));
+    out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id), INFO.nut));
+    out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id), INFO.threadHole));
   }
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
-    out.push(b(`⧉ Złącz z bryłą ${part.body} (pokaż gotowy element)`, () => st.merge(part.body)));
+    out.push(b(`⧉ Złącz z bryłą ${part.body} (pokaż gotowy element)`, () => st.merge(part.body), INFO.merge));
   return <>{out}</>;
 }
 
@@ -259,7 +263,7 @@ function PatternTool({ part }: { part: Part }) {
   const [count, setCount] = useState(4);
   const [distance, setDistance] = useState(10);
   const [axis, setAxis] = useState<0 | 1 | 2>(0);
-  const [inset, setInset] = useState(6);
+  const [inset, setInset] = useState(0);
   const [radius, setRadius] = useState(0);
   return (
     <div className="tool">
@@ -274,6 +278,7 @@ function PatternTool({ part }: { part: Part }) {
           <option value="mirrorXY">Lustro X i Y (4 sztuki od tego miejsca)</option>
         </select>
       </label>
+      <p className="desc">{PATTERN_INFO[kind]}</p>
       {(kind === 'linear' || kind === 'circle') && (
         <label className="field">
           <span>Ile sztuk razem</span>
@@ -303,8 +308,8 @@ function PatternTool({ part }: { part: Part }) {
         </label>
       )}
       {kind === 'corners' && (
-        <label className="field">
-          <span>Odsunięcie od krawędzi</span>
+        <label className="field" title="0 = zostaw element tam, gdzie stoi, i skopiuj go z tym samym odsunięciem od rogu">
+          <span>Odsunięcie od rogu (0 = jak teraz)</span>
           <NumberInput value={inset} min={0} max={500} unit="mm" onChange={setInset} />
         </label>
       )}
@@ -371,10 +376,12 @@ function TextureTool({ part }: { part: Part }) {
 
 const PATTERN_LABEL = { linear: 'w rzędzie', circle: 'po okręgu', sym: 'symetryczny' } as const;
 
-function Section({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
+function Section({ title, children, open = false, info }: { title: string; children: React.ReactNode; open?: boolean; info?: string }) {
   return (
     <details className="section" open={open}>
-      <summary>{title}</summary>
+      <summary>
+        {title} {info && <Info text={info} />}
+      </summary>
       {children}
     </details>
   );
@@ -419,7 +426,9 @@ function PartProperties({ part }: { part: Part }) {
       )}
       {pieces > 1 && <p className="desc">Część zestawu ({pieces} elementy). Przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</p>}
 
-      <h4>Wymiary</h4>
+      <h4>
+        Wymiary <Info text={INFO.dims} />
+      </h4>
       {fields.map((p) => (
         <div key={p.key}>
           {p.group && <h5>{p.group}</h5>}
@@ -436,13 +445,17 @@ function PartProperties({ part }: { part: Part }) {
       )}
       <Helpers part={part} />
 
-      <h4>Położenie</h4>
+      <h4>
+        Położenie <Info text={INFO.position} />
+      </h4>
       <XYZ value={part.position} step={st.settings.grid || 1} onChange={setPos} />
       <button className="small" onClick={() => st.dropToFloor(part.id)}>
         Połóż na stole
       </button>
 
-      <h4>Obrót</h4>
+      <h4>
+        Obrót <Info text={INFO.rotation} />
+      </h4>
       <XYZ value={part.rotation} step={15} unit="°" onChange={setRot} />
       <div className="row">
         {(['X', 'Y', 'Z'] as const).map((a, i) => (
@@ -453,31 +466,37 @@ function PartProperties({ part }: { part: Part }) {
       </div>
 
       {(part.type === 'box' || part.type === 'lid') && (
-        <Section title="🧲 Miejsca na magnesy">
+        <Section title="🧲 Miejsca na magnesy" info={INFO.magnets}>
           <MagnetTool target={part.id} body={part.body} />
         </Section>
       )}
       {!part.rigid && (
-        <Section title="Szyk: kopiuj, okrąg, narożniki, lustro">
+        <Section title="Szyk: kopiuj, okrąg, narożniki, lustro" info={INFO.pattern}>
           <PatternTool part={part} />
         </Section>
       )}
       {!part.hole && part.type !== 'figurine' && (
-        <Section title="Faktura powierzchni" open={!!part.texture}>
+        <Section title="Faktura powierzchni" open={!!part.texture} info={INFO.texture}>
           <TextureTool part={part} />
         </Section>
       )}
 
-      <h4>Wydruk</h4>
+      <h4>
+        Wydruk <Info text={INFO.print} />
+      </h4>
       <label className="field">
-        <span>Rodzaj</span>
+        <span>
+          Rodzaj <Info text={INFO.hole} />
+        </span>
         <select value={part.hole ? 'hole' : 'solid'} onChange={(e) => st.update(part.id, { hole: e.target.value === 'hole', color: e.target.value === 'hole' ? '#8b939e' : part.color === '#8b939e' ? '#4f8edc' : part.color })}>
           <option value="solid">Bryła (materiał)</option>
           <option value="hole">Otwór (wycina)</option>
         </select>
       </label>
       <label className="field" title="Elementy w tej samej bryle są sklejane w jeden wydruk. Otwory wycinają tylko swoją bryłę.">
-        <span>Należy do bryły</span>
+        <span>
+          Należy do bryły <Info text={INFO.body} />
+        </span>
         <select value={part.body} onChange={(e) => st.update(part.id, { body: Number(e.target.value) })}>
           {bodies.map((b) => (
             <option key={b} value={b}>
@@ -524,6 +543,7 @@ function GroupProperties({ body }: { body: number }) {
       <div className="props-head">
         <Icon type="cube" hole={false} />
         <b className="name">Bryła {body}</b>
+        <Info text={INFO.group} />
       </div>
       <p className="desc">
         {members.length} {members.length === 1 ? 'element' : 'elementów'}, w tym {holes} {holes === 1 ? 'otwór' : 'otworów'}. Wymiary: {size.map((v) => Math.round(v * 10) / 10).join(' × ')} mm.
@@ -534,7 +554,7 @@ function GroupProperties({ body }: { body: number }) {
           {merged ? '⧈ Rozdziel (pokaż otwory osobno)' : '⧉ Złącz otwory z bryłą (pokaż gotowy element)'}
         </button>
       )}
-      <Section title="🧲 Miejsca na magnesy (pudełko z płyt)">
+      <Section title="🧲 Miejsca na magnesy (pudełko z płyt)" info={INFO.magnets}>
         <MagnetTool target={groupId(body)} body={body} />
       </Section>
       {merged && <p className="desc">Złączona: widać gotowy element. Otwory nadal możesz kliknąć (na liście albo w modelu) i przesuwać w bryle.</p>}

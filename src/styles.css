@@ -204,3 +204,24 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 .chip.main { border-color: #3f5f8a; }
 .chip:hover { border-color: var(--accent); }
 .chip.recent { color: var(--accent-2); }
+
+/* ⓘ marks */
+.info { position: relative; display: inline-block; margin-left: 4px; color: var(--muted); cursor: help; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.info:hover, .info.open, .info:focus { color: var(--accent); outline: none; }
+.info-pop {
+  position: fixed; z-index: 50; width: 240px;
+  background: #0f1217; color: var(--text); border: 1px solid var(--accent); border-radius: 6px;
+  padding: 6px 8px; font-size: 12px; line-height: 1.35; box-shadow: 0 4px 14px #000a; white-space: normal;
+}
+.action-row { display: flex; align-items: center; gap: 4px; }
+.action-row .action { flex: 1; }
+
+/* Corner copy offer */
+.suggest {
+  position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 6;
+  display: flex; align-items: center; gap: 8px; max-width: min(640px, 92%);
+  background: #191d25f2; border: 1px solid var(--accent-2); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  box-shadow: 0 4px 16px #0009;
+}
+.suggest button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+.suggest button.primary { background: var(--accent-2); border-color: var(--accent-2); color: #10261a; font-weight: 600; }

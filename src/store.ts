@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as THREE from 'three';
 import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from './catalog';
 import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
-import { buildBodies, built, partMatrix, worldBox } from './geom/parts';
+import { buildBodies, built, partMatrix, worldBox, worldManifold } from './geom/parts';
 import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planSpots, wallThickness, type LidRef, type MagnetOptions } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
@@ -119,6 +119,11 @@ interface State {
   removeBody(body: number): void;
   /** Moves holes that no longer touch their own body into the body they now sit in. */
   fixHoles(): void;
+  /** After the user moves a part: join the body it now stands in, fix holes, maybe offer corner copies. */
+  afterMove(id: string): void;
+  /** Offer shown after placing an element in a body's corner. */
+  suggest: { id: string } | null;
+  dismissSuggest(): void;
   mergeAll(): void;
   runCheck(): void;
   closeCheck(): void;
@@ -481,6 +486,8 @@ export const useStore = create<State>((set, get) => {
     measure: false,
     measureHover: null,
     recent: loadRecent(),
+    suggest: null,
+    dismissSuggest: () => set({ suggest: null }),
     pins: [],
     fit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),
     setMeasure: (on) => set({ measure: on, measureHover: null, pins: on ? get().pins : [], preview: false }),
@@ -512,7 +519,7 @@ export const useStore = create<State>((set, get) => {
       });
     },
 
-    select: (id) => set({ selectedId: id }),
+    select: (id) => set((s) => ({ selectedId: id, suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
     setHover: (id) => {
       if (get().hoveredId !== id) set({ hoveredId: id });
     },
@@ -534,6 +541,7 @@ export const useStore = create<State>((set, get) => {
         } else if (parts.length) pushRight(parts, part);
       }
       commit([...parts, part], { selectedId: part.id, fitRequest: get().fitRequest + (sel ? 0 : 1) });
+      if (sel && inCorner(get().parts, get().parts.find((p) => p.id === part.id)!)) set({ suggest: { id: part.id } });
       return part.id;
     },
 
@@ -569,6 +577,7 @@ export const useStore = create<State>((set, get) => {
 
     update(id, patch) {
       commit(applyPatch(get().parts, id, patch));
+      if (patch.position && !patch.rotation) get().afterMove(id);
       const p = get().parts.find((x) => x.id === id);
       if (patch.params && p && !p.params.piece && p.type !== 'figurine') {
         const recent = { ...get().recent, [p.type]: p.params };
@@ -1053,8 +1062,9 @@ export const useStore = create<State>((set, get) => {
           });
         }
       } else if (kind === 'corners') {
+        // Inset 0 keeps the element where it is (same offset from its corner); otherwise it moves to that inset.
         const e = opt.inset;
-        moved = [ref.min.x + e, ref.min.y + e, src.position[2]];
+        moved = e > 0 ? [ref.min.x + e, ref.min.y + e, src.position[2]] : [...src.position];
         srcRule = { kind: 'sym', i: 0, n: 4, s: [1, 1] };
         const signs: [number, number][] = [
           [-1, 1],
@@ -1083,7 +1093,7 @@ export const useStore = create<State>((set, get) => {
         const pos = r3(c.position);
         next.push({ ...src, id: uid(), name: `${src.name} · ${i + 2}`, params: { ...src.params }, link, position: pos, rotation: c.rotation, pattern: rule(pos, c.rule) });
       });
-      commit(next);
+      commit(next, { suggest: null });
       get().notify(`Dodano ${copies.length} ${copies.length === 1 ? 'kopię' : 'kopii'}. Są powiązane: zmiana wymiarów jednej zmienia wszystkie, a przesunięcie jednej przesuwa resztę według szyku.`);
     },
 
@@ -1191,6 +1201,28 @@ export const useStore = create<State>((set, get) => {
       if (next !== parts) set({ parts: next });
     },
 
+    afterMove(id) {
+      const { parts } = get();
+      let next = parts;
+      const p = parts.find((x) => x.id === id);
+      let joined: number | null = null;
+      if (p && !p.hole && !p.rigid && p.type !== 'figurine') {
+        joined = hostBody(parts, p);
+        if (joined !== null) {
+          const merged = isMerged(parts, joined);
+          next = next.map((q) => (q.id === id ? { ...q, body: joined!, merged: merged || undefined } : q));
+        }
+      }
+      next = fixHolesIn(next);
+      if (next !== parts) set({ parts: next });
+      if (joined !== null) {
+        const host = next.find((q) => q.body === joined && !q.hole && q.id !== id);
+        get().notify(`„${p!.name}” stoi w bryle ${joined}${host ? ` (${host.name})` : ''}, więc do niej dołączył: razem to jeden wydruk, a szyki liczą się od tej bryły. „Cofnij” przywraca.`);
+      }
+      const cur = next.find((x) => x.id === id);
+      set({ suggest: cur && inCorner(next, cur) ? { id } : null });
+    },
+
     mergeAll() {
       commit(get().parts.map((p) => ({ ...p, body: 1 })));
       get().notify('Wszystkie elementy tworzą teraz jedną bryłę.');
@@ -1286,6 +1318,51 @@ function fixHolesIn(parts: Part[]): Part[] {
     return { ...hole, body: target };
   });
   return changed ? next : parts;
+}
+
+/**
+ * Body a moved solid now stands in, when it left its own: it touches nothing of its own body and
+ * sits inside (or cuts into) another body's solids. Null when it should stay where it is.
+ */
+function hostBody(parts: Part[], part: Part): number | null {
+  const pb = worldBox(part);
+  const near = pb.clone().expandByScalar(0.05);
+  if (parts.some((q) => q.body === part.body && q.id !== part.id && !q.hole && worldBox(q).intersectsBox(near))) return null;
+  let best: number | null = null;
+  let bestVol = 0;
+  for (const q of parts) {
+    if (q.hole || q.body === part.body || q.id === part.id || q.type === 'figurine') continue;
+    const qb = worldBox(q);
+    const inside = qb.clone().expandByScalar(0.05).containsBox(pb);
+    const inter = qb.clone().intersect(pb);
+    if (inter.isEmpty()) continue;
+    let cuts = false;
+    if (!inside) {
+      const a = worldManifold(part), b = worldManifold(q);
+      const i = a.intersect(b);
+      cuts = i.volume() > 0.5;
+      [a, b, i].forEach((m) => m.delete());
+    }
+    if ((inside || cuts) && volume(inter) > bestVol) {
+      bestVol = volume(inter);
+      best = q.body;
+    }
+  }
+  return best;
+}
+
+/** Is the part standing in a corner of its body (a column or pocket that could be copied to the other corners)? */
+function inCorner(parts: Part[], part: Part): boolean {
+  if (part.pattern || part.rigid || part.type === 'figurine') return false;
+  const host = bodyBox(parts, part.body, part.id);
+  if (host.isEmpty()) return false;
+  const pb = worldBox(part);
+  const W = host.max.x - host.min.x, D = host.max.y - host.min.y;
+  const s = pb.getSize(new THREE.Vector3());
+  if (s.x > 0.4 * W || s.y > 0.4 * D) return false;
+  const c = pb.getCenter(new THREE.Vector3());
+  const ex = Math.min(c.x - host.min.x, host.max.x - c.x), ey = Math.min(c.y - host.min.y, host.max.y - c.y);
+  return ex >= 0 && ey >= 0 && ex < Math.max(8, 0.15 * W) && ey < Math.max(8, 0.15 * D);
 }
 
 /** Body (other than `exclude`) whose solids overlap the given part the most, or null. */

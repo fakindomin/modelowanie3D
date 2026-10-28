@@ -54,7 +54,9 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Składanie:** przeciąganie myszką, kładzenie elementu na tym, co jest pod nim (w pudełku na dnie,
   nie na krawędzi), przyciąganie do prawdziwych ścianek, także wewnętrznych (dno, ścianki, narożniki
   w środku pudełka), obrót o 90°, strzałki z osiami do podnoszenia. Strzałka pod kursorem ma
-  pierwszeństwo przed elementem za nią.
+  pierwszeństwo przed elementem za nią. Element postawiony w innej bryle (np. kolumna w pudełku)
+  sam do niej dołącza, a postawiony w rogu bryły dostaje propozycję „Skopiować do pozostałych 3 narożników?”.
+- **Opisy ⓘ:** przy sekcjach i przyciskach panelu; najechanie albo stuknięcie pokazuje, co robi funkcja.
 - **Bryły do druku:** każdy element należy do bryły. Elementy jednej bryły są sklejane w jeden wydruk,
   a jej otwory wycinają tylko ją. Dzięki temu czop zostaje na jednej części, a gniazdo powstaje w drugiej.
 - **Eksport:** STL (wszystko w jednym pliku) i 3MF (każda bryła jako osobny obiekt).

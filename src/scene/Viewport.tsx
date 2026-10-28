@@ -215,7 +215,8 @@ function Scene() {
       const st = useStore.getState();
       if (d.moved) {
         st.setSnapTargets([]);
-        st.fixHoles();
+        if (groupBody(d.target) === null) st.afterMove(d.target);
+        else st.fixHoles();
       } else if (d.cycle && d.cycle.length > 1) {
         const i = d.cycle.indexOf(d.target);
         st.select(d.cycle[(i + 1) % d.cycle.length]);
@@ -401,7 +402,8 @@ function Gizmo() {
       onMouseUp={() => {
         dragging.current = null;
         useStore.getState().setSnapTargets([]);
-        useStore.getState().fixHoles();
+        if (gb === null) useStore.getState().afterMove(selectedId);
+        else useStore.getState().fixHoles();
       }}
     />
   );
