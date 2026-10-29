@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Manifold } from 'manifold-3d';
 import { DEFS } from '../catalog';
-import type { Part } from '../types';
+import type { Part, Texture } from '../types';
 import { M, matrixToMat4, toGeometry } from './manifold';
 import { applyTexture } from './texture';
 import { applyEdges } from './edges';
@@ -17,8 +17,14 @@ interface Built {
 
 const cache = new Map<string, Built>();
 
+/** Every texture of a part: the older single one and the per-face ones. */
+export function texturesOf(part: Part): Texture[] {
+  return [...(part.texture ? [part.texture] : []), ...(part.textures ?? [])];
+}
+
 function key(part: Part) {
-  return part.type + JSON.stringify(part.params) + (part.texture ? JSON.stringify(part.texture) : '') + (part.edges ? JSON.stringify(part.edges) : '');
+  const tex = texturesOf(part);
+  return part.type + JSON.stringify(part.params) + (tex.length ? JSON.stringify(tex) : '') + (part.edges ? JSON.stringify(part.edges) : '');
 }
 
 /** Local geometry of a part (centred in X/Y, resting on Z = 0), cached per type + params. */
@@ -30,13 +36,14 @@ export function built(part: Part): Built {
     let bad = false;
     try {
       manifold = DEFS[part.type].build(part.params);
-      if (part.texture && !part.hole) {
-        try {
-          manifold = applyTexture(manifold, part.texture);
-        } catch (e) {
-          console.warn('texture failed', e);
+      if (!part.hole)
+        for (const t of texturesOf(part)) {
+          try {
+            manifold = applyTexture(manifold, t);
+          } catch (e) {
+            console.warn('texture failed', e);
+          }
         }
-      }
       if (part.edges && !part.hole) {
         try {
           manifold = applyEdges(manifold, part.edges);

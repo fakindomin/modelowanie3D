@@ -163,6 +163,7 @@ function Help() {
           <ul>
             <li><b>Przeciągnij</b> element: przesuń. <b>Shift</b>: bez kładzenia, <b>Alt</b>: bez przyciągania</li>
             <li><b>Kliknij ponownie</b>: wybierz to, co leży pod spodem (np. otwór w bryle)</li>
+            <li><b>Dwuklik w ściankę</b>: faktura, napis i magnesy na tej ściance (panel po prawej)</li>
             <li><b>Tło</b>: obrót widoku · <b>prawy przycisk</b>: przesuń widok · <b>kółko</b>: zoom</li>
             <li><b>Strzałki, PgUp/PgDn</b>: przesuń o krok siatki · <b>R</b>: obróć o 90°</li>
             <li><b>F</b>: widok całości · <b>W</b>: wymiary · <b>Ctrl+Z / Ctrl+D / Delete</b></li>

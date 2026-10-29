@@ -44,7 +44,7 @@ function signature(members: Part[]) {
   const base = solids[0] ?? members[0];
   const inv = partMatrix(base.position, base.rotation).invert();
   const one = (p: Part) =>
-    JSON.stringify([p.type, p.params, p.hole, p.clip, p.texture, p.edges, p.bend, p.shell, p.infill, p.xform, p.merged]) +
+    JSON.stringify([p.type, p.params, p.hole, p.clip, p.texture, p.textures, p.edges, p.bend, p.shell, p.infill, p.xform, p.merged]) +
     (p === base ? '' : fix(inv.clone().multiply(partMatrix(p.position, p.rotation))));
   return members.map(one).sort().join('|');
 }

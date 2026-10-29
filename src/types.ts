@@ -103,6 +103,8 @@ export interface Part {
   /** Pieces of one fitting (hinge leaves, gland parts, figurine pieces) move together. */
   rigid?: string;
   texture?: Texture;
+  /** More textures, one per face (picked by double-clicking a face). */
+  textures?: Texture[];
   edges?: Edges;
   bend?: Bend;
   shell?: Shell;

@@ -29,7 +29,7 @@ const texSideField = (v: WizValues, round: boolean): Field[] =>
 /** A label on one face of the body `host` belongs to, as large as the face allows. */
 function addLabel(t: WizTools, on: Part, text: string, side: WallSide, cut: boolean, maxW: number, maxH: number) {
   const len = Math.max(1, [...text].length);
-  const size = r1(Math.max(3, Math.min(12, maxH * 0.45, (maxW * 0.8) / (len * 0.68))));
+  const size = r1(Math.max(3, Math.min(12, maxH * 0.45, (maxW * 0.8) / (len * 1.0))));
   const id = t.add(cut ? 'textCut' : 'text', { name: 'Napis', params: { text, size, depth: 0.8, bold: size < 6 ? 0.3 : 0 }, body: on.body, color: on.color });
   t.textToWall(id, side);
 }

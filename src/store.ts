@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as THREE from 'three';
 import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from './catalog';
 import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
-import { buildBodies, built, partMatrix, worldBox, worldManifold } from './geom/parts';
+import { buildBodies, built, partMatrix, texturesOf, worldBox, worldManifold } from './geom/parts';
 import { finishing } from './geom/modify';
 import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, type FaceMagnetOptions, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
@@ -10,7 +10,7 @@ import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check
 import { placeMates } from './geom/gearMates';
 import { isFitting, pipeFor, placeArmMates } from './geom/armMates';
 import { fittingGeo, oringFor, pinSpots, screwSpots } from './parts/couplings';
-import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, WizValues, Xform } from './types';
+import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, TextureFace, Vec3, WizValues, Xform } from './types';
 import { WIZARDS } from './wizards';
 import { host } from './wizards/host';
 import type { Feature } from './scene/measure';
@@ -150,6 +150,13 @@ interface State {
   pattern(id: string, kind: PatternKind, opt: PatternOptions): void;
   unlink(id: string): void;
   setTexture(id: string, texture: Texture | undefined): void;
+  /** Texture of one face (replacing that face's, if any); undefined removes it. */
+  setFaceTexture(id: string, face: TextureFace, texture: Texture | undefined): void;
+  /** Face picked by a double click: its texture face (part's own axes), wall side (world) and triangles to highlight. */
+  faceSel: { id: string; face: TextureFace | null; side: WallSide | null; tris: number[] } | null;
+  setFaceSel(f: { id: string; face: TextureFace | null; side: WallSide | null; tris: number[] } | null): void;
+  /** A label (raised or cut) on a wall of the body this part belongs to. */
+  addLabel(id: string, side: WallSide, text: string, cut: boolean): void;
   setEdges(id: string, edges: Edges | undefined): void;
   /** Bending of a whole body, kept on one of its solids (`id`); other solids of the body lose theirs. */
   setBend(id: string, bend: Bend | undefined): void;
@@ -326,7 +333,7 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
   // Same for a pipe (or its hole) moved off its fitting's arm.
   if (src.armOf && (patch.position || patch.rotation) && !('armOf' in patch)) own.armOf = undefined;
   const shareParams = !!params && !!src.link;
-  const shareTexture = 'texture' in patch && !!src.link;
+  const shareTexture = ('texture' in patch || 'textures' in patch) && !!src.link;
   const shareEdges = 'edges' in patch && !!src.link;
   const sharePose = !!src.rigid && (patch.position !== undefined || patch.rotation !== undefined);
   const follow = src.pattern && patch.position && patch.pattern === undefined ? followers(parts, src, own.position) : null;
@@ -339,7 +346,7 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
       if (p.params.piece !== undefined) next.piece = p.params.piece;
       q = { ...q, params: next };
     }
-    if (shareTexture && p.link === src.link) q = { ...q, texture: patch.texture };
+    if (shareTexture && p.link === src.link) q = { ...q, texture: own.texture, textures: own.textures };
     if (shareEdges && p.link === src.link) q = { ...q, edges: patch.edges };
     if (sharePose && p.rigid === src.rigid) q = { ...q, position: own.position, rotation: own.rotation };
     const f = follow?.get(p.id);
@@ -790,7 +797,7 @@ export const useStore = create<State>((set, get) => {
       });
     },
 
-    select: (id) => set((s) => ({ selectedId: id, multi: [], sketchSel: s.sketchSel && s.sketchSel.id === id ? s.sketchSel : null, suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
+    select: (id) => set((s) => ({ selectedId: id, multi: [], faceSel: s.faceSel && s.faceSel.id === id ? s.faceSel : null, sketchSel: s.sketchSel && s.sketchSel.id === id ? s.sketchSel : null, suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
     setHover: (id) => {
       if (get().hoveredId !== id) set({ hoveredId: id });
     },
@@ -848,6 +855,9 @@ export const useStore = create<State>((set, get) => {
 
     update(id, patch) {
       commit(applyPatch(get().parts, id, patch));
+      // A picked face no longer sits where it was drawn.
+      const fs = get().faceSel;
+      if (fs && fs.id === id && (patch.position || patch.rotation || patch.params)) set({ faceSel: { ...fs, tris: [] } });
       if (patch.position && !patch.rotation) get().afterMove(id);
       const p = get().parts.find((x) => x.id === id);
       if (patch.params && p && !p.params.piece && p.type !== 'figurine') {
@@ -1794,6 +1804,33 @@ export const useStore = create<State>((set, get) => {
 
     setTexture(id, texture) {
       get().update(id, { texture });
+    },
+
+    setFaceTexture(id, face, texture) {
+      const p = get().parts.find((x) => x.id === id);
+      if (!p) return;
+      const list = texturesOf(p).filter((t) => t.face !== face);
+      if (texture) list.push({ ...texture, face });
+      get().update(id, { texture: undefined, textures: list.length ? list : undefined });
+    },
+
+    faceSel: null,
+    setFaceSel: (faceSel) => set({ faceSel }),
+
+    addLabel(id, side, text, cut) {
+      const p = get().parts.find((x) => x.id === id);
+      if (!p || !text.trim()) return;
+      const box = bodyBox(get().parts, p.body);
+      const s = box.getSize(new THREE.Vector3());
+      // As large as the wall allows: 45 % of its height, the text (about one letter height per letter) across 80 % of its width.
+      const [w, h] = side === 'top' || side === 'bottom' ? [Math.max(s.x, s.y), Math.min(s.x, s.y)] : [side === 'left' || side === 'right' ? s.y : s.x, s.z];
+      const len = Math.max(1, [...text.trim()].length);
+      const size = round(Math.max(3, Math.min(20, h * 0.45, (w * 0.8) / (len * 1.0))), 1);
+      const keep = get().faceSel;
+      const tid = get().add(cut ? 'textCut' : 'text', { name: `Napis „${text.trim()}”`, params: { text: text.trim(), size, depth: 0.8, bold: size < 6 ? 0.3 : 0 }, body: p.body, color: p.color });
+      get().textToWall(tid, side);
+      get().select(id);
+      set({ faceSel: keep });
     },
 
     setEdges(id, edges) {

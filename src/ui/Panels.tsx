@@ -10,14 +10,14 @@ import { DEFAULT_EDGES } from '../geom/edges';
 import { DEFAULT_BEND } from '../geom/bend';
 import { DEFAULT_INFILL, DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/modify';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
-import type { Bend, Edges, Infill, Part, Shell, Texture, Vec3, Xform } from '../types';
+import type { Bend, Edges, Infill, Part, Shell, Texture, TextureFace, Vec3, Xform } from '../types';
 import { LATTICE_LABELS } from '../geom/lattice';
-import { buildBodies } from '../geom/parts';
+import { buildBodies, texturesOf } from '../geom/parts';
 import { Icon } from './Icon';
 import { SketchEditor } from './SketchEditor';
 import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
-import { WALL_SIDES, sideOf } from '../parts/connectors';
+import { WALL_SIDES, sideOf, type WallSide } from '../parts/connectors';
 import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, segmentsOf, toggleSegment, type DivLayout } from '../geom/dividers';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
@@ -584,10 +584,13 @@ function PatternTool({ part }: { part: Part }) {
   );
 }
 
-function TextureTool({ part }: { part: Part }) {
-  const setTexture = useStore((s) => s.setTexture);
-  const t = part.texture;
-  const set = (patch: Partial<Texture>) => setTexture(part.id, { ...(t ?? DEFAULT_TEXTURE), ...patch });
+function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) {
+  const setFaceTexture = useStore((s) => s.setFaceTexture);
+  const list = texturesOf(part);
+  const [pick, setPick] = useState<TextureFace>(fixed ?? list[0]?.face ?? 'top');
+  const face = fixed ?? pick;
+  const t = list.find((x) => x.face === face);
+  const set = (patch: Partial<Texture>) => setFaceTexture(part.id, face, { ...(t ?? DEFAULT_TEXTURE), ...patch, face });
   const n = (key: keyof Texture, label: string, min: number, max: number, step: number, unit?: string) => (
     <label className="field">
       <span>{label}</span>
@@ -596,9 +599,34 @@ function TextureTool({ part }: { part: Part }) {
   );
   return (
     <div className="tool">
+      {!fixed && (
+        <>
+          <p className="desc">Dwuklik w ściankę modelu wybiera ją od razu. Każda ścianka może mieć własną fakturę.</p>
+          {list.length > 0 && (
+            <div className="row">
+              {list.map((x) => (
+                <button key={x.face} className={x.face === face ? 'chip on' : 'chip'} onClick={() => setPick(x.face)}>
+                  {FACE_LABELS[x.face]}: {TEXTURE_LABELS[x.pattern]}
+                </button>
+              ))}
+            </div>
+          )}
+          <label className="field">
+            <span>Ścianka</span>
+            <select value={face} onChange={(e) => setPick(e.target.value as TextureFace)}>
+              {Object.entries(FACE_LABELS).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                  {list.some((x) => x.face === k) ? ' ✓' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
       <label className="field">
         <span>Faktura</span>
-        <select value={t ? t.pattern : 'none'} onChange={(e) => (e.target.value === 'none' ? setTexture(part.id, undefined) : set({ pattern: e.target.value as Texture['pattern'], mode: e.target.value === 'grooves' ? 'cut' : (t?.mode ?? 'add') }))}>
+        <select value={t ? t.pattern : 'none'} onChange={(e) => (e.target.value === 'none' ? setFaceTexture(part.id, face, undefined) : set({ pattern: e.target.value as Texture['pattern'], mode: e.target.value === 'grooves' ? 'cut' : (t?.mode ?? 'add') }))}>
           <option value="none">Gładka</option>
           {Object.entries(TEXTURE_LABELS).map(([k, l]) => (
             <option key={k} value={k}>
@@ -609,16 +637,6 @@ function TextureTool({ part }: { part: Part }) {
       </label>
       {t && (
         <>
-          <label className="field">
-            <span>Ścianka</span>
-            <select value={t.face} onChange={(e) => set({ face: e.target.value as Texture['face'] })}>
-              {Object.entries(FACE_LABELS).map(([k, l]) => (
-                <option key={k} value={k}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>
           {t.pattern !== 'grooves' && (
             <label className="field">
               <span>Wzór</span>
@@ -632,6 +650,62 @@ function TextureTool({ part }: { part: Part }) {
           {n('spacing', 'Odstęp', 0.8, 50, 0.2, 'mm')}
           {n('angle', 'Kierunek', -180, 180, 15, '°')}
           {n('margin', 'Margines od krawędzi', 0, 50, 0.5, 'mm')}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A label on the picked wall of the part's body. */
+function LabelTool({ part, side }: { part: Part; side: WallSide }) {
+  const addLabel = useStore((s) => s.addLabel);
+  const [text, setText] = useState('');
+  const [cut, setCut] = useState(true);
+  return (
+    <div className="tool">
+      <label className="field">
+        <span>Tekst</span>
+        <input className="textin" value={text} maxLength={40} placeholder="np. ŚRUBY M3" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+      </label>
+      <label className="field">
+        <span>Litery</span>
+        <select value={cut ? 'cut' : 'add'} onChange={(e) => setCut(e.target.value === 'cut')}>
+          <option value="cut">Wycięte</option>
+          <option value="add">Wypukłe</option>
+        </select>
+      </label>
+      <button className="action" disabled={!text.trim()} onClick={() => (addLabel(part.id, side, text, cut), setText(''))}>
+        + Dodaj napis na tej ściance
+      </button>
+    </div>
+  );
+}
+
+/** Options of the face picked by a double click: texture, label and magnets right there. */
+function FaceSection({ part }: { part: Part }) {
+  const fs = useStore((s) => s.faceSel);
+  const setFaceSel = useStore((s) => s.setFaceSel);
+  if (!fs || fs.id !== part.id) return null;
+  const off = opOff(part, 'texture');
+  const name = fs.face ? FACE_LABELS[fs.face].replace(' (walec, rura)', '') : 'skośna';
+  return (
+    <div className="facesel">
+      <div className="facesel-head">
+        <span>
+          ▣ Wybrana ścianka: <b>{name}</b>
+        </span>
+        <button className="mini" onClick={() => setFaceSel(null)} title="Zamknij (dwuklik w inną ściankę wybiera ją)">
+          ✕
+        </button>
+      </div>
+      <h5>Faktura</h5>
+      {off ? <p className="desc">{off.why}</p> : fs.face ? <TextureTool part={part} face={fs.face} /> : <p className="desc">Fakturę kładę na płaskich ściankach i bokach walców, a ta ścianka jest skośna.</p>}
+      {fs.side && !part.hole && (
+        <>
+          <h5>Napis</h5>
+          <LabelTool part={part} side={fs.side} />
+          <h5>Magnesy</h5>
+          <FaceMagnetTool key={fs.side} part={part} face={fs.side} />
         </>
       )}
     </div>
@@ -734,13 +808,13 @@ const FACES: [FaceMagnetOptions['face'], string][] = [
 ];
 
 /** Magnet pockets in one face of any element: a plate on a fridge, a figurine's base, blocks that snap together. */
-function FaceMagnetTool({ part }: { part: Part }) {
+function FaceMagnetTool({ part, face }: { part: Part; face?: FaceMagnetOptions['face'] }) {
   const add = useStore((s) => s.addFaceMagnets);
-  const [opt, setOpt] = useState<FaceMagnetOptions>({ size: '6x3', face: 'bottom', layout: part.type === 'figurine' ? 'center' : 'corners', n: 3, margin: 2 });
+  const [opt, setOpt] = useState<FaceMagnetOptions>({ size: '6x3', face: face ?? 'bottom', layout: part.type === 'figurine' ? 'center' : 'corners', n: 3, margin: 2 });
   const set = (p: Partial<FaceMagnetOptions>) => setOpt((o) => ({ ...o, ...p }));
   return (
     <div className="tool">
-      <p className="desc">Kieszenie na magnesy w wybranej ściance bryły. Gniazdo, które wypadłoby poza materiał (np. na krzywiźnie), zostanie pominięte.</p>
+      {!face && <p className="desc">Kieszenie na magnesy w wybranej ściance bryły. Gniazdo, które wypadłoby poza materiał (np. na krzywiźnie), zostanie pominięte.</p>}
       <label className="field">
         <span>Magnes (średnica × grubość)</span>
         <select value={opt.size} onChange={(e) => set({ size: e.target.value })}>
@@ -751,7 +825,7 @@ function FaceMagnetTool({ part }: { part: Part }) {
           ))}
         </select>
       </label>
-      <label className="field">
+      {!face && <label className="field">
         <span>Ścianka</span>
         <select value={opt.face} onChange={(e) => set({ face: e.target.value as FaceMagnetOptions['face'] })}>
           {FACES.map(([k, l]) => (
@@ -760,7 +834,7 @@ function FaceMagnetTool({ part }: { part: Part }) {
             </option>
           ))}
         </select>
-      </label>
+      </label>}
       <label className="field">
         <span>Ile i gdzie</span>
         <select value={opt.layout} onChange={(e) => set({ layout: e.target.value as FaceMagnetOptions['layout'] })}>
@@ -937,6 +1011,7 @@ function PartProperties({ part }: { part: Part }) {
         <input className="name" value={part.name} onChange={(e) => st.updateLive(part.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
       </div>
       <p className="desc">{def.description}</p>
+      <FaceSection part={part} />
       {part.locked && (
         <div className="linkbar">
           🔒 Zablokowany: nie przesuniesz go ani nie usuniesz.
@@ -1039,7 +1114,7 @@ function PartProperties({ part }: { part: Part }) {
       <OpSection part={part} op="edges" title="◠ Zaokrąglenia i fazki" open={!!part.edges} info={INFO.edges}>
         <EdgesTool part={part} />
       </OpSection>
-      <OpSection part={part} op="texture" title="Faktura powierzchni" open={!!part.texture} info={INFO.texture}>
+      <OpSection part={part} op="texture" title="Faktura powierzchni" open={texturesOf(part).length > 0} info={INFO.texture}>
         <TextureTool part={part} />
       </OpSection>
 

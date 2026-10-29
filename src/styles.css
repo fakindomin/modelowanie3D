@@ -559,3 +559,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .wiz-text { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; outline: none; }
 .wiz-text:focus { border-color: var(--accent); }
+.facesel { border: 1px solid var(--accent); background: #2a2622; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.facesel-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.facesel-head b { color: var(--accent); }
+.facesel h5 { margin: 8px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
+.textin { width: 150px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+.chip.on { border-color: var(--accent); color: #f3b27c; }

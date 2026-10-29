@@ -6,7 +6,8 @@ import { assembly, bodyBox, groupBody, groupId, isLocked, useStore } from '../st
 import { built, buildBodies, worldBox, type BodyResult } from '../geom/parts';
 import { finishing, warped } from '../geom/modify';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
-import type { Part, Vec3 } from '../types';
+import type { Part, TextureFace, Vec3 } from '../types';
+import type { WallSide } from '../parts/connectors';
 import { distance, featureAt, type Feature } from './measure';
 import { SketchHandles } from './SketchHandles';
 import { DimHandles } from './DimHandles';
@@ -301,6 +302,39 @@ function Scene() {
     };
   };
 
+  /** Double click on a face: pick the part and that face (texture, label and magnets in the panel). */
+  const onDouble = (e: ThreeEvent<MouseEvent>) => {
+    const st = useStore.getState();
+    if (st.measure || gizmoBusy()) return;
+    const it = e.intersections.find((i) => i.object instanceof THREE.Mesh && i.faceIndex != null && i.face && !i.object.userData.sketchHandle && !i.object.userData.handle);
+    if (!it) return;
+    e.stopPropagation();
+    let o: THREE.Object3D | null = it.object;
+    while (o && o.userData.pick === undefined) o = o.parent;
+    const pick = (o?.userData.pick as string) ?? '';
+    let part = st.parts.find((p) => p.id === pick);
+    const gb = groupBody(pick) ?? (part?.hole ? part.body : null);
+    if (gb !== null) {
+      // A group or a hole: the face belongs to the body's largest solid.
+      const solids = st.parts.filter((p) => p.body === gb && !p.hole);
+      part = solids.sort((a, b) => worldBox(b).getSize(new THREE.Vector3()).length() - worldBox(a).getSize(new THREE.Vector3()).length())[0];
+    }
+    if (!part) return;
+    const mesh = it.object as THREE.Mesh;
+    const nWorld = it.face!.normal.clone().transformDirection(mesh.matrixWorld);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(part.rotation.map((r) => (r * Math.PI) / 180) as Vec3)));
+    const nLocal = nWorld.clone().applyQuaternion(q.invert());
+    const rect = gl.domElement.getBoundingClientRect();
+    const toScreen = (v: THREE.Vector3) => {
+      const p = v.clone().project(camera);
+      return new THREE.Vector2(((p.x + 1) / 2) * rect.width, ((1 - p.y) / 2) * rect.height);
+    };
+    // Far from the cursor, so the face is taken, never an edge.
+    const f = featureAt({ geometry: mesh.geometry, matrix: mesh.matrixWorld, faceIndex: it.faceIndex!, point: it.point, pick, toScreen, cursor: new THREE.Vector2(-1e6, -1e6) });
+    st.select(part.id);
+    st.setFaceSel({ id: part.id, face: faceOf(nLocal), side: sideOfNormal(nWorld), tris: f?.tris ?? [] });
+  };
+
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     if (drag.current?.moved) return;
@@ -333,6 +367,7 @@ function Scene() {
   return (
     <group
       onPointerDown={onDown}
+      onDoubleClick={onDouble}
       onPointerMove={onMove}
       onPointerOut={() => {
         useStore.getState().setHover(null);
@@ -423,6 +458,33 @@ function Gizmo() {
       }}
     />
   );
+}
+
+/** Texture face (in the part's own axes) for a normal; round sides give "around", slopes nothing. */
+function faceOf(n: THREE.Vector3): TextureFace | null {
+  const a = [Math.abs(n.x), Math.abs(n.y), Math.abs(n.z)];
+  if (a[2] > 0.9) return n.z > 0 ? 'top' : 'bottom';
+  if (a[0] > 0.9) return n.x > 0 ? 'right' : 'left';
+  if (a[1] > 0.9) return n.y > 0 ? 'back' : 'front';
+  return a[2] < 0.3 ? 'around' : null;
+}
+
+/** World wall side a normal points to (labels and magnets go there), or nothing for a slope. */
+function sideOfNormal(n: THREE.Vector3): WallSide | null {
+  const a = [Math.abs(n.x), Math.abs(n.y), Math.abs(n.z)];
+  if (a[2] > 0.9) return n.z > 0 ? 'top' : 'bottom';
+  if (a[0] > 0.9) return n.x > 0 ? 'right' : 'left';
+  if (a[1] > 0.9) return n.y > 0 ? 'back' : 'front';
+  return null;
+}
+
+/** The face picked by a double click, tinted while its part stays selected. */
+function FaceSelMark() {
+  const fs = useStore((s) => s.faceSel);
+  const sel = useStore((s) => s.selectedId);
+  const f = useMemo(() => (fs && fs.tris.length ? ({ kind: 'face', pick: fs.id, label: '', values: [], tris: fs.tris, anchor: [0, 0, 0] } as Feature) : null), [fs]);
+  if (!f || fs!.id !== sel) return null;
+  return <FeatureMark f={f} color="#e8873a" />;
 }
 
 const HOVER_COLOR = '#ffd54a';
@@ -580,6 +642,7 @@ export function Viewport() {
       {!preview && !measure && <SketchHandles />}
       {!preview && !measure && <DimHandles />}
       <MeasureMarks />
+      <FaceSelMark />
       <CutPlane />
       <OrbitControls makeDefault enableDamping={false} />
       <CameraFit />
