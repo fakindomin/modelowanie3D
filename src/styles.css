@@ -557,3 +557,5 @@ body.resizing { cursor: col-resize; user-select: none; }
   .page { box-shadow: none; max-width: none; margin: 0; padding: 0; border-radius: 0; break-after: page; }
   .card { break-inside: avoid; }
 }
+.wiz-text { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; outline: none; }
+.wiz-text:focus { border-color: var(--accent); }

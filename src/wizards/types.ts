@@ -13,6 +13,7 @@ export type Field =
   | { kind: 'tiles'; key: string; label?: string; options: TileOption[]; cols?: 2 | 3 | 4 }
   | { kind: 'slider'; key: string; label: string; min: number; max: number; step: number; unit: string }
   | { kind: 'toggle'; key: string; label: string; desc: string }
+  | { kind: 'text'; key: string; label: string; placeholder?: string; max?: number }
   | { kind: 'hint'; text: string };
 
 export interface Step {

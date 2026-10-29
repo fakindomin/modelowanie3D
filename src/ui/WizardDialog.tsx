@@ -262,6 +262,13 @@ function FieldView({ f, values, set }: { f: Field; values: WizValues; set: (k: s
         </span>
       </label>
     );
+  if (f.kind === 'text')
+    return (
+      <label className="wiz-slider">
+        <span>{f.label}</span>
+        <input className="wiz-text" type="text" value={String(values[f.key] ?? '')} maxLength={f.max ?? 40} placeholder={f.placeholder} onChange={(e) => set(f.key, e.target.value)} />
+      </label>
+    );
   if (f.kind === 'slider')
     return (
       <label className="wiz-slider">

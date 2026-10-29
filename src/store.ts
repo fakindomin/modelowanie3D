@@ -2536,6 +2536,8 @@ host.simulate = (fn) => {
         st().addVariant({} as Family, { label: '', type: 'box', params, extra: 'hinged' }, 'recent');
         return st().parts.find((p) => p.type === 'box')?.id ?? '';
       },
+      update: (id, patch) => st().update(id, patch),
+      textToWall: (id, side) => st().textToWall(id, side),
       parts: () => st().parts,
     });
     return st().parts;

@@ -1,7 +1,10 @@
 import { MAGNETS, type Params } from '../catalog';
-import type { Vec3, WizValues } from '../types';
+import { worldBox } from '../geom/parts';
+import { TEXTURE_LABELS } from '../geom/texture';
+import type { WallSide } from '../parts/connectors';
+import type { Part, Texture, TextureFace, Vec3, WizValues } from '../types';
 import { PRINTERS } from './frame';
-import { host } from './host';
+import { host, type WizTools } from './host';
 import { rawPlan } from './raw';
 import type { Field, Plan, Wizard } from './types';
 
@@ -14,6 +17,30 @@ const pl = (n: number, one: string, few: string, many: string) => {
 const tiles = (key: string, options: Extract<Field, { kind: 'tiles' }>['options'], label?: string, cols?: 2 | 3 | 4): Field => ({ kind: 'tiles', key, label, options, cols });
 const printerField: Field = tiles('printer', Object.entries(PRINTERS).map(([k, pr]) => ({ value: k, label: pr.label, desc: `${pr.bed.join(' × ')} mm` })));
 const bedOf = (v: WizValues) => (PRINTERS[String(v.printer)] ?? PRINTERS.p1s).bed;
+
+// ------------------------------------------------------------------------------------- looks (shared)
+
+const texture = (pattern: string, face: TextureFace): Texture => ({ pattern: pattern as Texture['pattern'], face, mode: 'add', depth: 0.8, spacing: 3, angle: 0, margin: 3 });
+const SIDES: Record<string, string> = { front: 'Przód', back: 'Tył', left: 'Lewy bok', right: 'Prawy bok' };
+const texField = (round: boolean): Field[] => [tiles('tex', [{ value: 'none', label: 'Gładko' }, ...Object.entries(TEXTURE_LABELS).map(([k, l]) => ({ value: k, label: l }))], 'Faktura ścianki', 3)];
+const texSideField = (v: WizValues, round: boolean): Field[] =>
+  v.tex !== 'none' && !round ? [tiles('texOn', Object.entries(SIDES).map(([k, l]) => ({ value: k, label: l })), 'Na której ściance', 4)] : [];
+
+/** A label on one face of the body `host` belongs to, as large as the face allows. */
+function addLabel(t: WizTools, on: Part, text: string, side: WallSide, cut: boolean, maxW: number, maxH: number) {
+  const len = Math.max(1, [...text].length);
+  const size = r1(Math.max(3, Math.min(12, maxH * 0.45, (maxW * 0.8) / (len * 0.68))));
+  const id = t.add(cut ? 'textCut' : 'text', { name: 'Napis', params: { text, size, depth: 0.8, bold: size < 6 ? 0.3 : 0 }, body: on.body, color: on.color });
+  t.textToWall(id, side);
+}
+
+/** Half-round finger notch in the top of the front wall. */
+function addNotch(t: WizTools, box: Part) {
+  const b = worldBox(box);
+  const wall = Number(box.params.T) || 2;
+  const r = r1(Math.min(12, (b.max.z - b.min.z) / 2.5, (b.max.x - b.min.x) / 4));
+  t.add('hole', { name: 'Wycięcie na palec', params: { D: 2 * r, H: 4 * wall + 2, luz: 0 }, position: [r1((b.min.x + b.max.x) / 2), r1(b.min.y + 2 * wall + 1), r1(b.max.z)], rotation: [90, 0, 0], body: box.body });
+}
 
 /** How many columns go into each printed piece so that none is wider than `limit` (as even as possible). */
 function split(n: number, cell: number, limit: number) {
@@ -33,7 +60,8 @@ function organizer(v: WizValues): Plan {
   const nx = Number(v.nx), ny = Number(v.ny), wall = Number(v.wall), rad = Number(v.rad);
   const cw = W0 / nx, ch = D0 / ny;
   const bins = v.mode === 'bins';
-  const GAP = bins ? 0.6 : 0.3;
+  // Relief on a wall (texture, raised letters) sticks out 0.8 mm: leave room for it between pieces.
+  const GAP = (bins ? 0.6 : 0.3) + (v.tex !== 'none' ? 1 : 0) + (String(v.text ?? '').trim() && v.textMode === 'raised' ? 1 : 0);
   const gx = bins ? Array(nx).fill(1) : split(nx, cw, bed[0] - 6);
   const gy = bins ? Array(ny).fill(1) : split(ny, ch, bed[1] - 6);
   const base: Params = { shape: 'rect', H: r1(H), T: wall, B: 1.2, divMode: 'grid', rad, slide: false, low: 0 };
@@ -48,12 +76,17 @@ function organizer(v: WizValues): Plan {
         const D = cy * ch;
         const key = `${r1(W)}x${r1(D)}x${cx}x${cy}`;
         if (!roles.has(key)) roles.set(key, bins ? 'K' : `W${roles.size + 1}`);
-        t.add('box', {
+        const id = t.add('box', {
           name: bins ? 'Pojemnik' : 'Wkład',
           params: { ...base, W: r1(W - GAP), D: r1(D - GAP), nx: cx, ny: cy, div: '' },
           position: [r1(x + W / 2), r1(y + D / 2), 0],
           color: '#c9b48a',
+          ...(v.tex !== 'none' ? { texture: texture(String(v.tex), String(v.texOn) as TextureFace) } : {}),
         });
+        const box = t.parts().find((p) => p.id === id)!;
+        if (bins && v.notch) addNotch(t, box);
+        const label = String(v.text ?? '').trim();
+        if (label) addLabel(t, box, label, 'front', v.textMode !== 'raised', W - GAP, H * 0.5);
         y += D;
       }
       x += W;
@@ -80,6 +113,7 @@ function organizer(v: WizValues): Plan {
   const tooBig = items.some((i) => Number(i.params.W) > bed[0] || Number(i.params.D) > bed[1]);
   if (tooBig) notes.push({ warn: true, text: 'Komora jest większa niż stół drukarki. Dodaj przegródek albo wybierz większą drukarkę.' });
   if (Math.min(cw, ch) < 15) notes.push({ warn: true, text: 'Komory węższe niż 15 mm trudno opróżnić palcami. Zmniejsz liczbę przegródek.' });
+  if (String(v.text ?? '').trim() && v.tex !== 'none' && v.texOn === 'front') notes.push({ warn: true, text: 'Napis i faktura są na przedniej ściance, napis będzie słabo widać. Przenieś fakturę na bok.' });
   if (H < 15) notes.push({ warn: true, text: 'Bardzo niski wkład: sprawdź wysokość szuflady.' });
 
   return {
@@ -103,7 +137,7 @@ export const ORGANIZER_WIZARD: Wizard = {
   id: 'organizer',
   label: 'Organizer do szuflady',
   desc: 'Wkład z przegródkami albo osobne pojemniki na wymiar szuflady, dzielony na części mieszczące się na stole.',
-  defaults: { dW: 300, dD: 400, dH: 60, luz: 1, mode: 'one', nx: 3, ny: 4, wall: 1.6, rad: 3, printer: 'p1s' },
+  defaults: { dW: 300, dD: 400, dH: 60, luz: 1, mode: 'one', nx: 3, ny: 4, wall: 1.6, rad: 3, tex: 'none', texOn: 'front', notch: true, text: '', textMode: 'cut', printer: 'p1s' },
   set: (v, key, value) => ({ ...v, [key]: value }),
   plan: organizer,
   steps: [
@@ -140,6 +174,19 @@ export const ORGANIZER_WIZARD: Wizard = {
         tiles('rad', [{ value: 0, label: 'Ostre' }, { value: 3, label: '3 mm' }, { value: 6, label: '6 mm' }], 'Narożniki', 3),
       ],
     },
+    {
+      title: 'Wygląd',
+      desc: 'Faktura i napis na ściance, wycięcie na palec w pojemnikach.',
+      focus: [],
+      focusLabel: 'wygląd',
+      fields: (v) => [
+        ...texField(false),
+        ...texSideField(v, false),
+        ...(v.mode === 'bins' ? [{ kind: 'toggle' as const, key: 'notch', label: 'Wycięcie na palec', desc: 'Półokrągłe wycięcie w przedniej ściance każdego pojemnika: łatwiej go wyjąć.' }] : []),
+        { kind: 'text', key: 'text', label: 'Napis na przodzie każdej części', placeholder: 'np. ŚRUBKI', max: 24 },
+        ...(String(v.text ?? '').trim() ? [tiles('textMode', [{ value: 'cut', label: 'Wycięty', desc: 'drukuje się czysto' }, { value: 'raised', label: 'Wypukły', desc: 'lepiej widać' }], undefined, 2)] : []),
+      ],
+    },
     { title: 'Drukarka', desc: 'Wielkość stołu decyduje, na ile części dzielę wkład.', focus: [], focusLabel: 'podział na części', fields: () => [printerField] },
     { title: 'Podsumowanie', desc: '„Utwórz projekt” wstawia wkład do edytora jako zwykłe pudełka z przegródkami.', focus: [], focusLabel: 'cały wkład', fields: () => [] },
   ],
@@ -153,6 +200,13 @@ const CLOSES: Record<string, { label: string; desc: string; shapes: string[] }> 
   slide: { label: 'Wsuwana', desc: 'w rowki od przodu', shapes: ['rect'] },
   magnet: { label: 'Na magnesy', desc: 'płaska, trzyma magnesami', shapes: ['rect', 'round', 'hex'] },
   screw: { label: 'Zakręcana', desc: 'gwint i uszczelka', shapes: ['round'] },
+};
+
+const KNOBS: Record<string, { label: string; desc: string; closes: string[] }> = {
+  none: { label: 'Bez', desc: 'gładka pokrywka', closes: ['press', 'hinge', 'slide', 'magnet', 'screw'] },
+  tab: { label: 'Uchwyt', desc: 'listewka przy krawędzi', closes: ['press', 'hinge', 'slide', 'magnet'] },
+  knob: { label: 'Gałka', desc: 'okrągła, na środku', closes: ['press', 'magnet'] },
+  notch: { label: 'Wycięcie na palec', desc: 'w przedniej ściance', closes: ['press', 'hinge', 'magnet'] },
 };
 
 function boxPlan(v: WizValues): Plan {
@@ -181,13 +235,36 @@ function boxPlan(v: WizValues): Plan {
     screw: close === 'screw',
     div: '',
   };
+  const knob = KNOBS[String(v.knob)]?.closes.includes(close) ? String(v.knob) : 'none';
+  const label = String(v.text ?? '').trim();
   const built = host.simulate((t) => {
-    if (close === 'hinge') return void t.addHinged(params);
-    const id = t.add('box', { name: 'Pudełko', params, color: '#a9aeb3' });
-    if (close === 'magnet') t.addMagnets(id, { size: String(v.mag), layout: shape === 'hex' ? '6' : '4', hidden: false, lid: 'flat' });
-    else t.addLid(id);
+    let id: string;
+    if (close === 'hinge') id = t.addHinged(params);
+    else {
+      id = t.add('box', { name: 'Pudełko', params, color: '#a9aeb3' });
+      if (close === 'magnet') t.addMagnets(id, { size: String(v.mag), layout: shape === 'hex' ? '6' : '4', hidden: false, lid: 'flat' });
+      else t.addLid(id);
+    }
+    const box = t.parts().find((p) => p.id === id)!;
+    const lid = t.parts().find((p) => (p.type === 'lid' || p.type === 'slab') && !p.hole);
+    if (v.tex !== 'none') t.update(id, { texture: texture(String(v.tex), shape === 'round' ? 'around' : (String(v.texOn) as TextureFace)) });
+    if (knob === 'notch') addNotch(t, t.parts().find((p) => p.id === id)!);
+    if (lid && (knob === 'knob' || knob === 'tab')) {
+      const b = worldBox(lid);
+      const cx = r1((b.min.x + b.max.x) / 2), cy = r1((b.min.y + b.max.y) / 2);
+      if (knob === 'knob') t.add('cylinder', { name: 'Gałka', params: { D: 16, H: 10 }, position: [cx, cy, r1(b.max.z)], color: '#e8873a', edges: { kind: 'round', r: 2, vertical: false, top: true, bottom: false } });
+      else t.add('cube', { name: 'Uchwyt', params: { W: r1(Math.min(40, (b.max.x - b.min.x) * 0.4)), D: 8, H: 6 }, position: [cx, r1(b.min.y + 8), r1(b.max.z)], color: '#e8873a', edges: { kind: 'round', r: 1.5, vertical: true, top: true, bottom: false } });
+    }
+    if (label) {
+      if (v.textOn === 'lid' && lid) {
+        const b = worldBox(lid);
+        addLabel(t, t.parts().find((p) => p.id === lid.id)!, label, 'top', true, b.max.x - b.min.x, (b.max.y - b.min.y) * 0.5);
+      } else addLabel(t, box, label, 'front', v.textMode !== 'raised', W, H);
+    }
   });
   const { parts, items, size } = rawPlan(built, (main) => {
+    if (main.type === 'cylinder' || main.type === 'cube')
+      return { role: 'G', name: main.type === 'cylinder' ? 'Gałka' : 'Uchwyt', group: 'box', material: 'PLA', where: main.type === 'cylinder' ? 'Przyklejona na środku pokrywki' : 'Przyklejony przy przedniej krawędzi pokrywki', how: 'Płaskim spodem do stołu, bez podpór.' };
     if (main.type === 'gasket') return { role: 'U', name: 'Uszczelka płaska', group: 'box', material: 'TPU', where: 'W pokrywce, pod gwintem', how: 'Leży płasko, TPU 85A–95A, wolno.' };
     if (main.type === 'lid' || main.type === 'slab')
       return {
@@ -208,6 +285,7 @@ function boxPlan(v: WizValues): Plan {
     const [d, h] = MAGNETS[s] ?? [0, 0];
     buy.push({ name: `Magnes neodymowy Ø${d} × ${h} mm`, qty: `${k} szt.`, note: 'Połowa w pudełku, połowa w pokrywce.' });
   }
+  if (knob === 'knob' || knob === 'tab') buy.push({ name: 'Klej cyjanoakrylowy (CA)', qty: '1 tubka', note: knob === 'knob' ? 'Do przyklejenia gałki.' : 'Do przyklejenia uchwytu.' });
   if (close === 'hinge') buy.push({ name: 'Filament 1,75 mm jako oś zawiasu', qty: `${mm(W + 10)} mm`, note: 'Kawałek z tej samej szpuli.' });
 
   const steps = ['Wydrukuj części z listy: pudełko dnem do stołu, pokrywkę wierzchem do stołu.'];
@@ -216,11 +294,13 @@ function boxPlan(v: WizValues): Plan {
   if (close === 'screw') steps.push('Włóż uszczelkę do pokrywki pod gwint i zakręć pokrywkę.');
   if (close === 'slide') steps.push('Wsuń pokrywkę w rowki od przodu.');
   if (close === 'press') steps.push('Wciśnij pokrywkę rantem w pudełko.');
+  if (knob === 'knob' || knob === 'tab') steps.splice(1, 0, `Przyklej ${knob === 'knob' ? 'gałkę na środku' : 'uchwyt przy przedniej krawędzi'} pokrywki kroplą kleju CA.`);
 
   const notes: Plan['notes'] = [];
   if (W > bed[0] || D > bed[1] || H > bed[2]) notes.push({ warn: true, text: `Pudełko nie mieści się na stole (${bed.join(' × ')} mm). Zmniejsz je albo wybierz większą drukarkę.` });
   if (close === 'slide' && Number(v.wall) < 2) notes.push({ text: 'Wsuwana pokrywka potrzebuje ścianki 2 mm na rowki: pogrubiłem ją.' });
   if (close === 'magnet' && !magnets.size) notes.push({ warn: true, text: 'Ścianki są za cienkie na te magnesy. Wybierz mniejsze albo grubszą ściankę.' });
+  if (label && v.textOn !== 'lid' && v.tex !== 'none' && (shape === 'round' || v.texOn === 'front')) notes.push({ warn: true, text: 'Napis i faktura są na tej samej ściance, napis będzie słabo widać. Przenieś fakturę na bok albo napis na pokrywkę.' });
   if (close === 'screw') notes.push({ text: 'Gwint ma skok 3 mm: zakręca się w niecały obrót i dobrze się drukuje.' });
 
   return { items, placements: [], parts, buy, steps, notes, bed, longest: H, size: size as Vec3 };
@@ -230,7 +310,7 @@ export const BOX_WIZARD: Wizard = {
   id: 'box',
   label: 'Pudełko z pokrywką',
   desc: 'Pudełko z przegródkami i pokrywką: wciskaną, na zawiasie, wsuwaną, na magnesy albo zakręcaną.',
-  defaults: { shape: 'rect', W: 100, D: 70, H: 45, wall: 2, close: 'hinge', mag: '6x3', nx: 1, ny: 1, nr: 0, rad: 4, printer: 'p1s' },
+  defaults: { shape: 'rect', W: 100, D: 70, H: 45, wall: 2, close: 'hinge', mag: '6x3', nx: 1, ny: 1, nr: 0, rad: 4, tex: 'none', texOn: 'front', knob: 'tab', text: '', textOn: 'front', textMode: 'cut', printer: 'p1s' },
   set(v, key, value) {
     const next = { ...v, [key]: value };
     // A closing the new shape cannot have falls back to a plain lid.
@@ -281,6 +361,24 @@ export const BOX_WIZARD: Wizard = {
               ...(v.close !== 'slide' ? [tiles('rad', [{ value: 0, label: 'Ostre' }, { value: 4, label: '4 mm' }, { value: 8, label: '8 mm' }], 'Narożniki', 3)] : []),
             ]
           : [tiles('nr', [{ value: 0, label: 'Bez' }, { value: 2, label: '2' }, { value: 3, label: '3' }, { value: 4, label: '4' }, { value: 6, label: '6' }].slice(0, 5), 'Komory (jak tort)', 4)],
+    },
+    {
+      title: 'Wygląd',
+      desc: 'Faktura ścianki, gałka albo uchwyt do otwierania i napis.',
+      focus: [],
+      focusLabel: 'wygląd',
+      fields: (v) => [
+        ...texField(v.shape === 'round'),
+        ...texSideField(v, v.shape === 'round'),
+        ...(v.close !== 'screw' ? [tiles('knob', Object.entries(KNOBS).filter(([, k]) => k.closes.includes(String(v.close))).map(([k, o]) => ({ value: k, label: o.label, desc: o.desc })), 'Do otwierania')] : []),
+        { kind: 'text', key: 'text', label: 'Napis', placeholder: 'np. ŚRUBKI M3', max: 24 },
+        ...(String(v.text ?? '').trim()
+          ? [
+              tiles('textOn', [{ value: 'front', label: 'Na przodzie pudełka' }, { value: 'lid', label: 'Na pokrywce', desc: 'wycięty' }]),
+              ...(v.textOn !== 'lid' ? [tiles('textMode', [{ value: 'cut', label: 'Wycięty', desc: 'drukuje się czysto' }, { value: 'raised', label: 'Wypukły', desc: 'lepiej widać' }])] : []),
+            ]
+          : []),
+      ],
     },
     { title: 'Drukarka', desc: 'Sprawdzam, czy pudełko i pokrywka mieszczą się na stole.', focus: [], focusLabel: 'wielkość', fields: () => [printerField] },
     { title: 'Podsumowanie', desc: '„Utwórz projekt” wstawia pudełko i pokrywkę jako zwykłe elementy: pokrywka dalej śledzi pudełko.', focus: [], focusLabel: 'całość', fields: () => [] },
