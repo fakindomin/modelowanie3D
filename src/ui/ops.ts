@@ -9,7 +9,7 @@ export interface OpOff {
   use?: string;
 }
 
-type Group = 'container' | 'plate' | 'profile' | 'tubeProfile' | 'basic' | 'sketch' | 'text' | 'thread' | 'gear' | 'rack' | 'joint' | 'fitting' | 'pipe' | 'figurine' | 'mesh';
+type Group = 'container' | 'plate' | 'profile' | 'tubeProfile' | 'basic' | 'sketch' | 'text' | 'thread' | 'gear' | 'rack' | 'joint' | 'fitting' | 'coupling' | 'pipe' | 'figurine' | 'mesh';
 
 const GROUPS: Record<string, Group> = {
   box: 'container', lid: 'container', drawer: 'container', cabinet: 'container',
@@ -24,6 +24,7 @@ const GROUPS: Record<string, Group> = {
   rack: 'rack',
   hinge: 'joint', hingePip: 'joint', boxHinge: 'joint', snapFit: 'joint', dovetail: 'joint', peg: 'joint', pegSquare: 'joint',
   gland: 'fitting', hoseBarb: 'fitting', cableClamp: 'fitting', oring: 'fitting', gasket: 'fitting',
+  pipeFitting: 'coupling', profileFitting: 'coupling', springClip: 'coupling', pipeEnd: 'tubeProfile',
   pipeClamp: 'pipe', pipeClip: 'pipe', pipeSaddle: 'pipe',
   figurine: 'figurine',
   mesh: 'mesh',
@@ -93,6 +94,15 @@ const OFF: Partial<Record<Group, Partial<Record<Op, OpOff>>>> = {
     edges: { why: 'Zaokrąglenie zmieni pasowanie nakrętki.' },
     texture: { why: 'Nakrętka dociskowa ma już radełko.' },
   },
+  coupling: {
+    magnets: { why: 'Łącznik trzyma rury wsunięciem, gwintem albo zatrzaskiem, magnes nic nie doda.' },
+    bend: { why: 'Gięcie zniekształci ramiona i rury przestaną pasować.', use: 'Kolano 45° albo 90° w Wymiarach.' },
+    shell: { why: 'Ramiona łącznika są już puste w środku.', use: 'Ścianka łącznika w Wymiarach.' },
+    infill: { why: 'Kratownica przetnie ścianki, w które wchodzą rury.' },
+    xform: { why: 'Skala zmieni średnicę ramion i rura przestanie pasować.', use: 'Rozmiar rury w Wymiarach.' },
+    split: { why: 'Łącznik jest mały, mieści się na stole.' },
+    texture: { why: 'Faktura zmieni pasowanie ramion.' },
+  },
   pipe: {
     magnets: { why: 'Obejma trzyma się rury, magnes nic nie da.' },
     bend: { why: 'Obejma jest już wygięta na rurę.', use: 'Średnica rury w Wymiarach.' },
@@ -122,7 +132,7 @@ export function opOff(part: Part, op: Op): OpOff | null {
 }
 
 const SENSITIVE: Record<string, string> = {
-  thread: 'gwint', gear: 'zębatkę', rack: 'listwę zębatą', joint: 'zawias lub zatrzask', fitting: 'przepust',
+  thread: 'gwint', gear: 'zębatkę', rack: 'listwę zębatą', joint: 'zawias lub zatrzask', fitting: 'przepust', coupling: 'łącznik rur',
 };
 const SENSITIVE_HOLES: Record<string, string> = { threadHole: 'otwór z gwintem' };
 

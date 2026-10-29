@@ -8,6 +8,8 @@ import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, type FaceMagnetOptions, boxForLi
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
 import { placeMates } from './geom/gearMates';
+import { isFitting, pipeFor, placeArmMates } from './geom/armMates';
+import { fittingGeo, pinSpots, screwSpots } from './parts/couplings';
 import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, Xform } from './types';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
@@ -103,6 +105,8 @@ interface State {
   matchingBolt(id: string): void;
   /** Adds a gear (or rack, worm, wheel) meshing with this one; `kind` picks the partner. */
   matingGear(id: string, kind: 'gear' | 'rack' | 'bevel' | 'worm' | 'wheel'): void;
+  /** Pipes (or profiles) in every arm of a fitting, with their screw / pin holes and spring clips. */
+  matchingPipes(id: string): void;
   matchingNut(id: string): void;
   matchingThreadHole(id: string): void;
   addDrawers(id: string): void;
@@ -307,13 +311,15 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
   const own = { ...src, ...patch, ...(params ? { params } : {}) };
   // Moving a following gear by hand unhooks it from its driver.
   if (src.gearMate && (patch.position || patch.rotation) && !('gearMate' in patch)) own.gearMate = undefined;
+  // Same for a pipe (or its hole) moved off its fitting's arm.
+  if (src.armOf && (patch.position || patch.rotation) && !('armOf' in patch)) own.armOf = undefined;
   const shareParams = !!params && !!src.link;
   const shareTexture = 'texture' in patch && !!src.link;
   const shareEdges = 'edges' in patch && !!src.link;
   const sharePose = !!src.rigid && (patch.position !== undefined || patch.rotation !== undefined);
   const follow = src.pattern && patch.position && patch.pattern === undefined ? followers(parts, src, own.position) : null;
   if (follow) own.pattern = follow.get(src.id)!.pattern;
-  return placeMates(parts.map((p) => {
+  return placeArmMates(placeMates(parts.map((p) => {
     if (p.id === id) return own;
     let q = p;
     if (shareParams && p.link === src.link) {
@@ -327,7 +333,7 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
     const f = follow?.get(p.id);
     if (f) q = { ...q, position: f.position, pattern: f.pattern };
     return q;
-  }));
+  })));
 }
 
 /** New positions of every member of `src`'s pattern after `src` moves to `to` (rule kept). */
@@ -379,7 +385,7 @@ function dowelNote(pins: Part[], dowel: { d: number; len: number } | null) {
 
 export const useStore = create<State>((set, get) => {
   const commit = (parts: Part[], extra: Partial<State> = {}) =>
-    set((s) => ({ past: [...s.past.slice(-99), s.parts], future: [], parts: fixHolesIn(syncLids(s.parts, syncFigurines(parts))), check: null, ...extra }));
+    set((s) => ({ past: [...s.past.slice(-99), s.parts], future: [], parts: fixHolesIn(syncLids(s.parts, placeArmMates(syncFigurines(parts)))), check: null, ...extra }));
 
   const makePart = (type: string, parts: Part[], overrides: Partial<Part> = {}): Part => {
     const def = DEFS[type];
@@ -829,6 +835,7 @@ export const useStore = create<State>((set, get) => {
           link,
           rigid: p.rigid ? link : undefined,
           pattern: undefined,
+          armOf: undefined,
         };
         if (!firstId) firstId = copy.id;
         next.push(copy);
@@ -915,6 +922,51 @@ export const useStore = create<State>((set, get) => {
       made.gearMate = { of: src.id, angle: 0 };
       commit(placeMates([...parts, made]), { selectedId: made.id });
       get().notify('Pasująca część stoi tam, gdzie zęby się zazębiają. Zmieniasz liczbę zębów, a para sama się rozsuwa; przesunięcie jej ręcznie odpina ją.');
+    },
+
+    matchingPipes(id) {
+      const parts = get().parts.filter((p) => p.armOf?.of !== id);
+      const fit = parts.find((p) => p.id === id);
+      if (!isFitting(fit)) return;
+      const square = fit!.type === 'profileFitting';
+      const geo = fittingGeo(fit!.params, square);
+      const want = pipeFor(fit!, geo);
+      const next = [...parts];
+      const len = Math.max(40, Math.round(geo.depth * 2 + 20));
+      const seated = geo.end !== 'male' && geo.end !== 'female';
+      let holes = 0, clips = 0;
+      geo.dirs.forEach((_, i) => {
+        const body = nextBody(next);
+        const pipe = makePart(want.type, next, {
+          name: `${want.type === 'pipeFitting' ? 'Złączka' : square ? 'Profil' : 'Rura'} ${i + 1} do: ${fit!.name}`,
+          body,
+          params: { ...want.params, ...(want.type === 'rhs' ? { L: len } : want.type === 'tube' ? { H: len } : want.type === 'pipeEnd' ? { L: len } : {}) },
+          armOf: { of: id, i, role: 'pipe', k: 0 },
+        });
+        next.push(pipe);
+        if (!seated) return;
+        const add = (role: 'screw' | 'pin', k: number) => {
+          next.push(makePart('hole', next, { name: `${role === 'pin' ? 'Otwór na bolec' : 'Otwór na śrubę'} ${i + 1}.${k + 1}`, body, avoidBody: fit!.body, armOf: { of: id, i, role, k } }));
+          holes++;
+        };
+        if (geo.end === 'pin') {
+          pinSpots(geo, fit!.params).angles.forEach((_, k) => add('pin', k));
+          next.push(makePart('springClip', next, { name: `Zatrzask ${i + 1} do: ${fit!.name}`, armOf: { of: id, i, role: 'clip', k: 0 } }));
+          clips++;
+        } else if (geo.screw) screwSpots(geo, fit!.params).angles.forEach((_, k) => add('screw', k));
+      });
+      commit(placeArmMates(next), { selectedId: id });
+      const what = [
+        holes ? `${holes} ${holes === 1 ? 'otwór' : holes < 5 ? 'otwory' : 'otworów'} w rurach` : '',
+        clips ? `${clips} ${clips === 1 ? 'zatrzask' : clips < 5 ? 'zatrzaski' : 'zatrzasków'} sprężynowe` : '',
+      ].filter(Boolean);
+      get().notify(
+        !seated
+          ? geo.end === 'male'
+            ? 'Do gwintów zewnętrznych dodałem złączki z gwintem wewnętrznym, czekają przed ramionami.'
+            : 'Rury z gwintem zewnętrznym czekają przed ramionami: wkręć je.'
+          : `Rury stoją w ramionach${what.length ? ', dodałem ' + what.join(' i ') : ''}. Idą za łącznikiem; położenie śrub i bolców zmieniasz w łączniku. Przesunięta ręcznie rura odpina się.`,
+      );
     },
 
     matchingBolt(id) {
@@ -1934,6 +1986,7 @@ export const useStore = create<State>((set, get) => {
           position: r3([p.position[0] + w, p.position[1], p.position[2]]),
           rigid: p.rigid ? (rigids[p.rigid] ??= uid()) : undefined,
           pattern: p.pattern ? { ...p.pattern, id: (pats[p.pattern.id] ??= uid()) } : undefined,
+          armOf: undefined,
         }));
       commit([...parts, ...copies], { selectedId: groupId(nb) });
     },

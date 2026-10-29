@@ -140,6 +140,16 @@ Każda ma własną scenę, historię cofania i autozapis.
   parametrem elementu, można go zmienić od razu w okienku pomiaru.
 - **Faktura powierzchni** jako prawdziwa geometria: żeberka, rowki, radełko, kropki, plaster miodu,
   na wybranej ściance albo dookoła walca, wypukła lub wycięta.
+- **Łączniki rur i profili** (kategoria w menu): dwujnik, redukcja, kolano 45°/90°, trójnik T i Y,
+  czwórnik, narożniki 3D (3–6 ramion). Rozmiar z listy typowych rur (PCV/PP, kanalizacyjne,
+  aluminium/stal, miedź, rury gwintowane G 1/4–G 1) i profili (kwadratowe, prostokątne, V-slot)
+  albo własny. Zakończenia ramion: kielich, czop, gwint wewnętrzny lub zewnętrzny, bagnet (wsuń
+  i przekręć), na klik (sprężyste języczki) i zatrzask sprężynowy U/V (bolce wskakują w otwory rury
+  i łącznika). Opcjonalnie śruby M3–M8: otwór z gniazdem łba w łączniku, a w rurze otwór pod wkręt
+  albo na wylot z nakrętką. „Dodaj pasujące rury” wstawia rurę (profil, rurę z końcówką albo złączkę
+  z gwintem) w każde ramię razem z otworami i zatrzaskami; wszystko idzie za łącznikiem przy zmianie
+  rozmiaru, kształtu, położenia i kąta śrub. Osobno: „Rura z końcówką” i „Zatrzask sprężynowy U”
+  (drukowany na płasko, z PETG albo nylonu).
 - **Sprawdź model:** nachodzące na siebie bryły, ścianki cieńsze niż ustawione minimum (domyślnie
   0,8 mm), otwory, które nic nie wycinają, bryły pod stołem lub za duże na stół.
 - **Figurki:** 16 modeli z żebrowanej kolekcji (silnik przeniesiony z artefaktu, STANDARD v1.0),

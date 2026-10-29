@@ -80,6 +80,8 @@ export interface Xform {
   scale: Vec3;
 }
 
+export type ArmRole = 'pipe' | 'screw' | 'pin' | 'clip';
+
 export interface Part {
   id: string;
   type: string;
@@ -116,6 +118,8 @@ export interface Part {
   fitTo?: string;
   /** Gear meshing with another one: it stays where its teeth fit the driver's, also after edits. */
   gearMate?: { of: string; angle: number };
+  /** Pipe, hole or spring clip made for arm `i` of a pipe fitting: it follows the fitting (k: which screw / pin). */
+  armOf?: { of: string; i: number; role: ArmRole; k: number };
   /** Member of a pattern that keeps its rule: move one member and the others follow. */
   pattern?: PatternRule;
 }

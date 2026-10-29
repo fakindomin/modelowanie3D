@@ -10,6 +10,7 @@ import { CONNECTOR_DEFS } from './parts/connectors';
 import { FIGURINE_DEF } from './parts/figurine';
 import { TEXT_DEFS } from './parts/text';
 import { PIPE_DEFS } from './parts/pipes';
+import { COUPLING_DEFS } from './parts/couplings';
 import { SKETCH_DEFS } from './parts/sketch';
 import { gasket, isJar, jarBox, jarCap, jarParams } from './parts/jar';
 import { meshSolid } from './geom/meshes';
@@ -20,6 +21,7 @@ export type { Category, ParamDef, ParamValue, Params, PartDef } from './parts/de
 export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'ready', label: 'Gotowe elementy' },
   { id: 'profile', label: 'Profile' },
+  { id: 'couplings', label: 'Łączniki rur i profili' },
   { id: 'basic', label: 'Bryły podstawowe' },
   { id: 'joints', label: 'Otwory i połączenia' },
   { id: 'threads', label: 'Gwinty i śruby' },
@@ -778,7 +780,7 @@ const BASE: PartDef[] = [
   },
 ];
 
-export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...CONNECTOR_DEFS, FIGURINE_DEF];
+export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...COUPLING_DEFS, ...CONNECTOR_DEFS, FIGURINE_DEF];
 
 export const DEFS: Record<string, PartDef> = Object.fromEntries(CATALOG.map((d) => [d.type, d]));
 

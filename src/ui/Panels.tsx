@@ -403,6 +403,16 @@ function Helpers({ part }: { part: Part }) {
     out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id), INFO.nut));
     out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id), INFO.threadHole));
   }
+  if (part.type === 'pipeFitting' || part.type === 'profileFitting') {
+    const has = st.parts.some((p) => p.armOf?.of === part.id);
+    const what = part.type === 'profileFitting' ? 'profile' : 'rury';
+    out.push(b(has ? `↻ Wstaw pasujące ${what} od nowa` : `+ Dodaj pasujące ${what}`, () => st.matchingPipes(part.id), INFO.pipes));
+  }
+  const armFit = part.armOf ? st.parts.find((p) => p.id === part.armOf!.of) : undefined;
+  if (armFit) {
+    out.push(b(`→ Przejdź do łącznika „${armFit.name}”`, () => st.select(armFit.id), INFO.armOf));
+    out.push(b('⛓ Odepnij od łącznika', () => st.update(part.id, { armOf: undefined }), INFO.armOf));
+  }
   const fitBox = part.fitTo ? st.parts.find((p) => p.id === part.fitTo) : undefined;
   if (fitBox && part.type !== 'boxHinge') out.push(b(`⛓ Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit));
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
