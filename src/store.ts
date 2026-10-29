@@ -12,6 +12,7 @@ import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell,
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
+import { BOX_HINGE_LIFT } from './parts/joints';
 import { gridSegments, layoutOf } from './geom/dividers';
 import { DOWEL_LUZ, dowelSpots } from './geom/split';
 import { decodeMeshes, loadStoredMeshes, parseSTL, persistMeshes, registerMesh, toSolid } from './geom/meshes';
@@ -1131,13 +1132,35 @@ export const useStore = create<State>((set, get) => {
         const parts = get().parts;
         const b = worldBox(part);
         const lid = makePart('lid', parts, {
-          params: { ...defaultParams(DEFS.lid), W: part.params.W, D: part.params.D, T: 2, R: 0 },
-          position: [part.position[0], part.position[1], round(b.max.z)],
+          params: { ...defaultParams(DEFS.lid), W: part.params.W, D: part.params.D, T: 2, wall: part.params.T, R: 0, rad: part.params.rad ?? 0 },
+          position: [part.position[0], part.position[1], round(b.max.z + BOX_HINGE_LIFT, 2)],
           fitTo: part.id,
         });
-        commit([...parts, lid], { selectedId: id });
-        get().add('hingePip');
-        get().notify('Pudełko z pokrywką na zawiasie print-in-place: drukuje się w całości, zawias jest od razu ruchomy.');
+        const next = [...parts, lid];
+        const def = DEFS.boxHinge;
+        const link = uid();
+        const count = parts.filter((p) => p.type === 'boxHinge' && p.params.piece === 'A').length + 1;
+        for (const piece of def.pieces!) {
+          const body = piece.body === 'sel' ? part.body : lid.body;
+          next.push(
+            makePart('boxHinge', next, {
+              name: `${def.label} ${count}: ${piece.label}`,
+              params: { piece: piece.value },
+              position: part.position,
+              rotation: part.rotation,
+              hole: piece.hole,
+              color: piece.hole ? HOLE_COLOR : piece.body === 'sel' ? part.color : lid.color,
+              body,
+              link,
+              rigid: link,
+              fitTo: part.id,
+            }),
+          );
+        }
+        // Shown finished: the hinge's room is cut out right away.
+        const shown = next.map((p) => (!p.hole && (p.body === part.body || p.body === lid.body) ? { ...p, merged: true } : p));
+        commit(shown, { selectedId: id });
+        get().notify('Pudełko z pokrywką na zawiasie schowanym w tylnej ściance. Zawias rośnie i maleje razem z pudełkiem. Pokrywkę drukuj osobno, wierzchem do stołu, i złóż na osi z filamentu 1,75 mm wsuniętej z boku. W ustawieniach zawiasu można wybrać druk w całości (print-in-place).');
       } else if (variant.extra === 'slide') {
         get().addLid(id);
         get().select(id);
@@ -1970,6 +1993,7 @@ function syncLids(prev: Part[], parts: Part[]): Part[] {
       changed = true;
       return { ...lid, fitTo: undefined };
     }
+    if (lid.type === 'boxHinge') return lid;
     const want = lidParams(box, lid);
     if (Object.entries(want).every(([k, v]) => lid.params[k] === v)) return lid;
     changed = true;
@@ -1987,6 +2011,34 @@ function syncLids(prev: Part[], parts: Part[]): Part[] {
       }
     }
     return q;
+  });
+  return syncHinges(changed ? next : parts);
+}
+
+/** A box hinge follows its box (size, wall, corners, place) and its lid (thickness, gap above the rim). */
+function syncHinges(parts: Part[]): Part[] {
+  if (!parts.some((p) => p.type === 'boxHinge' && p.fitTo)) return parts;
+  let changed = false;
+  const next = parts.map((h) => {
+    if (h.type !== 'boxHinge' || !h.fitTo) return h;
+    const box = parts.find((p) => p.id === h.fitTo);
+    if (!box) return h;
+    const lid = parts.find((p) => p.type === 'lid' && p.fitTo === box.id);
+    const gap = lid ? worldBox(lid).min.z - worldBox(box).max.z : BOX_HINGE_LIFT;
+    const want: Params = {
+      W: box.params.W,
+      D: box.params.D ?? box.params.W,
+      H: box.params.H,
+      wall: box.params.T,
+      rad: box.params.slide ? 0 : (box.params.rad ?? 0),
+      Tl: lid ? lid.params.T : 2,
+      lift: gap >= 0 && gap <= 1 ? round(gap, 2) : BOX_HINGE_LIFT,
+    };
+    const same = Object.entries(want).every(([k, v]) => h.params[k] === v);
+    const placed = h.position.every((v, i) => v === box.position[i]) && h.rotation.every((v, i) => v === box.rotation[i]);
+    if (same && placed) return h;
+    changed = true;
+    return { ...h, params: { ...h.params, ...want }, position: [...box.position] as Vec3, rotation: [...box.rotation] as Vec3 };
   });
   return changed ? next : parts;
 }

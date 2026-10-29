@@ -9,6 +9,9 @@ i dosuwasz go do innych, a ścianki same się do siebie przyciągają.
 Dwie zakładki: **Techniczne** (składanie z gotowych elementów) i **Figurki** (żebrowana kolekcja).
 Każda ma własną scenę, historię cofania i autozapis.
 
+- **Menu po lewej:** każda kategoria to kafelek z ikoną, nazwą i liczbą elementów, rozwija się płynnie.
+  Długie nazwy łamią się na dwie linie, pełny opis jest w podpowiedzi. Prawy brzeg panelu można
+  przeciągnąć, żeby go poszerzyć (dwuklik wraca do domyślnej szerokości).
 - **Gotowe elementy w rodzinach:** kafelek dodaje podstawową odmianę, a strzałka obok rozwija
   wszystkie odmiany z rozmiarami S/M/L i ↺ (ostatnio użyte wymiary). Pudełka: prostokątne, okrągłe,
   sześciokątne, z przegródkami, z pokrywką, z pokrywką na zawiasie, z wsuwaną pokrywką. Pokrywki:
@@ -94,6 +97,11 @@ Każda ma własną scenę, historię cofania i autozapis.
   (1, 2, 3 kropki = ciasne, normalne, luźne) do wydruku testowego.
 - **Zawiasy i łączniki:** zawias z bolcem, zawias print-in-place, zatrzask (haczyk + okienko),
   jaskółczy ogon z gniazdem. Zawias zaznaczony na pudełku sam łączy skrzydełka z pudełkiem i pokrywą.
+- **Pudełko z pokrywką na zawiasie:** zawias jest schowany w tylnej ściance, oczka są równo z tylną
+  ścianką i wierzchem pokrywki, pokrywka otwiera się do ok. 140°. Średnica oczek (ok. 2–2,5 grubości
+  ścianki, 5–12 mm) i liczba oczek (3, 5 lub 7) dobierają się do pudełka i zmieniają się razem z nim.
+  Druk osobno (pokrywka wierzchem do stołu, oś z filamentu 1,75 mm wsuwana z boku) albo w całości,
+  zamknięte (print-in-place, stożkowe czopy).
 - **Przepusty i złączki:** dławik kablowy dobierany do średnicy kabla (otwór, korpus, nakrętka
   kontrująca, nakrętka dociskowa, uszczelka z TPU), przepust na wtyczkę (keyhole), odciążka kabla,
   karbowana końcówka na wąż 1/2", 5/8", 3/4" z gwintem G, rowek na o-ring.

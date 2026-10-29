@@ -62,12 +62,29 @@ export function Library() {
     return { c, fams, tiles };
   });
   const nothing = !figs.length && sections.every((x) => !x.fams.length && !x.tiles.length);
-  const head = (id: string, label: string) => (
-    <h3 className={!query && closed.has(id) ? 'closed' : ''} onClick={() => toggleCat(id)}>
-      {label}
-    </h3>
-  );
   const shown = (id: string) => !!query || !closed.has(id);
+  /** A main category: a tile with its icon, name and number of elements, opening smoothly. */
+  const category = (id: string, label: string, icon: string, count: number, groups: number, body: React.ReactNode) => {
+    const isOpen = shown(id);
+    return (
+      <section key={id} className="cat">
+        <button
+          className={isOpen ? 'cat-tile open' : 'cat-tile'}
+          onClick={() => toggleCat(id)}
+          aria-expanded={isOpen}
+          title={`${label}: ${count} ${elements(count)}${groups > 1 && groups !== count ? ` w ${groups} grupach` : ''}. Kliknij, żeby ${isOpen ? 'zwinąć' : 'rozwinąć'}.`}
+        >
+          <Icon type={icon} hole={false} />
+          <span className="cat-name">{label}</span>
+          <span className="count">{count}</span>
+          <span className="chev">▾</span>
+        </button>
+        <Expand open={isOpen}>
+          <div className="grid cat-grid">{body}</div>
+        </Expand>
+      </section>
+    );
+  };
   return (
     <aside className="library" ref={ref}>
       <input className="lib-search" placeholder="Szukaj elementu…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} />
@@ -76,44 +93,109 @@ export function Library() {
           Nowy element pojawi się na górze: <b>{selName}</b>
         </div>
       )}
-      {figs.length > 0 && (
-        <section>
-          {head('figs', 'Żebrowana kolekcja')}
-          {shown('figs') && (
-            <div className="grid">
-              {figs.map((id) => (
-                <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => addFigurine(id)}>
-                  <Icon type="figurine" hole={false} />
-                  <span>{FIG_MODELS[id].n}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+      {figs.length > 0 &&
+        category(
+          'figs',
+          'Żebrowana kolekcja',
+          'figurine',
+          figs.length,
+          figs.length,
+          figs.map((id) => (
+            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => addFigurine(id)}>
+              <Icon type="figurine" hole={false} />
+              <span>{FIG_MODELS[id].n}</span>
+            </button>
+          )),
+        )}
       {sections
         .filter((x) => x.fams.length || x.tiles.length)
-        .map(({ c, fams, tiles }) => (
-          <section key={c.id}>
-            {head(`${tab}:${c.id}`, tab === 'fig' && c.id === 'joints' ? 'Otwory, magnesy, czopy' : c.label)}
-            {shown(`${tab}:${c.id}`) && (
-              <div className="grid">
-                {fams.map(({ f, only }) => (
-                  <FamilyTile key={f.id} family={f} only={query ? only : undefined} open={!!query || open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />
-                ))}
-                {tiles.map((d) => (
-                  <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={d.description} onClick={() => add(d.type)}>
-                    <Icon type={d.type} hole={d.hole} />
-                    <span>{d.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-        ))}
+        .map(({ c, fams, tiles }) =>
+          category(
+            `${tab}:${c.id}`,
+            tab === 'fig' && c.id === 'joints' ? 'Otwory, magnesy, czopy' : c.label,
+            fams[0]?.f.icon ?? tiles[0].type,
+            fams.reduce((n, x) => n + x.only.length, 0) + tiles.length,
+            fams.length + tiles.length,
+            <>
+              {fams.map(({ f, only }) => (
+                <FamilyTile key={f.id} family={f} only={query ? only : undefined} open={!!query || open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />
+              ))}
+              {tiles.map((d) => (
+                <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={`${d.label}: ${d.description}`} onClick={() => add(d.type)}>
+                  <Icon type={d.type} hole={d.hole} />
+                  <span>{d.label}</span>
+                </button>
+              ))}
+            </>,
+          ),
+        )}
       {nothing && <p className="lib-empty">Nic nie pasuje do „{q}”.</p>}
+      <LibraryResize />
     </aside>
   );
+}
+
+const elements = (n: number) => (n === 1 ? 'element' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'elementy' : 'elementów');
+
+/** Content that slides open and shut (the grid row grows from 0 to its natural height). */
+function Expand({ open, children }: { open: boolean; children: React.ReactNode }) {
+  return (
+    <div className={open ? 'expand open' : 'expand'} inert={!open}>
+      <div className="expand-in">{children}</div>
+    </div>
+  );
+}
+
+const LIB_W_KEY = 'modelowanie3d.libraryWidth';
+const setLibWidth = (w: number) => document.documentElement.style.setProperty('--lib-w', `${w}px`);
+try {
+  const w = Number(localStorage.getItem(LIB_W_KEY));
+  if (w >= 200 && w <= 440) setLibWidth(w);
+} catch {
+  /* storage unavailable */
+}
+
+/** Drag the library's right edge to make it wider or narrower (double click: back to default). */
+function LibraryResize() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const top = () => ref.current && document.documentElement.style.setProperty('--lib-top', `${ref.current.parentElement!.getBoundingClientRect().top}px`);
+    top();
+    window.addEventListener('resize', top);
+    return () => window.removeEventListener('resize', top);
+  }, []);
+  const start = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const lib = (e.currentTarget as HTMLElement).parentElement!;
+    const x0 = e.clientX, w0 = lib.getBoundingClientRect().width;
+    let w = w0;
+    const move = (ev: PointerEvent) => {
+      w = Math.round(Math.min(440, Math.max(200, w0 + ev.clientX - x0)));
+      setLibWidth(w);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.classList.remove('resizing');
+      try {
+        localStorage.setItem(LIB_W_KEY, String(w));
+      } catch {
+        /* storage unavailable */
+      }
+    };
+    document.body.classList.add('resizing');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const reset = () => {
+    document.documentElement.style.removeProperty('--lib-w');
+    try {
+      localStorage.removeItem(LIB_W_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  return <div ref={ref} className="lib-resize" onPointerDown={start} onDoubleClick={reset} title="Przeciągnij, żeby poszerzyć panel (dwuklik: domyślna szerokość)" />;
 }
 
 const CLOSED_KEY = 'modelowanie3d.closedCategories';
@@ -137,18 +219,18 @@ function FamilyTile({ family, open, onToggle, only }: { family: Family; open: bo
           <Icon type={family.icon} hole={false} />
           <span>{family.label}</span>
         </button>
-        <button className="fam-more" onClick={onToggle} title={open ? 'Zwiń' : `Pokaż ${family.variants.length} odmian i rozmiary`}>
-          <span>{open ? '▴' : '▾'}</span>
-          <span>{family.variants.length}</span>
+        <button className="fam-more" onClick={onToggle} aria-expanded={open} title={open ? 'Zwiń' : `Pokaż ${family.variants.length} odmian i rozmiary`}>
+          <span className="count">{(only ?? family.variants).length}</span>
+          <span className="chev">▾</span>
         </button>
       </div>
-      {open && (
+      <Expand open={open}>
         <div className="variants">
           {(only ?? family.variants).map((v) => (
-            <div key={v.label} className="variant" title={v.hint ?? DEFS[v.type].description}>
+            <div key={v.label} className="variant" title={`${v.label}: ${v.hint ?? DEFS[v.type].description}`}>
               <span className="vname">
                 <Icon type={v.type} hole={false} />
-                {v.label}
+                <span>{v.label}</span>
               </span>
               <span className="sizes">
                 {family.noSizes && (
@@ -170,7 +252,7 @@ function FamilyTile({ family, open, onToggle, only }: { family: Family; open: bo
             </div>
           ))}
         </div>
-      )}
+      </Expand>
     </>
   );
 }
@@ -312,7 +394,7 @@ function Helpers({ part }: { part: Part }) {
     out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id), INFO.threadHole));
   }
   const fitBox = part.fitTo ? st.parts.find((p) => p.id === part.fitTo) : undefined;
-  if (fitBox) out.push(b(`⛓ Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit));
+  if (fitBox && part.type !== 'boxHinge') out.push(b(`⛓ Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit));
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
     out.push(b(`⧉ Pokaż gotowy element (bryła ${part.body})`, () => st.merge(part.body), INFO.merge));
   return <>{out}</>;
