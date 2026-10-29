@@ -164,6 +164,12 @@ const sizeParam: ParamDef = select(
   [...Object.entries(THREADS).map(([k, v]) => [k, v.label] as [string, string]), ['custom', 'Własny (średnica i skok)']],
 );
 const custom = (p: Params) => p.size === 'custom';
+const handParam: ParamDef = select('hand', 'Kierunek gwintu', 'right', [
+  ['right', 'Prawy (zwykły)'],
+  ['left', 'Lewy'],
+]);
+/** A left-hand thread is the right-hand part mirrored (the rest of these parts is symmetric). */
+const handed = (p: Params, m: Manifold) => (p.hand === 'left' ? m.mirror([1, 0, 0]) : m);
 const customD: ParamDef = { key: 'D', label: 'Średnica gwintu', type: 'number', def: 10, min: 3, max: 120, step: 0.1, unit: 'mm', show: custom };
 const customP: ParamDef = { key: 'P', label: 'Skok', type: 'number', def: 1.5, min: 0.5, max: 8, step: 0.05, unit: 'mm', show: custom };
 
@@ -181,8 +187,9 @@ export const THREAD_DEFS: PartDef[] = [
       { key: 'H', label: 'Głębokość', type: 'number', def: 12, min: 2, max: 300, unit: 'mm' },
       ...fitParams('in'),
       { key: 'chamfer', label: 'Fazka na wejściu', type: 'bool', def: true },
+      handParam,
     ],
-    build: (p) => internalThreadCut(specOf(p), num(p, 'H'), threadGap(p, 'in'), Boolean(p.chamfer)),
+    build: (p) => handed(p, internalThreadCut(specOf(p), num(p, 'H'), threadGap(p, 'in'), Boolean(p.chamfer))),
   },
   {
     type: 'bolt',
@@ -202,6 +209,7 @@ export const THREAD_DEFS: PartDef[] = [
       ]),
       { key: 'bore', label: 'Otwór w środku', type: 'number', def: 0, min: 0, max: 100, step: 0.5, unit: 'mm', hint: '0 = pełna śruba. Większy otwór robi króciec / złączkę.' },
       ...fitParams('out'),
+      handParam,
     ],
     build: (p) => {
       const s = specOf(p);
@@ -212,7 +220,7 @@ export const THREAD_DEFS: PartDef[] = [
       if (p.head === 'knurl') m = m.add(knurled(s.af * 1.1, headH + 0.01));
       const bore = num(p, 'bore');
       if (bore > 0) m = m.subtract(cyl(L + headH + 2, bore / 2).translate([0, 0, -1]));
-      return m;
+      return handed(p, m);
     },
   },
   {
@@ -231,12 +239,13 @@ export const THREAD_DEFS: PartDef[] = [
         ['knurl', 'Radełkowana (ręczna)'],
       ]),
       ...fitParams('in'),
+      handParam,
     ],
     build: (p) => {
       const s = specOf(p);
       const h = num(p, 'H') || Math.max(4, Math.round(s.d * 0.8));
       const outer = p.shape === 'knurl' ? knurled(s.af * 1.15, h) : hex(s.af, h);
-      return outer.subtract(internalThreadCut(s, h, threadGap(p, 'in'), true, true));
+      return handed(p, outer.subtract(internalThreadCut(s, h, threadGap(p, 'in'), true, true)));
     },
   },
   {

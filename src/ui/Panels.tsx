@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
-import { findLid, type MagnetOptions } from '../geom/magnets';
+import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
+import { bodyRisk, opOff, type Op } from './ops';
 import { BED_KEY, assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, loadBed, useStore, type PatternKind } from '../store';
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { DEFAULT_EDGES } from '../geom/edges';
@@ -389,6 +390,12 @@ function Helpers({ part }: { part: Part }) {
         <NumberInput value={part.gearMate!.angle} min={-360} max={360} step={15} unit="°" onChange={(angle) => st.update(part.id, { gearMate: { of: driver.id, angle } })} />
       </label>,
     );
+  if (part.type === 'text' && !st.parts.some((p) => p.body === part.body && p.bend)) {
+    // Wrap around the largest round part in the model, otherwise a 40 mm cylinder (changed in Gięcie).
+    const round = st.parts.filter((p) => !p.hole && ['cylinder', 'tube', 'rod'].includes(p.type)).sort((a, c) => Number(c.params.D) - Number(a.params.D))[0];
+    const D = round ? Number(round.params.D) : 40;
+    out.push(b(`↪ Owiń napis na walec (Ø ${D} mm)`, () => st.setBend(part.id, { ...DEFAULT_BEND, axis: 'x', dir: 'down', D, luz: 0 }), INFO.wrapText));
+  }
   if (part.type === 'bolt') {
     out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id), INFO.nut));
     out.push(b('+ Dodaj pasujący otwór z gwintem', () => st.matchingThreadHole(part.id), INFO.threadHole));
@@ -662,6 +669,104 @@ function Section({ title, children, open = false, info }: { title: string; child
   );
 }
 
+/** An operation's section; greyed out (with the reason and what to use instead) when it makes no sense for the element. */
+function OpSection({ part, op, title, info, open, children }: { part: Part; op: Op; title: string; info?: string; open?: boolean; children?: React.ReactNode }) {
+  const off = opOff(part, op);
+  if (!off)
+    return (
+      <Section title={title} open={open} info={info}>
+        {children}
+      </Section>
+    );
+  return (
+    <details className="section off">
+      <summary title={`Niedostępne: ${off.why}${off.use ? ` Zamiast: ${off.use}` : ''}`}>
+        {title} <span className="off-tag">niedostępne</span>
+      </summary>
+      <p className="off-why">
+        {off.why}
+        {off.use && (
+          <>
+            {' '}
+            <b>Zamiast:</b> {off.use}
+          </>
+        )}
+      </p>
+    </details>
+  );
+}
+
+/** Warning when a whole-body operation would spoil a thread, gear or hinge in that body. */
+function Risk({ body, op }: { body: number; op: 'bend' | 'xform' | 'split' }) {
+  const parts = useStore((s) => s.parts);
+  const text = bodyRisk(parts, body, op);
+  return text ? <p className="warn-line">⚠ {text}</p> : null;
+}
+
+const FACES: [FaceMagnetOptions['face'], string][] = [
+  ['bottom', 'Spód'],
+  ['top', 'Góra'],
+  ['front', 'Przód'],
+  ['back', 'Tył'],
+  ['left', 'Lewy bok'],
+  ['right', 'Prawy bok'],
+];
+
+/** Magnet pockets in one face of any element: a plate on a fridge, a figurine's base, blocks that snap together. */
+function FaceMagnetTool({ part }: { part: Part }) {
+  const add = useStore((s) => s.addFaceMagnets);
+  const [opt, setOpt] = useState<FaceMagnetOptions>({ size: '6x3', face: 'bottom', layout: part.type === 'figurine' ? 'center' : 'corners', n: 3, margin: 2 });
+  const set = (p: Partial<FaceMagnetOptions>) => setOpt((o) => ({ ...o, ...p }));
+  return (
+    <div className="tool">
+      <p className="desc">Kieszenie na magnesy w wybranej ściance bryły. Gniazdo, które wypadłoby poza materiał (np. na krzywiźnie), zostanie pominięte.</p>
+      <label className="field">
+        <span>Magnes (średnica × grubość)</span>
+        <select value={opt.size} onChange={(e) => set({ size: e.target.value })}>
+          {Object.keys(MAGNETS).map((k) => (
+            <option key={k} value={k}>
+              {k.replace('x', ' × ')} mm
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Ścianka</span>
+        <select value={opt.face} onChange={(e) => set({ face: e.target.value as FaceMagnetOptions['face'] })}>
+          {FACES.map(([k, l]) => (
+            <option key={k} value={k}>
+              {l}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Ile i gdzie</span>
+        <select value={opt.layout} onChange={(e) => set({ layout: e.target.value as FaceMagnetOptions['layout'] })}>
+          <option value="center">1 na środku</option>
+          <option value="corners">4 w narożnikach</option>
+          <option value="row">Rząd wzdłuż dłuższego boku</option>
+        </select>
+      </label>
+      {opt.layout === 'row' && (
+        <label className="field">
+          <span>Liczba w rzędzie</span>
+          <NumberInput value={opt.n} min={2} max={20} onChange={(n) => set({ n })} />
+        </label>
+      )}
+      {opt.layout !== 'center' && (
+        <label className="field">
+          <span>Odsunięcie od krawędzi</span>
+          <NumberInput value={opt.margin} min={1.2} max={100} step={0.5} unit="mm" onChange={(margin) => set({ margin })} />
+        </label>
+      )}
+      <button className="action" onClick={() => add(part.body, opt)}>
+        + Dodaj gniazda na magnesy
+      </button>
+    </div>
+  );
+}
+
 /** Top view of a box's dividers: click a segment to remove or restore it, drag it to move its line. */
 function DividerEditor({ part }: { part: Part }) {
   const update = useStore((s) => s.update);
@@ -888,47 +993,34 @@ function PartProperties({ part }: { part: Part }) {
         ))}
       </div>
 
-      {(part.type === 'box' || part.type === 'lid') && (
-        <Section title="🧲 Miejsca na magnesy" info={INFO.magnets}>
-          <MagnetTool target={part.id} body={part.body} />
-        </Section>
-      )}
-      {!part.hole && (
-        <Section title="↪ Gięcie" open={st.parts.some((p) => p.body === part.body && p.bend)} info={INFO.bend}>
-          <BendTool body={part.body} prefer={part.id} />
-        </Section>
-      )}
-      {!part.hole && (
-        <Section title="◫ Skorupa (wydrążenie)" open={st.parts.some((p) => p.body === part.body && p.shell)} info={INFO.shell}>
-          <ShellTool body={part.body} prefer={part.id} />
-        </Section>
-      )}
-      {!part.hole && (
-        <Section title="▦ Wypełnienie (ażur)" open={st.parts.some((p) => p.body === part.body && p.infill)} info={INFO.infill}>
-          <InfillTool body={part.body} prefer={part.id} />
-        </Section>
-      )}
-      {!part.hole && (
-        <Section title="⇋ Lustro i skala" open={st.parts.some((p) => p.body === part.body && p.xform)} info={INFO.xform}>
-          <XformTool body={part.body} prefer={part.id} />
-        </Section>
-      )}
-      {!part.hole && <SplitTool body={part.body} />}
-      {!part.rigid && (
-        <Section title="Szyk i kopie" info={INFO.pattern}>
-          <PatternTool part={part} />
-        </Section>
-      )}
-      {!part.hole && part.type !== 'figurine' && (
-        <Section title="◠ Zaokrąglenia i fazki" open={!!part.edges} info={INFO.edges}>
-          <EdgesTool part={part} />
-        </Section>
-      )}
-      {!part.hole && part.type !== 'figurine' && (
-        <Section title="Faktura powierzchni" open={!!part.texture} info={INFO.texture}>
-          <TextureTool part={part} />
-        </Section>
-      )}
+      {/* Every element lists the same operations in the same order; the ones that make no sense for it are greyed out. */}
+      <OpSection part={part} op="magnets" title="🧲 Miejsca na magnesy" info={INFO.magnets}>
+        {part.type === 'box' || part.type === 'lid' ? <MagnetTool target={part.id} body={part.body} /> : <FaceMagnetTool part={part} />}
+      </OpSection>
+      <OpSection part={part} op="bend" title="↪ Gięcie" open={st.parts.some((p) => p.body === part.body && p.bend)} info={INFO.bend}>
+        <Risk body={part.body} op="bend" />
+        <BendTool body={part.body} prefer={part.id} />
+      </OpSection>
+      <OpSection part={part} op="shell" title="◫ Skorupa (wydrążenie)" open={st.parts.some((p) => p.body === part.body && p.shell)} info={INFO.shell}>
+        <ShellTool body={part.body} prefer={part.id} />
+      </OpSection>
+      <OpSection part={part} op="infill" title="▦ Wypełnienie (ażur)" open={st.parts.some((p) => p.body === part.body && p.infill)} info={INFO.infill}>
+        <InfillTool body={part.body} prefer={part.id} />
+      </OpSection>
+      <OpSection part={part} op="xform" title="⇋ Lustro i skala" open={st.parts.some((p) => p.body === part.body && p.xform)} info={INFO.xform}>
+        <Risk body={part.body} op="xform" />
+        <XformTool body={part.body} prefer={part.id} />
+      </OpSection>
+      {opOff(part, 'split') ? <OpSection part={part} op="split" title="✂ Podziel na części" /> : <SplitTool body={part.body} />}
+      <OpSection part={part} op="pattern" title="Szyk i kopie" info={INFO.pattern}>
+        <PatternTool part={part} />
+      </OpSection>
+      <OpSection part={part} op="edges" title="◠ Zaokrąglenia i fazki" open={!!part.edges} info={INFO.edges}>
+        <EdgesTool part={part} />
+      </OpSection>
+      <OpSection part={part} op="texture" title="Faktura powierzchni" open={!!part.texture} info={INFO.texture}>
+        <TextureTool part={part} />
+      </OpSection>
 
       <h4>
         Wydruk <Info text={INFO.print} />
@@ -1369,6 +1461,7 @@ function SplitTool({ body }: { body: number }) {
         ✂ Podziel na części <Info text={INFO.split} />
       </summary>
       <div className="tool">
+        <Risk body={body} op="split" />
         <label className="field">
           <span>Cięcie w poprzek osi</span>
           <select value={axis} onChange={(e) => (setAxis(Number(e.target.value) as 0 | 1 | 2), setAt(null))}>

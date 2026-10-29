@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 /** Short explanations of what each tool does, shown by the ⓘ marks. */
 export const INFO = {
+  wrapText: 'Zawija napis na walec o podanej średnicy, litery na zewnątrz (np. etykieta na kubek albo skala na pokrętle). Średnicę zmienisz w sekcji Gięcie. Bierze średnicę największego walca, rury lub pręta w modelu.',
   dims: 'Wymiary tego elementu w milimetrach. Strzałki ↑↓ w polu zmieniają o krok, z Shiftem o 10 kroków.',
   position: 'Położenie środka elementu (X, Y) i jego spodu (Z) w mm. Element postawiony w innej bryle sam do niej dołącza.',
   rotation: 'Obrót wokół osi X, Y, Z w stopniach. Przyciski obracają o 90° i zostawiają element na tej samej wysokości.',

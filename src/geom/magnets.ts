@@ -242,3 +242,12 @@ export function boxForLid(parts: Part[], lid: Part): number | null {
   }
   return null;
 }
+
+/** Pockets in one face of any body (not only boxes). */
+export interface FaceMagnetOptions {
+  size: string;
+  face: 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
+  layout: 'center' | 'corners' | 'row';
+  n: number;
+  margin: number;
+}

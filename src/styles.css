@@ -402,3 +402,11 @@ input[type='color'] { width: 44px; height: 26px; border: 1px solid var(--line); 
 .lib-resize:hover::after, body.resizing .lib-resize::after { background: #e8873a55; }
 body.resizing { cursor: col-resize; user-select: none; }
 @media (max-width: 900px) { .lib-resize { display: none; } }
+
+/* greyed-out operations: same place for every element, the reason on hover or when opened */
+.section.off > summary { color: #6f7276; cursor: help; }
+.section.off > summary .info { display: none; }
+.off-tag { margin-left: auto; font-size: 10.5px; color: #75787c; border: 1px solid #3c3f43; border-radius: 4px; padding: 0 5px; text-transform: none; letter-spacing: 0; }
+.off-why { margin: 4px 2px 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.off-why b { color: #c9cbcd; font-weight: 600; }
+.warn-line { margin: 4px 0 6px; padding: 5px 8px; font-size: 12px; line-height: 1.4; color: #f1c27d; background: #3a3020; border-left: 3px solid #e8a23a; border-radius: 4px; }

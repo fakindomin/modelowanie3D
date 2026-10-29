@@ -12,6 +12,14 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Menu po lewej:** każda kategoria to kafelek z ikoną, nazwą i liczbą elementów, rozwija się płynnie.
   Długie nazwy łamią się na dwie linie, pełny opis jest w podpowiedzi. Prawy brzeg panelu można
   przeciągnąć, żeby go poszerzyć (dwuklik wraca do domyślnej szerokości).
+- **Stały prawy panel:** każdy element ma te same operacje w tej samej kolejności (magnesy, gięcie,
+  skorupa, ażur, lustro i skala, podział, szyk, zaokrąglenia, faktura). Operacja bez sensu dla danego
+  elementu jest wygaszona i mówi dlaczego oraz czego użyć zamiast niej (np. przy śrubie skala zmieniłaby
+  skok gwintu, więc zostaje rozmiar M i kierunek gwintu). Gięcie, lustro, skala i podział ostrzegają,
+  gdy w bryle jest gwint, zębatka, zawias albo przepust.
+- **Magnesy w każdej bryle:** pudełko i pokrywka mają automat z lustrzanymi gniazdami, a pozostałe
+  elementy (płyty, profile, bryły, figurki, szuflady) dostają gniazda w wybranej ściance: 1 na środku,
+  4 w narożnikach albo rząd. Gniazdo, które wypadłoby poza materiał, jest pomijane.
 - **Gotowe elementy w rodzinach:** kafelek dodaje podstawową odmianę, a strzałka obok rozwija
   wszystkie odmiany z rozmiarami S/M/L i ↺ (ostatnio użyte wymiary). Pudełka: prostokątne, okrągłe,
   sześciokątne, z przegródkami, z pokrywką, z pokrywką na zawiasie, z wsuwaną pokrywką. Pokrywki:
@@ -94,7 +102,8 @@ Każda ma własną scenę, historię cofania i autozapis.
   śrubę / nakrętkę / otwór z gwintem” dobierają drugą część z luzem.
   Dopasowanie: ciasne, normalne (wkręca się ręką) albo luźne; luz liczony na boku zwoju i dzielony między
   śrubę i otwór, wierzchołki zwojów są lekko ścięte. „Próbka gwintu” to krótka śruba i trzy nakrętki
-  (1, 2, 3 kropki = ciasne, normalne, luźne) do wydruku testowego.
+  (1, 2, 3 kropki = ciasne, normalne, luźne) do wydruku testowego. Śruba, nakrętka i otwór mają gwint
+  prawy albo lewy (np. napinacz); pasujące elementy dostają ten sam kierunek.
 - **Zawiasy i łączniki:** zawias z bolcem, zawias print-in-place, zatrzask (haczyk + okienko),
   jaskółczy ogon z gniazdem. Zawias zaznaczony na pudełku sam łączy skrzydełka z pudełkiem i pokrywą.
 - **Pudełko z pokrywką na zawiasie:** zawias jest schowany w tylnej ściance, oczka są równo z tylną

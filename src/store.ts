@@ -4,7 +4,7 @@ import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from '
 import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
 import { buildBodies, built, partMatrix, worldBox, worldManifold } from './geom/parts';
 import { finishing } from './geom/modify';
-import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
+import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, type FaceMagnetOptions, boxForLid, findLid, magnetDims, planRingSpots, planSpots, wallThickness, type LidRef, type MagnetOptions, type Spot } from './geom/magnets';
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
 import { placeMates } from './geom/gearMates';
@@ -110,6 +110,8 @@ interface State {
   unfitLid(id: string): void;
   /** Magnet pockets on the top edge of a box (ready-made or built from plates) and mirrored ones in its lid. */
   addMagnets(id: string, opt: MagnetOptions): void;
+  /** Magnet pockets in one face of any body: centre, corners or a row. */
+  addFaceMagnets(body: number, opt: FaceMagnetOptions): void;
   /** Adds a family variant in size S/M/L or with the dimensions last used for its type. */
   addVariant(family: Family, variant: Variant, size: Size | 'recent'): void;
   /** Last parameters the user set, per part type ("Ostatnie" in the library). */
@@ -905,7 +907,7 @@ export const useStore = create<State>((set, get) => {
       const depth = Number(src.params.H) || 12;
       const bolt = makePart('bolt', parts, {
         name: `Śruba do: ${src.name}`,
-        params: { size: src.params.size, D: src.params.D, P: src.params.P, L: src.type === 'threadHole' ? Math.max(3, depth - 1) : Math.max(10, depth + 8), head: 'hex', bore: 0, fit: 'normal', luz: 0.1 },
+        params: { size: src.params.size, D: src.params.D, P: src.params.P, L: src.type === 'threadHole' ? Math.max(3, depth - 1) : Math.max(10, depth + 8), head: 'hex', bore: 0, fit: 'normal', luz: 0.1, hand: src.params.hand ?? 'right' },
       });
       pushRight(parts, bolt);
       commit([...parts, bolt], { selectedId: bolt.id, fitRequest: get().fitRequest + 1 });
@@ -916,7 +918,7 @@ export const useStore = create<State>((set, get) => {
       const { parts } = get();
       const src = parts.find((x) => x.id === id);
       if (!src) return;
-      const nut = makePart('threadNut', parts, { name: `Nakrętka do: ${src.name}`, params: { size: src.params.size, D: src.params.D, P: src.params.P, H: 0, shape: 'hex', fit: 'normal', luz: 0.2 } });
+      const nut = makePart('threadNut', parts, { name: `Nakrętka do: ${src.name}`, params: { size: src.params.size, D: src.params.D, P: src.params.P, H: 0, shape: 'hex', fit: 'normal', luz: 0.2, hand: src.params.hand ?? 'right' } });
       pushRight(parts, nut);
       commit([...parts, nut], { selectedId: nut.id, fitRequest: get().fitRequest + 1 });
       get().notify('Dodano pasującą nakrętkę jako osobną bryłę obok modelu.');
@@ -930,7 +932,7 @@ export const useStore = create<State>((set, get) => {
       const local = new THREE.Vector3(0, 0, Math.max(0, headH)).applyMatrix4(partMatrix(bolt.position, bolt.rotation));
       const hole = makePart('threadHole', parts, {
         name: `Gwint do: ${bolt.name}`,
-        params: { size: bolt.params.size, D: bolt.params.D, P: bolt.params.P, H: Number(bolt.params.L), fit: 'normal', luz: 0.2, chamfer: true },
+        params: { size: bolt.params.size, D: bolt.params.D, P: bolt.params.P, H: Number(bolt.params.L), fit: 'normal', luz: 0.2, chamfer: true, hand: bolt.params.hand ?? 'right' },
         position: r3([local.x, local.y, local.z]),
         rotation: [...bolt.rotation],
       });
@@ -990,6 +992,63 @@ export const useStore = create<State>((set, get) => {
     unfitLid(id) {
       commit(get().parts.map((p) => (p.id === id ? { ...p, fitTo: undefined } : p)));
       get().notify('Pokrywka odłączona: jej wymiary nie zmieniają się już razem z pudełkiem.');
+    },
+
+    addFaceMagnets(body, opt) {
+      const { parts } = get();
+      const [res] = buildBodies(parts, [body]);
+      if (!res) return;
+      const bb = finishedBox(parts, body);
+      const { r, depth } = magnetDims(opt.size);
+      const axis = opt.face === 'top' || opt.face === 'bottom' ? 2 : opt.face === 'left' || opt.face === 'right' ? 0 : 1;
+      const plus = opt.face === 'top' || opt.face === 'right' || opt.face === 'back';
+      // The face's two in-plane axes and its extent there.
+      const [ua, va] = axis === 2 ? [0, 1] : axis === 0 ? [1, 2] : [0, 2];
+      const lo = (a: number) => bb.min.getComponent(a), hi = (a: number) => bb.max.getComponent(a);
+      const m = Math.max(opt.margin, MAGNET_WALL) + r;
+      const cu = (lo(ua) + hi(ua)) / 2, cv = (lo(va) + hi(va)) / 2;
+      const su = Math.max(0, (hi(ua) - lo(ua)) / 2 - m), sv = Math.max(0, (hi(va) - lo(va)) / 2 - m);
+      let uv: [number, number][];
+      if (opt.layout === 'center') uv = [[cu, cv]];
+      else if (opt.layout === 'corners') uv = su > 0 && sv > 0 ? [[cu - su, cv - sv], [cu + su, cv - sv], [cu - su, cv + sv], [cu + su, cv + sv]] : [[cu, cv]];
+      else {
+        const n = Math.max(2, Math.round(opt.n));
+        const alongU = hi(ua) - lo(ua) >= hi(va) - lo(va);
+        const s = alongU ? su : sv;
+        uv = Array.from({ length: n }, (_, i) => {
+          const t = -s + (2 * s * i) / (n - 1);
+          return alongU ? [cu + t, cv] : [cu, cv + t];
+        });
+      }
+      const rotation: Vec3 =
+        opt.face === 'top' ? [0, 0, 0] : opt.face === 'bottom' ? [180, 0, 0] : opt.face === 'right' ? [0, 90, 0] : opt.face === 'left' ? [0, -90, 0] : opt.face === 'back' ? [-90, 0, 0] : [90, 0, 0];
+      const surf = plus ? hi(axis) : lo(axis);
+      const inward = (plus ? -1 : 1) * (depth - 0.01);
+      const link = uid();
+      const next = [...parts];
+      let skipped = 0, k = 0;
+      for (const [u, v] of uv) {
+        const pos: [number, number, number] = [0, 0, 0];
+        pos[ua] = u;
+        pos[va] = v;
+        pos[axis] = surf + inward;
+        const pocket = makePart('magnet', next, { name: `Magnes ${k + 1}`, params: { size: opt.size, luz: MAGNET_LUZ }, position: r3(pos), rotation, body, link });
+        // Only where the pocket and a wall around it sit in material (a sphere or a figurine is not a box).
+        const wall = worldManifold({ ...pocket, params: { ...pocket.params, luz: MAGNET_LUZ + 2 * MAGNET_WALL } });
+        const inside = wall.subtract(res.manifold);
+        const ok = inside.volume() < wall.volume() * 0.12;
+        wall.delete();
+        inside.delete();
+        if (!ok) {
+          skipped++;
+          continue;
+        }
+        k++;
+        next.push(pocket);
+      }
+      if (!k) return get().notify('Tu nie zmieści się gniazdo: ścianka jest za mała albo za cienka na ten magnes. Wybierz mniejszy magnes albo inną ściankę.');
+      commit(next, { selectedId: groupId(body) });
+      get().notify(`Dodano ${k} ${few(k) ? 'gniazda' : k === 1 ? 'gniazdo' : 'gniazd'} na magnesy ${opt.size.replace('x', '×')} mm (głębokość ${String(round(depth, 2)).replace('.', ',')} mm).${skipped ? ` ${skipped} pominięte, bo wypadały poza materiał.` : ''} Bieguny: przed wklejeniem złóż magnesy parami.`);
     },
 
     addMagnets(id, opt) {
