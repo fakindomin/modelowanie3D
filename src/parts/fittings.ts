@@ -235,4 +235,24 @@ export const FITTING_DEFS: PartDef[] = [
       return cyl(h, id / 2 + cs * 1.4).subtract(cyl(h + 2, id / 2).translate([0, 0, -1]));
     },
   },
+  {
+    type: 'oringPart',
+    label: 'O-ring do druku',
+    category: 'fittings',
+    hole: false,
+    description: 'Uszczelka o-ring do wydruku z TPU (miękkiego, 85A–95A). Przekrój kwadratowy drukuje się czyściej i uszczelnia tak samo dobrze; okrągły jak kupny.',
+    params: [
+      { key: 'ID', label: 'Średnica wewnętrzna', type: 'number', def: 20, min: 2, max: 300, step: 0.1, unit: 'mm' },
+      { key: 'CS', label: 'Przekrój', type: 'number', def: 2, min: 1, max: 10, step: 0.1, unit: 'mm', hint: 'Do druku najlepiej 2 mm i więcej (dysza 0,4).' },
+      select('section', 'Kształt przekroju', 'square', [['square', 'Kwadratowy (lepiej się drukuje)'], ['round', 'Okrągły']]),
+    ],
+    build: oringSolid,
+  },
 ];
+
+/** A printable o-ring lying flat: inner diameter ID, cross-section CS (round or square). */
+export function oringSolid(p: Params): Manifold {
+  const id = num(p, 'ID'), cs = num(p, 'CS');
+  if (p.section === 'round') return M().Manifold.revolve(M().CrossSection.circle(cs / 2, 32).translate([id / 2 + cs / 2, cs / 2]), 128);
+  return cyl(cs, id / 2 + cs).subtract(cyl(cs + 2, id / 2).translate([0, 0, -1]));
+}

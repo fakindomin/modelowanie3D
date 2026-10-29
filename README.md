@@ -150,6 +150,8 @@ Każda ma własną scenę, historię cofania i autozapis.
   z gwintem) w każde ramię razem z otworami i zatrzaskami; wszystko idzie za łącznikiem przy zmianie
   rozmiaru, kształtu, położenia i kąta śrub. Osobno: „Rura z końcówką” i „Zatrzask sprężynowy U”
   (drukowany na płasko, z PETG albo nylonu).
+  Rowek na o-ring w ramionach (kielich albo czop, ścisk 20 %) i **o-ring do druku** z TPU (przekrój
+  kwadratowy albo okrągły), też jako osobny element i do „Rowka na o-ring”.
 - **Sprawdź model:** nachodzące na siebie bryły, ścianki cieńsze niż ustawione minimum (domyślnie
   0,8 mm), otwory, które nic nie wycinają, bryły pod stołem lub za duże na stół.
 - **Figurki:** 16 modeli z żebrowanej kolekcji (silnik przeniesiony z artefaktu, STANDARD v1.0),

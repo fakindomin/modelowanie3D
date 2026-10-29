@@ -408,6 +408,8 @@ function Helpers({ part }: { part: Part }) {
     const what = part.type === 'profileFitting' ? 'profile' : 'rury';
     out.push(b(has ? `↻ Wstaw pasujące ${what} od nowa` : `+ Dodaj pasujące ${what}`, () => st.matchingPipes(part.id), INFO.pipes));
   }
+  if (part.type === 'oring' || ((part.type === 'pipeFitting') && part.params.oring === 'yes'))
+    out.push(b('+ Dodaj o-ring do druku', () => st.addOrings(part.id), INFO.oringPart));
   const armFit = part.armOf ? st.parts.find((p) => p.id === part.armOf!.of) : undefined;
   if (armFit) {
     out.push(b(`→ Przejdź do łącznika „${armFit.name}”`, () => st.select(armFit.id), INFO.armOf));

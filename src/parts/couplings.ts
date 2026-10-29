@@ -192,6 +192,26 @@ export function halfAt(geo: FitGeo, i: number, a: number) {
   return geo.square ? (Math.abs(Math.cos(a)) > 0.5 ? D / 2 : H / 2) : D / 2;
 }
 
+const ORING_ENDS = new Set(['socket', 'plug', 'bayonet', 'click', 'pin']);
+/**
+ * O-ring seal of arm i (round arms only): groove in the socket bore (sealing on the pipe's outside)
+ * or on the plug (sealing on the pipe's inside), squeezed 20 %. Null when the arm has none.
+ */
+export function oringFor(geo: FitGeo, p: Params, i: number) {
+  if (geo.square || p.oring !== 'yes' || !ORING_ENDS.has(geo.end)) return null;
+  const { D, T } = geo.size(i);
+  const CS = num(p, 'orCS') || 2;
+  const z = geo.stop + Math.max(CS * 1.5, geo.depth * 0.25);
+  const w = CS * 1.4;
+  if (geo.end === 'plug') {
+    const bottom = D / 2 - T - 0.8 * CS;
+    // Stretched about 2 % onto the groove bottom so it stays put while the pipe goes on.
+    return { CS, z, w, r0: bottom, r1: D / 2 - T, ID: Math.round(2 * bottom * 0.98 * 10) / 10 };
+  }
+  const bottom = D / 2 + 0.8 * CS;
+  return { CS, z, w, r0: D / 2 + geo.g - 0.01, r1: bottom, ID: Math.round((2 * bottom - 2 * CS) * 10) / 10 };
+}
+
 /** Pipe hole through one wall in the arm frame: start just outside, pointing inward. */
 function radialCyl(r0: number, r1: number, rad: number, z: number, a: number) {
   // A cylinder along +X from r0 to r1, at height z, turned to angle a about the arm.
@@ -230,7 +250,8 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut: Manifold;
     adds.push(cyl(stop, D / 2));
     const rp = idR - g;
     adds.push(cyl(depth - 1, rp).translate([0, 0, stop - 0.01]).add(cyl(1, rp, rp - 0.8).translate([0, 0, L - 1.1])));
-    const rin = rp - Math.max(wall, 1.6);
+    const ring = oringFor(geo, p, i);
+    const rin = Math.min(rp - Math.max(wall, 1.6), ring ? ring.r0 - 1.2 : Infinity);
     if (rin > 1.5) cuts.push(cyl(L + 2, rin).translate([0, 0, -1]));
     // Room for the pipe pushed over the plug: other arms' collars must not reach into it.
     cuts.push(cyl(depth + 2, D / 2 + 2).subtract(cyl(depth + 4, idR - 0.01).translate([0, 0, -1])).translate([0, 0, stop]));
@@ -270,6 +291,11 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut: Manifold;
       const ps = pinSpots(geo, p);
       for (const a of ps.angles) cuts.push(radialCyl(r1, r2, geo.pinD / 2 + g, ps.z, a));
     }
+  }
+  const ring = oringFor(geo, p, i);
+  if (ring) {
+    const groove = cyl(ring.w, end === 'plug' ? ring.r1 + 1 : ring.r1).subtract(cyl(ring.w + 2, ring.r0).translate([0, 0, -1])).translate([0, 0, ring.z - ring.w / 2]);
+    cuts.push(groove);
   }
   // Screws: a clearance hole with a counterbore in the arm (a pilot hole in a plug).
   if (geo.screw && (end !== 'pin')) {
@@ -436,6 +462,8 @@ export const COUPLING_DEFS: PartDef[] = [
       n('P', 'Skok gwintu', 1.5, 0.75, 4, 0.25, { show: (p: Params) => threaded(p) && !String(p.std).startsWith('g'), hint: 'Rury G mają gwint rurowy z normy, bez wyboru skoku.' }),
       { ...fitSel, show: threaded },
       ...pinParams,
+      { ...select('oring', 'Uszczelka o-ring', 'none', [['none', 'Bez uszczelki'], ['yes', 'Rowek na o-ring']]), show: (p) => ORING_ENDS.has(String(p.end)), hint: 'Rowek w ramieniu i o-ring do druku z TPU (dodaje go „Dodaj pasujące rury” albo „Dodaj o-ringi”). Ściska się o 20 %.' },
+      n('orCS', 'Przekrój o-ringu', 2, 1, 6, 0.1, { show: (p: Params) => p.oring === 'yes' && ORING_ENDS.has(String(p.end)), hint: 'Ścianka łącznika musi być grubsza niż 0,8 × przekrój + 1 mm.' }),
       ...screwParams(true),
     ],
     normalize: (prev, next) => stdNormalize({ std: 'std2', D: 'D2', T: 'T2' }, 'pipe')(prev, stdNormalize({ std: 'std', D: 'D', T: 'T' }, 'pipe')(prev, next)),

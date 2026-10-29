@@ -61,6 +61,7 @@ const PATHS: Record<string, string> = {
   profileFitting: 'M4 4 H12 V16 H24 V24 H4 Z M8 4 V20 H24',
   pipeEnd: 'M9 3 H19 V18 H9 Z M8 18 L20 20 M8 21 L20 23 M8 24 L20 26',
   springClip: 'M8 25 V8 M20 25 V8 M8 25 H20 M3 9 H8 M20 9 H25',
+  oringPart: 'M14 4 A10 10 0 1 0 14.01 4 M14 7 A7 7 0 1 0 14.01 7',
   gasket: 'M14 5 A9 9 0 1 0 14.01 5 M14 10 A4 4 0 1 0 14.01 10',
   connector: 'M3 5 H25 V23 H3 Z M8 11 H20 A3 3 0 0 1 20 17 H8 A3 3 0 0 1 8 11 Z',
   piCase: 'M3 9 V24 H25 V9 M6 18 H22 V21 H6 Z M8 15 V18 M20 15 V18 M25 12 H22 V16 H25',

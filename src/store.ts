@@ -9,7 +9,7 @@ import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurin
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
 import { placeMates } from './geom/gearMates';
 import { isFitting, pipeFor, placeArmMates } from './geom/armMates';
-import { fittingGeo, pinSpots, screwSpots } from './parts/couplings';
+import { fittingGeo, oringFor, pinSpots, screwSpots } from './parts/couplings';
 import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, Xform } from './types';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
@@ -107,6 +107,8 @@ interface State {
   matingGear(id: string, kind: 'gear' | 'rack' | 'bevel' | 'worm' | 'wheel'): void;
   /** Pipes (or profiles) in every arm of a fitting, with their screw / pin holes and spring clips. */
   matchingPipes(id: string): void;
+  /** Printable o-rings for a fitting's grooves (or an o-ring groove), beside the model. */
+  addOrings(id: string): void;
   matchingNut(id: string): void;
   matchingThreadHole(id: string): void;
   addDrawers(id: string): void;
@@ -956,6 +958,7 @@ export const useStore = create<State>((set, get) => {
         } else if (geo.screw) screwSpots(geo, fit!.params).angles.forEach((_, k) => add('screw', k));
       });
       commit(placeArmMates(next), { selectedId: id });
+      if (fit!.params.oring === 'yes' && !parts.some((p) => p.type === 'oringPart' && p.name.endsWith(`do: ${fit!.name}`))) get().addOrings(id);
       const what = [
         holes ? `${holes} ${holes === 1 ? 'otwór' : holes < 5 ? 'otwory' : 'otworów'} w rurach` : '',
         clips ? `${clips} ${clips === 1 ? 'zatrzask' : clips < 5 ? 'zatrzaski' : 'zatrzasków'} sprężynowe` : '',
@@ -967,6 +970,32 @@ export const useStore = create<State>((set, get) => {
             : 'Rury z gwintem zewnętrznym czekają przed ramionami: wkręć je.'
           : `Rury stoją w ramionach${what.length ? ', dodałem ' + what.join(' i ') : ''}. Idą za łącznikiem; położenie śrub i bolców zmieniasz w łączniku. Przesunięta ręcznie rura odpina się.`,
       );
+    },
+
+    addOrings(id) {
+      const { parts } = get();
+      const src = parts.find((p) => p.id === id);
+      if (!src) return;
+      const rings: { ID: number; CS: number }[] = [];
+      if (src.type === 'oring') rings.push({ ID: Number(src.params.ID), CS: Number(src.params.CS) });
+      else if (isFitting(src)) {
+        const geo = fittingGeo(src.params, src.type === 'profileFitting');
+        geo.dirs.forEach((_, i) => {
+          const r = oringFor(geo, src.params, i);
+          if (r) rings.push({ ID: r.ID, CS: r.CS });
+        });
+      }
+      if (!rings.length) return get().notify('Ten łącznik nie ma rowka na o-ring. Włącz „Uszczelka o-ring” w Wymiarach.');
+      const next = [...parts];
+      // Same size: linked copies (edit one, all follow).
+      const links: Record<string, string> = {};
+      for (const r of rings) {
+        const o = makePart('oringPart', next, { name: `O-ring ${r.ID}×${r.CS} do: ${src.name}`, params: { ID: r.ID, CS: r.CS, section: 'square' }, link: (links[`${r.ID}/${r.CS}`] ??= uid()) });
+        pushRight(next, o);
+        next.push(o);
+      }
+      commit(next);
+      get().notify(`Dodałem ${rings.length === 1 ? 'o-ring' : rings.length + ' o-ringi'} do druku z TPU (85A–95A), obok modelu. Kupny o-ring o tych wymiarach też pasuje.`);
     },
 
     matchingBolt(id) {

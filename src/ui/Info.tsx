@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 /** Short explanations of what each tool does, shown by the ⓘ marks. */
 export const INFO = {
+  oringPart: 'Dodaje o-ring dopasowany do rowka (ściśnięty o 20 %) jako osobną bryłę obok modelu. Drukuj z TPU 85A–95A, przekrój kwadratowy, bez podpór; można też kupić o-ring o tych wymiarach.',
   pipes: 'Wstawia rurę (albo profil) w każde ramię łącznika, dopasowaną do wybranego rozmiaru. Przy śrubach i zatrzasku U w rurach powstają współosiowe otwory, a w rurach siedzą zatrzaski sprężynowe. Rury i otwory idą za łącznikiem: zmieniasz rozmiar, kształt albo położenie śrub w łączniku i wszystko się przestawia. Do kupnych rur: otwory w rurze nawierć według wydruku (albo wydrukuj krótki odcinek rury jako szablon).',
   armOf: 'Ta część należy do ramienia łącznika i idzie za nim. Położenie śrub wzdłuż ramienia i kąt wokół ramienia zmieniasz w Wymiarach łącznika: otwór w łączniku i w rurze przesuwają się razem. Przesunięcie tej części ręcznie (albo „Odepnij”) odłącza ją i od tej chwili stoi tam, gdzie ją postawisz.',
   jar: 'Słoik: górna część ścianki staje się gwintowaną szyjką (cofniętą tak, że zakręcona pokrywka jest równo z pudełkiem). Pokrywka ma gwint wewnętrzny i miejsce na płaską uszczelkę, którą zakręcenie ściska o 0,3 mm. Uszczelkę drukuj z TPU albo wytnij z gumy. Szyjkę i pokrywkę drukuj bez podpór; pokrywkę wierzchem do stołu.',
