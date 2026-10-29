@@ -383,7 +383,26 @@ export function buildPipeEnd(p: Params): Manifold {
     const zh = depth - 3;
     m = m.subtract(M().Manifold.revolve(poly([[D / 2 - 1, zh - 0.2], [D / 2 + 1, zh - 0.2], [D / 2 + 1, zh + 1.8], [D / 2 - 1, zh + 1.8]]), 96));
   }
-  return m.subtract(cyl(L + 2, ri).translate([0, 0, -1]));
+  m = m.subtract(cyl(L + 2, ri).translate([0, 0, -1]));
+  if (p.bell === 'yes') {
+    // Socket on the top end: the next pipe's plain end slides in down to the ledge (45° outside, prints standing).
+    const bD = num(p, 'bellD'), bl = num(p, 'bellL') || 0.15, Ri = D / 2 + bl, Ro = Ri + (num(p, 'bellW') || 2.4);
+    const z0 = L - bD;
+    m = m
+      .add(cyl(bD, Ro).translate([0, 0, z0]))
+      .add(cyl(Ro - D / 2 + 0.01, D / 2, Ro).translate([0, 0, z0 - (Ro - D / 2)]))
+      .subtract(cyl(bD + 1, Ri).translate([0, 0, z0]))
+      .subtract(cyl(0.81, Ri, Ri + 0.8).translate([0, 0, L - 0.8]))
+      .subtract(cyl(L + 2, ri).translate([0, 0, -1]));
+  }
+  // Two opposite holes for the pins of a U spring clip (fitting arm or the next pipe).
+  const pins = String(p.pinHoles ?? 'none');
+  if (pins !== 'none') {
+    const pd = num(p, 'pinD') || 5, at = num(p, 'pinAt') || 15;
+    const zs = [...(pins === 'bottom' || pins === 'both' ? [at] : []), ...(pins === 'top' || pins === 'both' ? [L - at] : [])];
+    for (const z of zs) m = m.subtract(cyl(D + 2, pd / 2 + g).rotate([0, 90, 0]).translate([-D / 2 - 1, 0, z]));
+  }
+  return m;
 }
 
 /** Square pipe end: the profile itself, lying along +Z from its end at z = 0 (centred). */
@@ -505,7 +524,7 @@ export const COUPLING_DEFS: PartDef[] = [
     label: 'Rura z końcówką',
     category: 'couplings',
     hole: false,
-    description: 'Rura (do druku albo jako nakładka na kupną rurę) z końcówką do łącznika: gwint męski, bolce bagnetu albo rowek zatrzasku. Stoi pionowo, końcówka na dole.',
+    description: 'Odcinek rury do druku z końcówką do łącznika (gwint męski, bolce bagnetu, rowek zatrzasku), kielichem na górze do łączenia odcinków i otworami na zatrzask U. Stoi pionowo, końcówka na dole.',
     params: [
       select('end', 'Końcówka', 'male', [['socket', 'Gładka'], ['male', 'Gwint zewnętrzny'], ['bayonet', 'Bolce bagnetu'], ['click', 'Rowek na klik']]),
       pipeStd(),
@@ -515,7 +534,13 @@ export const COUPLING_DEFS: PartDef[] = [
       n('depth', 'Długość końcówki', 20, 6, 200, 1),
       n('P', 'Skok gwintu', 1.5, 0.75, 4, 0.25, { show: (p: Params) => p.end === 'male' && !String(p.std).startsWith('g') }),
       { ...fitSel, show: (p) => p.end === 'male' },
-      n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => p.end === 'bayonet' }),
+      { ...select('bell', 'Kielich na górze', 'none', [['none', 'Bez kielicha'], ['yes', 'Kielich (następna rura wchodzi do środka)']]), hint: 'Odcinki rury łączone bez osobnych złączek: gładki koniec następnego odcinka wchodzi w kielich do oporu.' },
+      n('bellD', 'Głębokość kielicha', 30, 8, 100, 1, { show: (p: Params) => p.bell === 'yes' }),
+      n('bellW', 'Ścianka kielicha', 2.4, 1.2, 8, 0.2, { show: (p: Params) => p.bell === 'yes' }),
+      n('bellL', 'Luz kielicha', 0.15, 0, 1, 0.05, { show: (p: Params) => p.bell === 'yes', hint: '0,1–0,15 mm: ciasno, trzyma bez kleju. 0,3: luźno, do klejenia.' }),
+      { ...select('pinHoles', 'Otwory na zatrzask U', 'none', [['none', 'Bez otworów'], ['bottom', 'Na dole'], ['top', 'Na górze'], ['both', 'Na obu końcach']]) },
+      n('pinAt', 'Odległość otworów od końca', 15, 4, 100, 0.5, { show: (p: Params) => p.pinHoles !== 'none' && p.pinHoles !== undefined }),
+      n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => p.end === 'bayonet' || (p.pinHoles !== 'none' && p.pinHoles !== undefined) }),
       n('wall', 'Wysokość bolców', 2.3, 1, 10, 0.1, { show: (p: Params) => p.end === 'bayonet', hint: 'Tyle co ścianka łącznika.' }),
       n('luz', 'Luz', 0.25, 0, 1.5, 0.05, { show: () => false }),
     ],
