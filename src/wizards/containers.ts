@@ -1,38 +1,10 @@
 import { MAGNETS, type Params } from '../catalog';
 import { worldBox } from '../geom/parts';
-import { TEXTURE_LABELS } from '../geom/texture';
-import type { WallSide } from '../parts/connectors';
-import type { Part, Texture, TextureFace, Vec3, WizValues } from '../types';
-import { PRINTERS } from './frame';
+import type { Part, TextureFace, Vec3, WizValues } from '../types';
+import { addLabel, bedOf, lidFace, mm, pl, printerField, r1, texField, texSideField, texture, tiles } from './common';
 import { host, type WizTools } from './host';
 import { rawPlan } from './raw';
 import type { Field, Plan, Wizard } from './types';
-
-const r1 = (v: number) => Math.round(v * 10) / 10;
-const mm = (v: number) => String(r1(v)).replace('.', ',');
-const pl = (n: number, one: string, few: string, many: string) => {
-  const f = n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14);
-  return `${n} ${n === 1 ? one : f ? few : many}`;
-};
-const tiles = (key: string, options: Extract<Field, { kind: 'tiles' }>['options'], label?: string, cols?: 2 | 3 | 4): Field => ({ kind: 'tiles', key, label, options, cols });
-const printerField: Field = tiles('printer', Object.entries(PRINTERS).map(([k, pr]) => ({ value: k, label: pr.label, desc: `${pr.bed.join(' × ')} mm` })));
-const bedOf = (v: WizValues) => (PRINTERS[String(v.printer)] ?? PRINTERS.p1s).bed;
-
-// ------------------------------------------------------------------------------------- looks (shared)
-
-const texture = (pattern: string, face: TextureFace): Texture => ({ pattern: pattern as Texture['pattern'], face, mode: 'add', depth: 0.8, spacing: 3, angle: 0, margin: 3 });
-const SIDES: Record<string, string> = { front: 'Przód', back: 'Tył', left: 'Lewy bok', right: 'Prawy bok' };
-const texField = (round: boolean): Field[] => [tiles('tex', [{ value: 'none', label: 'Gładko' }, ...Object.entries(TEXTURE_LABELS).map(([k, l]) => ({ value: k, label: l }))], 'Faktura ścianki', 3)];
-const texSideField = (v: WizValues, round: boolean): Field[] =>
-  v.tex !== 'none' && !round ? [tiles('texOn', Object.entries(SIDES).map(([k, l]) => ({ value: k, label: l })), 'Na której ściance', 4)] : [];
-
-/** A label on one face of the body `host` belongs to, as large as the face allows. */
-function addLabel(t: WizTools, on: Part, text: string, side: WallSide, cut: boolean, maxW: number, maxH: number) {
-  const len = Math.max(1, [...text].length);
-  const size = r1(Math.max(3, Math.min(12, maxH * 0.45, (maxW * 0.8) / (len * 1.0))));
-  const id = t.add(cut ? 'textCut' : 'text', { name: 'Napis', params: { text, size, depth: 0.8, bold: size < 6 ? 0.3 : 0 }, body: on.body, color: on.color });
-  t.textToWall(id, side);
-}
 
 /** Half-round finger notch in the top of the front wall. */
 function addNotch(t: WizTools, box: Part) {
@@ -251,14 +223,17 @@ function boxPlan(v: WizValues): Plan {
     if (knob === 'notch') addNotch(t, t.parts().find((p) => p.id === id)!);
     if (lid && (knob === 'knob' || knob === 'tab')) {
       const b = worldBox(lid);
-      const cx = r1((b.min.x + b.max.x) / 2), cy = r1((b.min.y + b.max.y) / 2);
-      if (knob === 'knob') t.add('cylinder', { name: 'Gałka', params: { D: 16, H: 10 }, position: [cx, cy, r1(b.max.z)], color: '#e8873a', edges: { kind: 'round', r: 2, vertical: false, top: true, bottom: false } });
-      else t.add('cube', { name: 'Uchwyt', params: { W: r1(Math.min(40, (b.max.x - b.min.x) * 0.4)), D: 8, H: 6 }, position: [cx, r1(b.min.y + 8), r1(b.max.z)], color: '#e8873a', edges: { kind: 'round', r: 1.5, vertical: true, top: true, bottom: false } });
+      // A lid with a rim lies rim up: the knob is printed beside it and glued onto its outside.
+      const away = lidFace(lid) === 'bottom';
+      const cx = away ? r1(b.max.x + 20) : r1((b.min.x + b.max.x) / 2), cy = r1((b.min.y + b.max.y) / 2);
+      const z = away ? 0 : r1(b.max.z);
+      if (knob === 'knob') t.add('cylinder', { name: 'Gałka', params: { D: 16, H: 10 }, position: [cx, cy, z], color: '#e8873a', edges: { kind: 'round', r: 2, vertical: false, top: true, bottom: false } });
+      else t.add('cube', { name: 'Uchwyt', params: { W: r1(Math.min(40, (b.max.x - b.min.x) * 0.4)), D: 8, H: 6 }, position: [away ? r1(b.max.x + 10 + Math.min(20, (b.max.x - b.min.x) * 0.2)) : cx, r1(b.min.y + 8), z], color: '#e8873a', edges: { kind: 'round', r: 1.5, vertical: true, top: true, bottom: false } });
     }
     if (label) {
       if (v.textOn === 'lid' && lid) {
         const b = worldBox(lid);
-        addLabel(t, t.parts().find((p) => p.id === lid.id)!, label, 'top', true, b.max.x - b.min.x, (b.max.y - b.min.y) * 0.5);
+        addLabel(t, t.parts().find((p) => p.id === lid.id)!, label, lidFace(lid), true, b.max.x - b.min.x, (b.max.y - b.min.y) * 0.5);
       } else addLabel(t, box, label, 'front', v.textMode !== 'raised', W, H);
     }
   });
@@ -385,3 +360,116 @@ export const BOX_WIZARD: Wizard = {
   ],
 };
 
+
+// ------------------------------------------------------------------------------------- cabinet with drawers
+
+const HANDLES: Record<string, string> = { notch: 'Wycięcie na palec', knob: 'Gałka', none: 'Bez uchwytu' };
+
+function cabinetPlan(v: WizValues): Plan {
+  const bed = bedOf(v);
+  const cols = Number(v.cols), rows = Number(v.rows), w = Number(v.w), h = Number(v.h), D = Number(v.D), T = Number(v.T);
+  const labels = String(v.text ?? '').split(',').map((s) => s.trim());
+  const handle = String(v.handle);
+  const built = host.simulate((t) => {
+    t.addCabinet({ w, h, D, cols, rows, T, catch: String(v.catch) });
+    const drawers = t.parts().filter((p) => p.type === 'drawer');
+    if (!drawers.length) return;
+    const first = drawers[0];
+    t.update(first.id, { params: { ...first.params, handle, nx: Number(v.nx), ny: Number(v.ny), rad: Number(v.rad) } });
+    if (v.tex !== 'none') t.update(first.id, { texture: texture(String(v.tex), 'front') });
+    // Labels go row by row from the top left, like reading the cabinet's front.
+    const order = t
+      .parts()
+      .filter((p) => p.type === 'drawer')
+      .sort((a, b) => b.position[2] - a.position[2] || a.position[0] - b.position[0]);
+    order.forEach((d, i) => {
+      const text = labels[i];
+      if (!text) return;
+      addLabel(t, d, text, 'front', v.textMode !== 'raised', w * 0.8, handle === 'knob' ? h * 0.3 : h * 0.45);
+      if (handle !== 'knob') return;
+      // Under the knob, not over it, and on the front itself (the knob sticks out in front of it).
+      const label = t.parts().filter((p) => p.body === d.body && (p.type === 'text' || p.type === 'textCut')).pop();
+      const front = d.position[1] - Number(d.params.D) / 2 + (label?.hole ? Number(label.params.depth) || 0 : 0);
+      if (label) t.update(label.id, { position: [label.position[0], r1(front), r1(d.position[2] + Number(d.params.H) * 0.2)] });
+    });
+  });
+  const { parts, items, size } = rawPlan(built, (main) =>
+    main.type === 'cabinet'
+      ? { role: 'S', name: `Szafka ${cols} × ${rows}`, group: 'box', material: 'PLA', where: '', how: 'Tyłem do stołu: otwory szuflad patrzą w górę, drukuje się bez podpór.' }
+      : { role: 'D', name: `Szuflada ${mm(w - 0.6)} × ${mm(h - 0.6)} mm`, group: 'box', material: 'PLA', where: 'W otworze szafki, luz 0,3 mm z każdej strony', how: 'Dnem do stołu, bez podpór.' },
+  );
+  const cw = cols * w + (cols + 1) * T, chh = rows * h + (rows + 1) * T;
+  const buy: Plan['buy'] = [];
+  if (v.catch !== 'none') {
+    const [d, hh] = MAGNETS[String(v.catch)] ?? [0, 0];
+    buy.push({ name: `Magnes neodymowy Ø${d} × ${hh} mm`, qty: `${2 * cols * rows} szt.`, note: 'Po jednym w szafce i w szufladzie: szuflada sama się domyka.' }, { name: 'Klej cyjanoakrylowy (CA)', qty: '1 tubka' });
+  }
+  const steps = ['Wydrukuj szafkę tyłem do stołu, szuflady dnem do stołu.'];
+  if (v.catch !== 'none') steps.push('Wklej magnesy w gniazda w tylnej ściance szafki, a potem w szuflady: przyłóż je do magnesów szafki, żeby się przyciągały, i dopiero wtedy wklej.');
+  steps.push('Wsuń szuflady w otwory.');
+  const notes: Plan['notes'] = [{ text: `Szafka ${mm(cw)} × ${mm(D)} × ${mm(chh)} mm, ${pl(cols * rows, 'szuflada', 'szuflady', 'szuflad')}.` }];
+  // Printed on its back: the front (width × height) lies on the bed.
+  if (cw > bed[0] || chh > bed[1] || D > bed[2]) notes.push({ warn: true, text: `Szafka nie mieści się na stole (${bed.join(' × ')} mm). Zmniejsz ją albo zrób dwie mniejsze obok siebie.` });
+  if (labels.some(Boolean) && v.tex !== 'none') notes.push({ warn: true, text: 'Napisy i faktura są na przodzie szuflad: napisy będzie słabo widać.' });
+  if (labels.filter(Boolean).length > cols * rows) notes.push({ text: 'Napisów jest więcej niż szuflad: nadmiarowe pomijam.' });
+  return { items, placements: [], parts, buy, steps, notes, bed, longest: chh, size: size as Vec3 };
+}
+
+export const CABINET_WIZARD: Wizard = {
+  id: 'cabinet',
+  label: 'Szafka z szufladami',
+  desc: 'Szafka z otworami i dopasowanymi szufladami: uchwyty, przegródki, zatrzask na magnes, napisy na frontach.',
+  defaults: { cols: 2, rows: 3, w: 60, h: 30, D: 85, T: 2, catch: 'none', handle: 'notch', nx: 1, ny: 1, rad: 0, tex: 'none', text: '', textMode: 'cut', printer: 'p1s' },
+  set: (v, key, value) => ({ ...v, [key]: value }),
+  plan: cabinetPlan,
+  steps: [
+    {
+      title: 'Układ',
+      desc: 'Ile szuflad obok siebie i jedna nad drugą.',
+      focus: [],
+      focusLabel: 'szafka',
+      fields: () => [
+        { kind: 'slider', key: 'cols', label: 'Kolumny', min: 1, max: 6, step: 1, unit: '' },
+        { kind: 'slider', key: 'rows', label: 'Rzędy', min: 1, max: 8, step: 1, unit: '' },
+      ],
+    },
+    {
+      title: 'Szuflada',
+      desc: 'Wymiary otworu na jedną szufladę. Szuflady mają 0,3 mm luzu z każdej strony.',
+      focus: [],
+      focusLabel: 'szuflady',
+      fields: () => [
+        { kind: 'slider', key: 'w', label: 'Szerokość', min: 20, max: 250, step: 1, unit: 'mm' },
+        { kind: 'slider', key: 'h', label: 'Wysokość', min: 12, max: 150, step: 1, unit: 'mm' },
+        { kind: 'slider', key: 'D', label: 'Głębokość', min: 30, max: 250, step: 1, unit: 'mm' },
+        tiles('T', [{ value: 1.6, label: '1,6 mm' }, { value: 2, label: '2 mm' }, { value: 3, label: '3 mm' }], 'Ścianki szafki', 3),
+      ],
+    },
+    {
+      title: 'Wnętrze',
+      desc: 'Przegródki w każdej szufladzie i zatrzask na magnes, który domyka szufladę.',
+      focus: [],
+      focusLabel: 'szuflady',
+      fields: () => [
+        { kind: 'slider', key: 'nx', label: 'Komory wszerz', min: 1, max: 6, step: 1, unit: '' },
+        { kind: 'slider', key: 'ny', label: 'Komory w głąb', min: 1, max: 6, step: 1, unit: '' },
+        tiles('catch', [{ value: 'none', label: 'Bez zatrzasku' }, { value: '6x2', label: 'Magnes Ø6 × 2' }, { value: '8x2', label: 'Magnes Ø8 × 2' }], 'Zatrzask', 3),
+      ],
+    },
+    {
+      title: 'Wygląd',
+      desc: 'Uchwyt, faktura frontów i napisy: po jednym na szufladę, od lewej górnej, rzędami.',
+      focus: [],
+      focusLabel: 'fronty',
+      fields: (v) => [
+        tiles('handle', Object.entries(HANDLES).map(([k, l]) => ({ value: k, label: l })), 'Uchwyt', 3),
+        tiles('rad', [{ value: 0, label: 'Ostre' }, { value: 2, label: '2 mm' }, { value: 4, label: '4 mm' }], 'Narożniki szuflad', 3),
+        ...texField(false),
+        { kind: 'text', key: 'text', label: 'Napisy na frontach, po przecinku', placeholder: 'np. M3, M4, M5, podkładki', max: 200 },
+        ...(String(v.text ?? '').trim() ? [tiles('textMode', [{ value: 'cut', label: 'Wycięte', desc: 'drukują się czysto' }, { value: 'raised', label: 'Wypukłe', desc: 'lepiej widać' }], undefined, 2)] : []),
+      ],
+    },
+    { title: 'Drukarka', desc: 'Szafkę drukuje się tyłem do stołu: przód musi się zmieścić na stole.', focus: [], focusLabel: 'wielkość', fields: () => [printerField] },
+    { title: 'Podsumowanie', desc: '„Utwórz projekt” wstawia szafkę i szuflady. Szuflady są powiązane: zmiana jednej zmienia wszystkie.', focus: [], focusLabel: 'całość', fields: () => [] },
+  ],
+};

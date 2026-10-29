@@ -125,6 +125,12 @@ export function Manual() {
                           <dd>{it.where}</dd>
                         </>
                       )}
+                      {it.note && (
+                        <>
+                          <dt>Notatka</dt>
+                          <dd>{it.note}</dd>
+                        </>
+                      )}
                     </dl>
                   </div>
                 ))}

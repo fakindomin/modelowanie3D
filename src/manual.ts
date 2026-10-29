@@ -17,6 +17,8 @@ export interface ManualItem {
   material: string;
   how: string;
   where: string;
+  /** Notes the user wrote on the parts of this print. */
+  note: string;
   color: string;
   geometry: THREE.BufferGeometry;
   bodies: number[];
@@ -115,7 +117,8 @@ export function makeManual(parts: Part[]): Manual {
     geometry.computeBoundingBox();
     const s = geometry.boundingBox!.getSize(new THREE.Vector3());
     const material = materialOf(main, wiz);
-    const no = wiz ? wiz.role : String(++n);
+    // With several wizard projects in one model their roles repeat: number them per project (1.P, 2.P).
+    const no = wiz ? (plans.size > 1 ? `${[...plans.keys()].indexOf(main.wiz!.run) + 1}.${wiz.role}` : wiz.role) : String(++n);
     bodies.forEach((b) => noOf.set(b, no));
     items.push({
       no,
@@ -126,6 +129,7 @@ export function makeManual(parts: Part[]): Manual {
       material,
       how: howOf(main, single, wiz),
       where: wiz?.where ?? '',
+      note: [...new Set(bodies.flatMap((b) => parts.filter((p) => p.body === b && p.note?.trim()).map((p) => p.note!.trim())))].join(' '),
       color: main.color,
       geometry,
       bodies,

@@ -1,8 +1,9 @@
 import { FRAME_WIZARD } from './frame';
-import { BOX_WIZARD, ORGANIZER_WIZARD } from './containers';
+import { BOX_WIZARD, CABINET_WIZARD, ORGANIZER_WIZARD } from './containers';
+import { CASE_WIZARD, PANEL_WIZARD } from './electronics';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD].map((w) => [w.id, w]));
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD].map((w) => [w.id, w]));
 const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
 
 const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
@@ -24,15 +25,15 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
     items: [
       ready(ORGANIZER_WIZARD),
       ready(BOX_WIZARD),
-      soon('cabinet', 'Szafka z szufladami', 'Liczba szuflad, prowadnice, uchwyty.'),
+      ready(CABINET_WIZARD),
       soon('stack', 'Pojemniki piętrowe', 'Stackowane moduły o jednej podstawie.'),
     ],
   },
   {
     label: 'Obudowy elektroniki',
     items: [
-      soon('case', 'Obudowa płytki', 'Raspberry Pi, Arduino, ESP32, złącza i wentylacja.'),
-      soon('panel', 'Panel sterowania', 'Przyciski, pokrętła, wyświetlacz.'),
+      ready(CASE_WIZARD),
+      ready(PANEL_WIZARD),
       soon('junction', 'Puszka z dławikami', 'Szczelna puszka z wejściami kabli.'),
     ],
   },

@@ -126,6 +126,8 @@ export interface Part {
   pattern?: PatternRule;
   /** Made by a project wizard: its run, the wizard and the item; one part of each run keeps the answers. */
   wiz?: WizTag;
+  /** The user's own note, printed with this part in the manual. */
+  note?: string;
 }
 
 /** Answers given in a project wizard. */

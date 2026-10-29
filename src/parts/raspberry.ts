@@ -112,6 +112,21 @@ export const BOARDS: Record<string, Board> = {
     ports: [{ label: 'micro USB', edge: 'x0', at: 10.5, z: 1.4, params: plug('microusb') }],
     hint: 'Przycisk BOOTSEL jest przy złączu USB; jeśli go potrzebujesz, dodaj otwór okrągły w pokrywce.',
   },
+  uno: {
+    label: 'Arduino Uno R3',
+    L: 68.6, W: 53.3, t: 1.6, pilot: 2.6, standoff: 6, top: 12,
+    holes: [
+      [14, 2.5],
+      [15.3, 50.7],
+      [66.1, 7.6],
+      [66.1, 35.5],
+    ],
+    ports: [
+      { label: 'USB-B', edge: 'x0', at: 38.1, z: 5.5, params: sock('usbb') },
+      { label: 'Gniazdo zasilania DC', edge: 'x0', at: 7.6, z: 5.5, params: sock('dc55', { d: 11.5 }) },
+    ],
+    hint: 'Gniazda USB-B i DC wystają ok. 6 mm poza płytkę: wchodzą w otwory w lewej ściance. Otwory w płytce są na wkręty M3.',
+  },
 };
 
 export const EDGE_SIDE: Record<Port['edge'], WallSide> = { x0: 'left', x1: 'right', y0: 'front' };

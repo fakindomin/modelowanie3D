@@ -2574,6 +2574,35 @@ host.simulate = (fn) => {
         return st().parts.find((p) => p.type === 'box')?.id ?? '';
       },
       update: (id, patch) => st().update(id, patch),
+      remove: (id) => st().remove(id),
+      addPiCase: (board) => {
+        st().addPiCase(board);
+        const id = st().selectedId ?? '';
+        st().select(null);
+        return id;
+      },
+      addCabinet: (params) => {
+        st().addVariant({} as Family, { label: '', type: 'cabinet', params, extra: 'drawers' }, 'recent');
+        st().select(null);
+        return st().parts.find((p) => p.type === 'cabinet')?.id ?? '';
+      },
+      addFaceMagnets: (body, opt) => {
+        st().addFaceMagnets(body, opt);
+        st().select(null);
+      },
+      connectorToWall: (id, side) => st().connectorToWall(id, side),
+      addConnector: (box, params, side, at) => {
+        st().select(box);
+        const id = st().add('connector', { params });
+        st().select(null);
+        st().connectorToWall(id, side);
+        if (at) {
+          const p = st().parts.find((x) => x.id === id)!;
+          st().update(id, { position: [at[0] ?? p.position[0], at[1] ?? p.position[1], at[2] ?? p.position[2]] });
+          st().connectorToWall(id, side);
+        }
+        return id;
+      },
       textToWall: (id, side) => st().textToWall(id, side),
       parts: () => st().parts,
     });

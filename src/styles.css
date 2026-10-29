@@ -565,3 +565,6 @@ body.resizing { cursor: col-resize; user-select: none; }
 .facesel h5 { margin: 8px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
 .textin { width: 150px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
 .chip.on { border-color: var(--accent); color: #f3b27c; }
+
+.note { width: 100%; box-sizing: border-box; resize: vertical; margin: 0 0 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; color: inherit; font: inherit; font-size: 12px; }
+.note:focus { outline: none; border-color: var(--accent); }

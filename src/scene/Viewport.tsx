@@ -70,30 +70,31 @@ function MergedMember({ part, look }: { part: Part; look: Look }) {
 /** Builds the cut result of the given bodies in the background of edits (debounced). */
 function useBodies(parts: Part[], only: number[] | undefined, key: string) {
   const [bodies, setBodies] = useState<BodyResult[]>([]);
-  const live = useRef<BodyResult[]>([]);
-  live.current = bodies;
+  // Results on screen; the ones they replace are freed after the new ones are committed (not inside a
+  // state updater, which React may call twice).
+  const shown = useRef<BodyResult[]>([]);
   useEffect(() => {
-    const t = setTimeout(() => {
-      const next = only && !only.length ? [] : buildBodies(parts, only);
-      setBodies((old) => {
-        old.forEach((b) => {
-          b.geometry.dispose();
-          b.manifold.delete();
-        });
-        return next;
-      });
-    }, 30);
+    const t = setTimeout(() => setBodies(only && !only.length ? [] : buildBodies(parts, only)), 30);
     return () => clearTimeout(t);
   }, [parts, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const prev = shown.current;
+    shown.current = bodies;
+    if (prev !== bodies) prev.forEach(freeBody);
+  }, [bodies]);
   useEffect(
-    () => () =>
-      live.current.forEach((b) => {
-        b.geometry.dispose();
-        b.manifold.delete();
-      }),
+    () => () => {
+      shown.current.forEach(freeBody);
+      shown.current = [];
+    },
     [],
   );
   return bodies;
+}
+
+function freeBody(b: BodyResult) {
+  b.geometry.dispose();
+  b.manifold.delete();
 }
 
 function PreviewBodies() {

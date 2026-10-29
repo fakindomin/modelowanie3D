@@ -1011,6 +1011,14 @@ function PartProperties({ part }: { part: Part }) {
         <input className="name" value={part.name} onChange={(e) => st.updateLive(part.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
       </div>
       <p className="desc">{def.description}</p>
+      <textarea
+        className="note"
+        rows={part.note ? 2 : 1}
+        placeholder="Notatka do instrukcji (np. „wkręć śrubę M3 × 10”)"
+        value={part.note ?? ''}
+        onChange={(e) => st.updateLive(part.id, { note: e.target.value })}
+        onKeyDown={(e) => e.stopPropagation()}
+      />
       <FaceSection part={part} />
       {part.locked && (
         <div className="linkbar">
