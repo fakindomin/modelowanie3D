@@ -12,6 +12,7 @@ import { isFitting, pipeFor, placeArmMates } from './geom/armMates';
 import { fittingGeo, oringFor, pinSpots, screwSpots } from './parts/couplings';
 import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, WizValues, Xform } from './types';
 import { WIZARDS } from './wizards';
+import { host } from './wizards/host';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
@@ -714,6 +715,31 @@ export const useStore = create<State>((set, get) => {
       const next = [...parts];
       const links: Record<string, string> = {};
       const byRole = new Map(plan.items.map((it) => [it.role, it]));
+      if (plan.parts) {
+        // Ready parts from the wizard's scratch scene: fresh ids and bodies, references carried over.
+        const ids = new Map(plan.parts.map((p) => [p.id, uid()]));
+        const bodies = new Map<number, number>();
+        const keys = new Map<string, string>();
+        const fresh = (k?: string) => (k ? (keys.get(k) ?? (keys.set(k, uid()), keys.get(k)!)) : undefined);
+        let nb = nextBody(next);
+        for (const p of plan.parts) if (!bodies.has(p.body)) bodies.set(p.body, nb++);
+        for (const p of plan.parts)
+          next.push({
+            ...p,
+            id: ids.get(p.id)!,
+            name: p.wiz?.role && !p.hole ? `${p.wiz.role} ${p.name}` : p.name,
+            body: bodies.get(p.body)!,
+            avoidBody: p.avoidBody !== undefined ? bodies.get(p.avoidBody) : undefined,
+            position: r3([p.position[0] + origin[0], p.position[1] + origin[1], p.position[2] + origin[2]]),
+            fitTo: p.fitTo ? ids.get(p.fitTo) : undefined,
+            gearMate: p.gearMate ? { ...p.gearMate, of: ids.get(p.gearMate.of) ?? p.gearMate.of } : undefined,
+            armOf: p.armOf ? { ...p.armOf, of: ids.get(p.armOf.of) ?? p.armOf.of } : undefined,
+            link: fresh(p.link),
+            rigid: fresh(p.rigid),
+            pattern: p.pattern ? { ...p.pattern, id: fresh(p.pattern.id)! } : undefined,
+            wiz: { run: tag, w: id, role: p.wiz?.role ?? '', recipe: { values, origin } },
+          });
+      }
       for (const pl of plan.placements) {
         const it = byRole.get(pl.role)!;
         next.push(
@@ -730,7 +756,7 @@ export const useStore = create<State>((set, get) => {
         );
       }
       commit(next, { selectedId: null, fitRequest: get().fitRequest + 1, wizard: null, suggest: null });
-      const n = plan.placements.length;
+      const n = plan.parts ? new Set(plan.parts.map((p) => p.body)).size : plan.placements.length;
       get().notify(`${run ? 'Zaktualizowano' : 'Utworzono'} „${wz.label}”: ${n} ${n === 1 ? 'element' : few(n) ? 'elementy' : 'elementów'}. Zaznacz dowolny i kliknij „Edytuj w kreatorze”, żeby zmienić odpowiedzi.`);
     },
     pins: [],
@@ -2486,3 +2512,34 @@ useStore.subscribe((s, prev) => {
     /* storage unavailable */
   }
 });
+
+host.simulate = (fn) => {
+  const snap = useStore.getState();
+  useStore.setState({ parts: [], past: [], future: [], selectedId: null, suggest: null, check: null, multi: [] });
+  try {
+    const st = () => useStore.getState();
+    fn({
+      add: (type, o) => {
+        const id = st().add(type, o);
+        st().select(null);
+        return id;
+      },
+      addLid: (id) => {
+        st().addLid(id);
+        st().select(null);
+      },
+      addMagnets: (id, opt) => {
+        st().addMagnets(id, opt);
+        st().select(null);
+      },
+      addHinged: (params) => {
+        st().addVariant({} as Family, { label: '', type: 'box', params, extra: 'hinged' }, 'recent');
+        return st().parts.find((p) => p.type === 'box')?.id ?? '';
+      },
+      parts: () => st().parts,
+    });
+    return st().parts;
+  } finally {
+    useStore.setState(snap, true);
+  }
+};

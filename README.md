@@ -174,6 +174,11 @@ Każda ma własną scenę, historię cofania i autozapis.
   na żywo w środku (podświetla to, czego dotyczy krok), po prawej części, filament, czas, stoły i uwagi.
   „Utwórz projekt” wstawia zwykłe elementy (kopie jednej części są powiązane), a „Edytuj w kreatorze”
   przy każdej z nich otwiera kreator z zapisanymi odpowiedziami i wstawia ramę od nowa w tym samym miejscu.
+  „Organizer do szuflady”: wymiary wnętrza szuflady i luz, wkład z przegródkami (dzielony wzdłuż
+  przegródek na części mieszczące się na stole) albo osobne pojemniki, ścianka, narożniki.
+  „Pudełko z pokrywką”: kształt, wymiary, zamknięcie (wciskana, zawias, wsuwana, magnesy, zakręcana
+  z uszczelką), przegródki. Te kreatory budują części narzędziami edytora (pokrywka śledzi pudełko,
+  gniazda magnesów, zawias), więc dalej działają jak zwykłe elementy.
 - **Instrukcja (📖):** dla każdego projektu: okładka z rysunkiem i filamentem, karty „do wydrukowania”
   (miniatura, numer, ilość identycznych brył, wymiary, materiał, waga, ułożenie na stole), „do kupienia”
   (magnesy, wkręty, płyty), „co do czego pasuje” (pokrywka–pudełko, rura–łącznik, zębatki, czop–gniazdo)

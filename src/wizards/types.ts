@@ -1,5 +1,5 @@
 import type { Params } from '../catalog';
-import type { Vec3, WizValues } from '../types';
+import type { Part, Vec3, WizValues } from '../types';
 
 export interface TileOption {
   value: string | number;
@@ -60,6 +60,8 @@ export interface Plan {
   longest: number;
   /** Outer size of the assembled model, mm. */
   size: Vec3;
+  /** Ready parts built with the editor's tools (boxes, lids, magnets), used in place of placements. Each carries wiz.role. */
+  parts?: Part[];
   /** Bought boards (shelves, top), centre and size: shown in the preview, not added to the model. */
   boards?: { size: Vec3; position: Vec3 }[];
 }

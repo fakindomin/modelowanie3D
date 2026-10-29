@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { useStore } from '../store';
-import { built } from '../geom/parts';
+import { buildBodies, built } from '../geom/parts';
 import { WIZARDS, WIZARD_GROUPS } from '../wizards';
 import { estimate, fmtH, fmtKg, type Estimate } from '../wizards/estimate';
 import type { Field, Plan, Wizard } from '../wizards/types';
@@ -201,7 +201,7 @@ function Steps({ wz, initial, run }: { wz: Wizard; initial: WizValues; run?: str
           {busy && <span className="wiz-busy"> · przeliczam…</span>}
         </div>
         {error && <div className="wiz-error">{error}</div>}
-        {plan && <BedInset plan={plan} pipe={Number(values.pipe) || 20} />}
+        {plan && !plan.parts && <BedInset plan={plan} pipe={Number(values.pipe) || 20} />}
         <div className="wiz-hint">Przeciągnij, żeby obrócić · kółko: przybliż</div>
       </section>
       <aside className="wiz-sum">
@@ -346,7 +346,7 @@ function Frame({ plan, focus }: { plan: Plan; focus: string[] }) {
   useEffect(() => {
     const r = Math.max(W, D, H);
     const target = new THREE.Vector3(0, 0, H / 2);
-    camera.position.copy(target).add(new THREE.Vector3(0.75, -1.05, 0.55).normalize().multiplyScalar(r * 2.3 + 300));
+    camera.position.copy(target).add(new THREE.Vector3(0.75, -1.05, 0.55).normalize().multiplyScalar(r * 2.5 + 60));
     camera.lookAt(target);
     const c = controls as unknown as { target: THREE.Vector3; update(): void } | null;
     if (c) {
@@ -356,8 +356,21 @@ function Frame({ plan, focus }: { plan: Plan; focus: string[] }) {
     // Only when the size changes noticeably, so orbiting survives small edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, controls]);
+  // Ready parts (boxes, lids): shown as printed, holes cut.
+  const bodies = useMemo(() => (plan.parts ? buildBodies(plan.parts) : []), [plan]);
+  useEffect(
+    () => () =>
+      bodies.forEach((b) => {
+        b.geometry.dispose();
+        b.manifold.delete();
+      }),
+    [bodies],
+  );
   return (
     <group position={[-W / 2, -D / 2, 0]}>
+      {bodies.map((b) => (
+        <mesh key={'r' + b.body} geometry={b.geometry} material={mat(b.color, false)} />
+      ))}
       {plan.placements.map((pl, i) => {
         const it = byRole.get(pl.role)!;
         const g = built({ type: it.type, params: it.params } as Part).geometry;

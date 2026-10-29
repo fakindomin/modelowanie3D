@@ -1,7 +1,9 @@
 import { FRAME_WIZARD } from './frame';
+import { BOX_WIZARD, ORGANIZER_WIZARD } from './containers';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = { [FRAME_WIZARD.id]: FRAME_WIZARD };
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD].map((w) => [w.id, w]));
+const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
 
 const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
 
@@ -10,7 +12,7 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
   {
     label: 'Ramy i konstrukcje',
     items: [
-      { id: 'frame', label: FRAME_WIZARD.label, desc: FRAME_WIZARD.desc, ready: true },
+      ready(FRAME_WIZARD),
       soon('profileFrame', 'Rama z profili', 'Kwadratowe profile, łączniki z czopem, panele.'),
       soon('rack', 'Regał modułowy', 'Półki, przegrody, rozbudowa w górę i w bok.'),
       soon('stand', 'Stojak', 'Na rośliny, monitor, telefon, narzędzia.'),
@@ -20,8 +22,8 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
   {
     label: 'Pojemniki',
     items: [
-      soon('organizer', 'Organizer do szuflady', 'Wymiary szuflady, siatka przegródek.'),
-      soon('box', 'Pudełko z pokrywką', 'Zawias, magnesy, zatrzask albo gwint.'),
+      ready(ORGANIZER_WIZARD),
+      ready(BOX_WIZARD),
       soon('cabinet', 'Szafka z szufladami', 'Liczba szuflad, prowadnice, uchwyty.'),
       soon('stack', 'Pojemniki piętrowe', 'Stackowane moduły o jednej podstawie.'),
     ],

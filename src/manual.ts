@@ -161,7 +161,7 @@ export function makeManual(parts: Part[]): Manual {
   // ------------------------------------------------------------------ to buy
   const buy: Manual['buy'] = [];
   const magnets = new Map<string, number>();
-  for (const p of parts) if (p.type === 'magnet') magnets.set(String(p.params.size), (magnets.get(String(p.params.size)) ?? 0) + 1);
+  for (const p of parts) if (p.type === 'magnet' && !p.wiz) magnets.set(String(p.params.size), (magnets.get(String(p.params.size)) ?? 0) + 1);
   for (const [size, k] of magnets) {
     const [d, h] = MAGNETS[size] ?? [0, 0];
     buy.push({ name: `Magnes neodymowy Ø${d} × ${h} mm`, qty: `${k} szt.`, note: 'Wklej kroplą kleju CA. Przed wklejeniem sprawdź, czy pary się przyciągają.' });
