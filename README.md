@@ -177,12 +177,20 @@ Każda ma własną scenę, historię cofania i autozapis.
   „Organizer do szuflady”: wymiary wnętrza szuflady i luz, wkład z przegródkami (dzielony wzdłuż
   przegródek na części mieszczące się na stole) albo osobne pojemniki, ścianka, narożniki.
   „Pudełko z pokrywką”: kształt, wymiary, zamknięcie (wciskana, zawias, wsuwana, magnesy, zakręcana
-  z uszczelką), przegródki. Te kreatory budują części narzędziami edytora (pokrywka śledzi pudełko,
-  gniazda magnesów, zawias), więc dalej działają jak zwykłe elementy.
+  z uszczelką; okrągłe także bez dna albo z gwintem z obu stron), przegródki.
+  „Szafka z szufladami”: kolumny i rzędy, wymiary otworu, przegródki w szufladach, zatrzask na magnes,
+  uchwyt, faktura frontów i napisy na każdej szufladzie.
+  „Obudowa płytki”: Raspberry Pi 5/4/3, Zero 2 W, Pico, Arduino Uno; wybór gniazd, karta SD, przycisk
+  i dioda w pokrywce, wentylacja (ażur w pokrywce albo szczeliny z tyłu), uszy na wkręty albo magnesy w dnie.
+  „Panel sterowania”: przyciski 12/16 mm, potencjometry z gałkami do druku, diody, okno na OLED 0,96"
+  albo LCD 16×2, gniazda DC / USB-C / wyłącznik w tylnej ściance.
+  Te kreatory budują części narzędziami edytora (pokrywka śledzi pudełko, gniazda magnesów, zawias,
+  otwory na złącza), więc dalej działają jak zwykłe elementy.
 - **Instrukcja (📖):** dla każdego projektu: okładka z rysunkiem i filamentem, karty „do wydrukowania”
   (miniatura, numer, ilość identycznych brył, wymiary, materiał, waga, ułożenie na stole), „do kupienia”
   (magnesy, wkręty, płyty), „co do czego pasuje” (pokrywka–pudełko, rura–łącznik, zębatki, czop–gniazdo)
-  i kolejność składania. Drukuje się albo zapisuje jako PDF.
+  i kolejność składania. Własna notatka przy elemencie (pole pod opisem w panelu) trafia na jego kartę.
+  Drukuje się albo zapisuje jako PDF.
 - **Eksport:** STL (wszystko w jednym pliku) i 3MF (każda bryła jako osobny obiekt).
 - Zapis i wczytywanie projektu (JSON z obiema zakładkami), autozapis w przeglądarce, cofnij/ponów.
 

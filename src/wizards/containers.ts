@@ -205,6 +205,7 @@ function boxPlan(v: WizValues): Plan {
     rad: rect && close !== 'slide' ? Number(v.rad) : 0,
     slide: close === 'slide',
     screw: close === 'screw',
+    ends: close === 'screw' ? String(v.ends ?? 'bottom') : 'bottom',
     div: '',
   };
   const knob = KNOBS[String(v.knob)]?.closes.includes(close) ? String(v.knob) : 'none';
@@ -216,6 +217,12 @@ function boxPlan(v: WizValues): Plan {
       id = t.add('box', { name: 'Pudełko', params, color: '#a9aeb3' });
       if (close === 'magnet') t.addMagnets(id, { size: String(v.mag), layout: shape === 'hex' ? '6' : '4', hidden: false, lid: 'flat' });
       else t.addLid(id);
+      if (params.ends === 'both') {
+        // Second cap and gasket for the other end.
+        const cap = t.parts().find((p) => p.type === 'lid')!, g = t.parts().find((p) => p.type === 'gasket');
+        t.add('lid', { name: cap.name, params: cap.params, fitTo: cap.fitTo, position: [cap.position[0], r1(cap.position[1] + W + 10), 0], color: cap.color });
+        if (g) t.add('gasket', { name: g.name, params: g.params, fitTo: g.fitTo, position: [g.position[0], r1(g.position[1] + W + 10), 0], color: g.color });
+      }
     }
     const box = t.parts().find((p) => p.id === id)!;
     const lid = t.parts().find((p) => (p.type === 'lid' || p.type === 'slab') && !p.hole);
@@ -266,7 +273,7 @@ function boxPlan(v: WizValues): Plan {
   const steps = ['Wydrukuj części z listy: pudełko dnem do stołu, pokrywkę wierzchem do stołu.'];
   if (close === 'magnet') steps.push('Wklej magnesy kroplą kleju CA. Najpierw włóż wszystkie do pudełka, przyłóż do nich magnesy pokrywki i dopiero wtedy wklej, żeby się przyciągały.');
   if (close === 'hinge') steps.push('Nałóż pokrywkę oczkami między oczka pudełka i wsuń z boku kawałek filamentu 1,75 mm jako oś. Wystający koniec przytnij.');
-  if (close === 'screw') steps.push('Włóż uszczelkę do pokrywki pod gwint i zakręć pokrywkę.');
+  if (close === 'screw') steps.push(params.ends === 'both' ? 'Włóż uszczelki do obu pokrywek pod gwint i zakręć je na końce rury.' : 'Włóż uszczelkę do pokrywki pod gwint i zakręć pokrywkę.');
   if (close === 'slide') steps.push('Wsuń pokrywkę w rowki od przodu.');
   if (close === 'press') steps.push('Wciśnij pokrywkę rantem w pudełko.');
   if (knob === 'knob' || knob === 'tab') steps.splice(1, 0, `Przyklej ${knob === 'knob' ? 'gałkę na środku' : 'uchwyt przy przedniej krawędzi'} pokrywki kroplą kleju CA.`);
@@ -277,6 +284,8 @@ function boxPlan(v: WizValues): Plan {
   if (close === 'magnet' && !magnets.size) notes.push({ warn: true, text: 'Ścianki są za cienkie na te magnesy. Wybierz mniejsze albo grubszą ściankę.' });
   if (label && v.textOn !== 'lid' && v.tex !== 'none' && (shape === 'round' || v.texOn === 'front')) notes.push({ warn: true, text: 'Napis i faktura są na tej samej ściance, napis będzie słabo widać. Przenieś fakturę na bok albo napis na pokrywkę.' });
   if (close === 'screw') notes.push({ text: 'Gwint ma skok 3 mm: zakręca się w niecały obrót i dobrze się drukuje.' });
+  if (params.ends === 'open') notes.push({ text: 'Bez dna: to rura z gwintem u góry, np. osłona albo łącznik.' });
+  if (params.ends === 'both') notes.push({ text: 'Rura z gwintem z obu stron: na każdym końcu zakręcana pokrywka z uszczelką.' });
 
   return { items, placements: [], parts, buy, steps, notes, bed, longest: H, size: size as Vec3 };
 }
@@ -285,7 +294,7 @@ export const BOX_WIZARD: Wizard = {
   id: 'box',
   label: 'Pudełko z pokrywką',
   desc: 'Pudełko z przegródkami i pokrywką: wciskaną, na zawiasie, wsuwaną, na magnesy albo zakręcaną.',
-  defaults: { shape: 'rect', W: 100, D: 70, H: 45, wall: 2, close: 'hinge', mag: '6x3', nx: 1, ny: 1, nr: 0, rad: 4, tex: 'none', texOn: 'front', knob: 'tab', text: '', textOn: 'front', textMode: 'cut', printer: 'p1s' },
+  defaults: { shape: 'rect', W: 100, D: 70, H: 45, wall: 2, close: 'hinge', ends: 'bottom', mag: '6x3', nx: 1, ny: 1, nr: 0, rad: 4, tex: 'none', texOn: 'front', knob: 'tab', text: '', textOn: 'front', textMode: 'cut', printer: 'p1s' },
   set(v, key, value) {
     const next = { ...v, [key]: value };
     // A closing the new shape cannot have falls back to a plain lid.
@@ -320,6 +329,9 @@ export const BOX_WIZARD: Wizard = {
       focusLabel: 'pokrywka',
       fields: (v) => [
         tiles('close', Object.entries(CLOSES).filter(([, c]) => c.shapes.includes(String(v.shape))).map(([k, c]) => ({ value: k, label: c.label, desc: c.desc }))),
+        ...(v.close === 'screw'
+          ? [tiles('ends', [{ value: 'bottom', label: 'Z dnem' }, { value: 'open', label: 'Bez dna', desc: 'rura' }, { value: 'both', label: 'Gwint z obu stron', desc: 'dwie pokrywki' }], 'Dno', 3)]
+          : []),
         ...(v.close === 'magnet' ? [tiles('mag', ['5x2', '6x3', '8x3', '10x3'].map((s) => ({ value: s, label: `Ø${s.replace('x', ' × ')}` })), 'Magnesy', 4)] : []),
       ],
     },

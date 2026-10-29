@@ -39,22 +39,40 @@ export const jarParams = (shown: (p: Params) => boolean): ParamDef[] => [
   { key: 'screw', label: 'Gwint pod zakręcaną pokrywkę', type: 'bool', def: false, show: (p) => p.shape === 'round' && shown(p), hint: 'Górna część ścianki staje się gwintowaną szyjką, a pokrywka jest zakręcana (z uszczelką).' },
   { key: 'P', label: 'Skok gwintu', type: 'number', def: 3, min: 1.5, max: 6, step: 0.5, unit: 'mm', show: (p) => isJar(p) && shown(p), hint: '3 mm zakręca się szybko i dobrze się drukuje. Mniejszy skok trzyma mocniej, ale wymaga dokładniejszego druku.' },
   { key: 'threadL', label: 'Długość gwintu', type: 'number', def: 8, min: 4, max: 40, step: 0.5, unit: 'mm', show: (p) => isJar(p) && shown(p) },
+  {
+    ...select('ends', 'Dno', 'bottom', [
+      ['bottom', 'Z dnem'],
+      ['open', 'Bez dna (rura)'],
+      ['both', 'Bez dna, gwint z obu stron'],
+    ]),
+    show: (p) => isJar(p) && shown(p),
+    hint: 'Bez dna pudełko staje się rurą z gwintem. Z gwintem z obu stron można zakręcić pokrywkę na każdym końcu albo połączyć kilka takich rur złączką.',
+  },
   { ...select('fit', 'Dopasowanie gwintu', 'normal', Object.entries(FITS).map(([k, v]) => [k, v.label] as [string, string])), show: (p) => isJar(p) && shown(p) },
 ];
 
-/** The box: body, a shoulder, then the threaded neck; inside, a 45° step where the neck is thicker. */
+/**
+ * The box: body, a shoulder, then the threaded neck; inside, a 45° step where the neck is thicker.
+ * Without a bottom it is a tube; with threads on both ends the bottom neck is the top one turned over.
+ */
 export function jarBox(p: Params): Manifold {
   const d = jarDims(p);
-  const H = num(p, 'H'), b = num(p, 'B');
-  const Hn = Math.min(d.L, H - b - 1);
+  const H = num(p, 'H'), both = p.ends === 'both', open = both || p.ends === 'open';
+  const b = open ? -1 : num(p, 'B');
+  const Hn = Math.min(d.L, (both ? H / 2 : H - Math.max(0, b)) - 1);
+  const lo = both ? Hn : 0;
   const ri = d.W / 2 - d.t;
-  let m = cyl(H - Hn, d.W / 2).add(externalThread(d.spec, Hn, threadGap(p, 'out'), true, false).translate([0, 0, H - Hn]));
+  const neck = externalThread(d.spec, Hn, threadGap(p, 'out'), true, false);
+  let m = cyl(H - Hn - lo, d.W / 2).translate([0, 0, lo]).add(neck.translate([0, 0, H - Hn]));
+  if (both) m = m.add(neck.rotate([180, 0, 0]).translate([0, 0, Hn]));
   const step = Math.max(0, ri - d.riN);
   const z1 = Math.max(b, H - Hn - step);
-  const inside = cyl(z1 - b + 0.01, ri)
-    .translate([0, 0, b])
+  const z0 = both ? Math.min(Hn + step, z1) : b;
+  let inside = cyl(z1 - z0 + 0.01, ri)
+    .translate([0, 0, z0])
     .add(cyl(step + 0.01, ri, d.riN).translate([0, 0, z1]))
     .add(cyl(H + 2, d.riN).translate([0, 0, b]));
+  if (both && step > 0) inside = inside.add(cyl(step + 0.01, d.riN, ri).translate([0, 0, z0 - step - 0.01]));
   m = m.subtract(inside);
   return m;
 }
