@@ -15,10 +15,10 @@ export const PRINTERS: Record<string, { label: string; bed: Vec3 }> = {
 };
 
 const TEMPLATES: Record<string, { label: string; desc: string; v: WizValues }> = {
-  tent: { label: 'Namiot / growbox', desc: 'Wysoka rama pod tkaninę', v: { W: 60, D: 60, H: 140, rings: 1, lamp: true, shelves: false, top: false } },
-  shelf: { label: 'Regał', desc: 'Półki na poziomach', v: { W: 80, D: 30, H: 120, rings: 3, lamp: false, shelves: true, top: true } },
-  table: { label: 'Stolik', desc: 'Niska rama z blatem', v: { W: 60, D: 40, H: 45, rings: 0, lamp: false, shelves: false, top: true } },
-  own: { label: 'Własna rama', desc: 'Prostopadłościan od zera', v: { W: 50, D: 50, H: 50, rings: 0, lamp: false, shelves: false, top: false } },
+  tent: { label: 'Namiot / growbox', desc: 'Wysoka rama pod tkaninę', v: { W: 60, D: 60, H: 140, rings: 1, lamp: true, shelves: false, bottom: false, top: false } },
+  shelf: { label: 'Regał', desc: 'Półki na poziomach', v: { W: 80, D: 30, H: 120, rings: 3, lamp: false, shelves: true, bottom: true, top: true } },
+  table: { label: 'Stolik', desc: 'Niska rama z blatem', v: { W: 60, D: 40, H: 45, rings: 0, lamp: false, shelves: false, bottom: false, top: true } },
+  own: { label: 'Własna rama', desc: 'Prostopadłościan od zera', v: { W: 50, D: 50, H: 50, rings: 0, lamp: false, shelves: false, bottom: false, top: false } },
 };
 
 /** Little frame drawing for a template tile (100 × 48). */
@@ -39,6 +39,8 @@ function frameIcon(v: WizValues) {
 const defaults = (type: string): Params => Object.fromEntries(DEFS[type].params.map((q) => [q.key, q.def]));
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const DEG = Math.PI / 180;
+/** A lamp bar belongs to a grow tent (or a frame of one's own), not to a shelf or a table. */
+const lampFits = (v: WizValues) => v.tpl === 'tent' || v.tpl === 'own';
 const X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1);
 
 /** Euler angles (XYZ, degrees, multiples of 90) that turn every `from` direction onto the matching set of `to`. */
@@ -84,7 +86,7 @@ function plan(v: WizValues): Plan {
   const Lmax = bed[2] - 16;
   const bellMode = v.seg !== 'coupler';
   const bell = Math.max(20, Math.round(D * 1.2));
-  const lamp = !!v.lamp;
+  const lamp = !!v.lamp && lampFits(v);
   const holes = joint !== 'glue';
 
   const fitParams = (kind: string): Params => ({
@@ -325,7 +327,18 @@ function plan(v: WizValues): Plan {
   if (joint === 'screw') buy.push({ name: 'Wkręt do tworzyw M4 × 12 (np. typu PT)', qty: `${pipeEnds + (bellMode ? 0 : couplers * 2)} szt.`, note: 'Jeden w każdym ramieniu łącznika, przez otwór w ramieniu w otwór pilotowy rury.' });
   if (joint === 'glue') buy.push({ name: 'Klej do tworzyw (cyjanoakryl żelowy albo epoksyd 2K)', qty: '1 opakowanie', note: 'Połączenia na stałe, ramy nie rozbierzesz.' });
   const board = (what: string) => `${what} ${mm(W - 2 * Ro + D)} × ${mm(Dp - 2 * Ro + D)} mm`;
-  if (v.shelves && levels > 1) buy.push({ name: board('Płyta półki (sklejka 6–10 mm)'), qty: `${levels - 1} szt.`, note: `Wytnij w rogach wcięcia ${mm(2 * Ro + 4)} × ${mm(2 * Ro + 4)} mm na łączniki. Leży na rurach poziomu.` });
+  const shelfZ = [...(v.bottom ? [zs[0]] : []), ...(v.shelves ? zs.slice(1, -1) : [])];
+  if (shelfZ.length)
+    buy.push({
+      name: board('Płyta półki (sklejka 6–10 mm)'),
+      qty: `${shelfZ.length} szt.`,
+      note: `Wytnij w rogach wcięcia ${mm(2 * Ro + 4)} × ${mm(2 * Ro + 4)} mm na łączniki. Leży na rurach ${v.bottom && v.shelves && levels > 1 ? 'dolnej ramy i poziomów' : v.bottom ? 'dolnej ramy' : 'poziomów'}.`,
+    });
+  // Bought boards, drawn in the preview only.
+  const boards: Plan['boards'] = [...shelfZ.map((z) => ({ z: z + D / 2 + 4, t: 8 })), ...(v.top ? [{ z: zTop + D / 2 + 6, t: 12 }] : [])].map(({ z, t }) => ({
+    size: [W - 2 * Ro + D, Dp - 2 * Ro + D, t] as Vec3,
+    position: [W / 2, Dp / 2, z] as Vec3,
+  }));
   if (v.top) buy.push({ name: board('Blat (sklejka lub płyta 10–18 mm)'), qty: '1 szt.', note: 'Leży na górnej ramie, wcięcia w rogach jak w półkach.' });
 
   const segRoles = items.filter((i) => i.group === 'pipe');
@@ -342,7 +355,7 @@ function plan(v: WizValues): Plan {
     'Złóż dolny prostokąt: 4 narożniki N1 i rury krawędzi.',
     levels > 1 ? `Wstaw słupki, łączniki 4-ramienne ${fitRole.corner4} i rury poziomów (${pl(levels - 1, 'poziom', 'poziomy', 'poziomów')}).` : 'Wstaw 4 słupki.',
     lamp ? `Złóż górny prostokąt z trójnikami ${fitRole.tee} na środku dłuższych krawędzi i drążkiem pod lampę między nimi.` : 'Złóż górny prostokąt i nałóż go na słupki.',
-    ...(v.shelves && levels > 1 ? ['Połóż półki na rurach poziomów.'] : []),
+    ...(shelfZ.length ? [v.bottom && !(v.shelves && levels > 1) ? 'Połóż półkę na rurach dolnej ramy.' : v.bottom ? 'Połóż półki na rurach dolnej ramy i poziomów.' : 'Połóż półki na rurach poziomów.'] : []),
     ...(v.top ? ['Połóż blat na górnej ramie.'] : []),
   ];
 
@@ -354,10 +367,9 @@ function plan(v: WizValues): Plan {
   if (mat === 'PLA' && Number(v.H) > 100) notes.push({ warn: true, text: 'PLA ugina się z czasem pod obciążeniem. Dla dużej ramy wybierz PETG.' });
   if (mat === 'PLA' && joint === 'clip') notes.push({ text: 'Zatrzaski Z i tak drukuj z PETG albo nylonu: z PLA pękają.' });
   if (D <= 16 && Number(v.H) > 80) notes.push({ warn: true, text: 'Rura Ø16 przy tej wysokości będzie się mocno uginać. Wybierz Ø20 albo Ø25.' });
-  if (v.shelves && levels === 1) notes.push({ warn: true, text: 'Półki leżą na poziomach usztywniających. Dodaj co najmniej jeden poziom.' });
   if (lamp) notes.push({ text: 'Drążek pod lampę uniesie około 3 kg.' });
 
-  return { items, placements, buy, steps, notes, bed, longest, size: [W, Dp, H] };
+  return { items, placements, buy, steps, notes, bed, longest, size: [W, Dp, H], boards };
 }
 
 const tiles = (key: string, options: Extract<Field, { kind: 'tiles' }>['options'], label?: string, cols?: 2 | 3 | 4): Field => ({ kind: 'tiles', key, label, options, cols });
@@ -418,9 +430,10 @@ export const FRAME_WIZARD: Wizard = {
       desc: 'Elementy dodatkowe ramy.',
       focus: [],
       focusLabel: 'dodatki',
-      fields: () => [
-        { kind: 'toggle', key: 'lamp', label: 'Drążek pod lampę', desc: 'Trójniki na górnych krawędziach i drążek przez środek.' },
-        { kind: 'toggle', key: 'shelves', label: 'Półki na poziomach', desc: 'Płyty ze sklejki na rurach poziomów (do kupienia, wymiary w instrukcji).' },
+      fields: (v) => [
+        ...(lampFits(v) ? [{ kind: 'toggle' as const, key: 'lamp', label: 'Drążek pod lampę', desc: 'Trójniki na górnych krawędziach i drążek przez środek.' }] : []),
+        { kind: 'toggle', key: 'bottom', label: 'Półka na dolnej ramie', desc: 'Płyta ze sklejki na rurach dolnego prostokąta, tuż nad podłogą (do kupienia).' },
+        ...(Number(v.rings) > 0 ? [{ kind: 'toggle' as const, key: 'shelves', label: 'Półki na poziomach', desc: 'Płyty ze sklejki na rurach poziomów usztywniających (do kupienia, wymiary w instrukcji).' }] : []),
         { kind: 'toggle', key: 'top', label: 'Blat na górze', desc: 'Płyta na górnej ramie (do kupienia).' },
       ],
     },

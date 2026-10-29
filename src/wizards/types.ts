@@ -60,6 +60,8 @@ export interface Plan {
   longest: number;
   /** Outer size of the assembled model, mm. */
   size: Vec3;
+  /** Bought boards (shelves, top), centre and size: shown in the preview, not added to the model. */
+  boards?: { size: Vec3; position: Vec3 }[];
 }
 
 export interface Wizard {

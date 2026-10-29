@@ -364,6 +364,11 @@ function Frame({ plan, focus }: { plan: Plan; focus: string[] }) {
         const dim = focus.length > 0 && !focus.includes(it.group);
         return <mesh key={i} geometry={g} material={mat(it.color, dim)} position={pl.position} rotation={[pl.rotation[0] * DEG, pl.rotation[1] * DEG, pl.rotation[2] * DEG]} />;
       })}
+      {plan.boards?.map((b, i) => (
+        <mesh key={'b' + i} position={b.position} material={mat('#c8b38a', focus.length > 0)}>
+          <boxGeometry args={b.size} />
+        </mesh>
+      ))}
     </group>
   );
 }
