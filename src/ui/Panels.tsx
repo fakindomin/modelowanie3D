@@ -373,6 +373,9 @@ function Helpers({ part }: { part: Part }) {
     out.push(b('◣ Dodaj żebra w narożnikach', () => st.addRibs(part.id, Math.max(2, Math.round((Number(part.params.L) || 100) / 50) + 1)), INFO.ribs));
   if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id), INFO.drawers));
   if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id), INFO.lid));
+  if (part.type === 'box' && part.params.shape === 'round' && !part.params.screw) out.push(b('+ Gwint i zakręcana pokrywka z uszczelką', () => st.makeJar(part.id), INFO.jar));
+  if (part.type === 'box' && part.params.shape === 'round' && part.params.screw && !st.parts.some((p) => p.type === 'gasket' && p.fitTo === part.id))
+    out.push(b('+ Dodaj płaską uszczelkę', () => st.addGasket(part.id), INFO.jar));
   if ((part.type === 'box' && (!part.params.shape || part.params.shape === 'rect') && !part.params.slide) || part.type === 'drawer')
     out.push(b('⊞ Rozbij na płyty', () => st.explode(part.id), INFO.explode));
   if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id), INFO.bolt));

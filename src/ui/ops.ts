@@ -23,7 +23,7 @@ const GROUPS: Record<string, Group> = {
   gear: 'gear', ringGear: 'gear', bevelGear: 'gear', worm: 'gear', wormWheel: 'gear', planetary: 'gear', gt2Pulley: 'gear',
   rack: 'rack',
   hinge: 'joint', hingePip: 'joint', boxHinge: 'joint', snapFit: 'joint', dovetail: 'joint', peg: 'joint', pegSquare: 'joint',
-  gland: 'fitting', hoseBarb: 'fitting', cableClamp: 'fitting', oring: 'fitting',
+  gland: 'fitting', hoseBarb: 'fitting', cableClamp: 'fitting', oring: 'fitting', gasket: 'fitting',
   pipeClamp: 'pipe', pipeClip: 'pipe', pipeSaddle: 'pipe',
   figurine: 'figurine',
   mesh: 'mesh',

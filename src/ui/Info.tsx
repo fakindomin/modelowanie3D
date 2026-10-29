@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 /** Short explanations of what each tool does, shown by the ⓘ marks. */
 export const INFO = {
+  jar: 'Słoik: górna część ścianki staje się gwintowaną szyjką (cofniętą tak, że zakręcona pokrywka jest równo z pudełkiem). Pokrywka ma gwint wewnętrzny i miejsce na płaską uszczelkę, którą zakręcenie ściska o 0,3 mm. Uszczelkę drukuj z TPU albo wytnij z gumy. Szyjkę i pokrywkę drukuj bez podpór; pokrywkę wierzchem do stołu.',
   wrapText: 'Zawija napis na walec o podanej średnicy, litery na zewnątrz (np. etykieta na kubek albo skala na pokrętle). Średnicę zmienisz w sekcji Gięcie. Bierze średnicę największego walca, rury lub pręta w modelu.',
   dims: 'Wymiary tego elementu w milimetrach. Strzałki ↑↓ w polu zmieniają o krok, z Shiftem o 10 kroków.',
   position: 'Położenie środka elementu (X, Y) i jego spodu (Z) w mm. Element postawiony w innej bryle sam do niej dołącza.',

@@ -61,6 +61,7 @@ export const FAMILIES: Family[] = [
       { label: 'Sześciokątne', type: 'box', params: { shape: 'hex' } },
       { label: 'Z przegródkami', type: 'box', params: { nx: 3, ny: 2 } },
       { label: 'Z pokrywką w komplecie', type: 'box', extra: 'lid' },
+      { label: 'Okrągłe z zakręcaną pokrywką', type: 'box', params: { shape: 'round', screw: true }, extra: 'lid', hint: 'Słoik: gwint na górze ścianki, zakręcana pokrywka i płaska uszczelka (TPU) pod wieczko.' },
       { label: 'Z pokrywką na zawiasie', type: 'box', extra: 'hinged', hint: 'Pudełko, płaska pokrywka i zawias print-in-place na tylnej krawędzi.' },
       { label: 'Z wsuwaną pokrywką', type: 'box', params: { slide: true, T: 3 }, extra: 'slide' },
     ],

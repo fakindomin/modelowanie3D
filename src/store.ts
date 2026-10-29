@@ -13,6 +13,7 @@ import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
 import { BOX_HINGE_LIFT } from './parts/joints';
+import { gasketDims, isJar } from './parts/jar';
 import { gridSegments, layoutOf } from './geom/dividers';
 import { DOWEL_LUZ, dowelSpots } from './geom/split';
 import { decodeMeshes, loadStoredMeshes, parseSTL, persistMeshes, registerMesh, toSolid } from './geom/meshes';
@@ -110,6 +111,10 @@ interface State {
   unfitLid(id: string): void;
   /** Magnet pockets on the top edge of a box (ready-made or built from plates) and mirrored ones in its lid. */
   addMagnets(id: string, opt: MagnetOptions): void;
+  /** Round box: threaded neck, screw-on cap and a flat gasket (adds what is missing). */
+  makeJar(id: string): void;
+  /** Flat gasket for a jar box that has none. */
+  addGasket(id: string): void;
   /** Magnet pockets in one face of any body: centre, corners or a row. */
   addFaceMagnets(body: number, opt: FaceMagnetOptions): void;
   /** Adds a family variant in size S/M/L or with the dimensions last used for its type. */
@@ -554,6 +559,18 @@ export const useStore = create<State>((set, get) => {
     return firstId;
   };
 
+  /** A flat gasket for a jar box, lying on the bed at x (its left edge). */
+  const makeGasket = (box: Part, parts: Part[], x: number) => {
+    const dims = gasketDims(box.params);
+    return makePart('gasket', parts, {
+      name: `Uszczelka do: ${box.name}`,
+      params: { ...dims, T: 1.5 },
+      position: [round(x + dims.OD / 2), round(box.position[1]), 0],
+      fitTo: box.id,
+      color: '#3d4148',
+    });
+  };
+
   const pushRight = (parts: Part[], part: Part) => {
     const size = built(part).box.getSize(new THREE.Vector3());
     part.position = besideAll(parts, size);
@@ -982,7 +999,10 @@ export const useStore = create<State>((set, get) => {
       });
       lid.params = { ...lid.params, ...lidParams(box, lid) };
       lid.position = [round(b.max.x + 10 + Number(lid.params.W) / 2), round(box.position[1]), 0];
-      commit([...parts, lid], { selectedId: lid.id });
+      const added = [lid];
+      if (isJar(box.params) && !parts.some((p) => p.type === 'gasket' && p.fitTo === box.id)) added.push(makeGasket(box, [...parts, lid], b.max.x + 20 + Number(lid.params.W)));
+      commit([...parts, ...added], { selectedId: lid.id });
+      if (isJar(box.params)) get().notify('Zakręcana pokrywka i płaska uszczelka. Pokrywkę drukuj wierzchem do stołu, uszczelkę z TPU (albo wytnij z gumy). Włóż ją do pokrywki pod gwint.');
       if (slide) get().notify('Pudełko ma rowki, więc pokrywka jest wsuwana: wsuwa się od przodu (luz 0,3 mm na stronę).');
       // Pockets placed by hand in the box: check them now that a lid is coming and offer fixes.
       const issues = magnetIssues(get().parts).filter((i) => i.fix);
@@ -992,6 +1012,25 @@ export const useStore = create<State>((set, get) => {
     unfitLid(id) {
       commit(get().parts.map((p) => (p.id === id ? { ...p, fitTo: undefined } : p)));
       get().notify('Pokrywka odłączona: jej wymiary nie zmieniają się już razem z pudełkiem.');
+    },
+
+    makeJar(id) {
+      const box = get().parts.find((p) => p.id === id);
+      if (!box || box.params.shape !== 'round') return;
+      if (!box.params.screw) get().update(id, { params: { ...box.params, screw: true } });
+      const lid = get().parts.find((p) => p.type === 'lid' && p.fitTo === id);
+      if (!lid) return get().addLid(id);
+      get().addGasket(id);
+      get().notify('Pudełko ma gwint, pokrywka stała się zakręcana. Dodałem płaską uszczelkę (TPU).');
+    },
+
+    addGasket(id) {
+      const { parts } = get();
+      const box = parts.find((p) => p.id === id);
+      if (!box || !isJar(box.params) || parts.some((p) => p.type === 'gasket' && p.fitTo === id)) return;
+      const g = makeGasket(box, parts, 0);
+      pushRight(parts, g);
+      commit([...parts, g], { selectedId: g.id });
     },
 
     addFaceMagnets(body, opt) {
@@ -2025,6 +2064,7 @@ function lidParams(box: Part, lid: Part): Params {
     const g = slideGroove(box.params);
     return { W: round(g.lidW, 2), D: round(g.lidD, 2), T: g.lidT };
   }
+  if (lid.type === 'gasket') return gasketDims(box.params);
   const p: Params = { shape: box.params.shape ?? 'rect', W: box.params.W, D: box.params.D, wall: box.params.T, rad: box.params.slide ? 0 : (box.params.rad ?? 0) };
   // Dividers lowered at least by the rim height don't reach it: no slots needed.
   const clear = (Number(box.params.low) || 0) >= (Number(lid.params.R) || 0);
@@ -2035,6 +2075,13 @@ function lidParams(box: Part, lid: Part): Params {
   p.divMode = box.params.divMode ?? 'grid';
   p.nr = clear ? 0 : (box.params.nr ?? 0);
   p.rot = box.params.rot ?? 0;
+  // A round box with a threaded neck gets a screw-on cap.
+  p.screw = isJar(box.params);
+  if (p.screw) {
+    p.P = box.params.P ?? 3;
+    p.threadL = box.params.threadL ?? 8;
+    p.fit = box.params.fit ?? 'normal';
+  }
   return p;
 }
 

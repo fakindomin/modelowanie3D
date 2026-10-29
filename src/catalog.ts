@@ -11,6 +11,7 @@ import { FIGURINE_DEF } from './parts/figurine';
 import { TEXT_DEFS } from './parts/text';
 import { PIPE_DEFS } from './parts/pipes';
 import { SKETCH_DEFS } from './parts/sketch';
+import { gasket, isJar, jarBox, jarCap, jarParams } from './parts/jar';
 import { meshSolid } from './geom/meshes';
 import { dividerSolid, segmentsOf } from './geom/dividers';
 
@@ -220,6 +221,8 @@ const BASE: PartDef[] = [
         show: hasDividers,
         hint: 'Obniża przegródki pod górną krawędzią, np. o wysokość rantu pokrywki. Przy wsuwanej pokrywce przegródki same kończą się pod rowkiem.',
       },
+
+      ...jarParams(() => true),
     ],
     normalize: dropLayout,
     build: (p) => {
@@ -228,6 +231,10 @@ const BASE: PartDef[] = [
       // Dividers stop under a sliding lid's groove so the lid can pass over them.
       const top = Math.min(H - (Number(p.low) || 0), rect && p.slide ? slideGroove(p).z0 - 0.3 : H);
       const div = boxDividers(p, b, top);
+      if (isJar(p)) {
+        const m = jarBox(p);
+        return div ? m.add(div) : m;
+      }
       if (p.shape === 'round') {
         const m = cyl(H, W / 2).subtract(cyl(H, W / 2 - t).translate([0, 0, b]));
         return div ? m.add(div) : m;
@@ -266,8 +273,13 @@ const BASE: PartDef[] = [
       RAD(rectOnly),
       { key: 'nx', label: 'Szczeliny na przegródki wzdłuż', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => gridOn(p) && num(p, 'R') > 0 && !p.div, hint: 'Tyle samo co przegródek w pudełku: rant dostaje szczeliny tam, gdzie stoją przegródki.' },
       { key: 'ny', label: 'Szczeliny na przegródki w poprzek', type: 'number', def: 1, min: 1, max: 20, step: 1, show: (p) => gridOn(p) && num(p, 'R') > 0 && !p.div },
+      // A screw-on cap takes these from its box (they are synced, so not shown).
+      ...jarParams(() => false),
+      { key: 'gasketT', label: 'Grubość uszczelki', type: 'number', def: 1.5, min: 0, max: 5, step: 0.1, unit: 'mm', show: isJar, hint: 'Miejsce na płaską uszczelkę pod wieczkiem. Zakręcenie ściska ją o 0,3 mm. 0 = bez uszczelki.' },
+      { key: 'grip', label: 'Radełko na obwodzie', type: 'bool', def: true, show: isJar },
     ],
     build: (p) => {
+      if (isJar(p)) return jarCap(p);
       const W = num(p, 'W'), t = num(p, 'T'), wall = num(p, 'wall'), R = num(p, 'R'), c = num(p, 'luz'), lip = 1.6;
       let m: Manifold;
       if (p.shape === 'round' || p.shape === 'hex') {
@@ -295,6 +307,19 @@ const BASE: PartDef[] = [
       }
       return m;
     },
+  },
+  {
+    type: 'gasket',
+    label: 'Uszczelka płaska',
+    category: 'fittings',
+    hole: false,
+    description: 'Płaski pierścień uszczelniający, np. pod zakręcaną pokrywkę. Drukuj z TPU (elastyczny filament) albo wytnij z gumy.',
+    params: [
+      { key: 'OD', label: 'Średnica zewn.', type: 'number', def: 40, min: 3, max: 500, step: 0.1, unit: 'mm' },
+      { key: 'ID', label: 'Średnica wewn.', type: 'number', def: 32, min: 1, max: 500, step: 0.1, unit: 'mm' },
+      { key: 'T', label: 'Grubość', type: 'number', def: 1.5, min: 0.4, max: 10, step: 0.1, unit: 'mm' },
+    ],
+    build: gasket,
   },
   {
     type: 'drawer',

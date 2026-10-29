@@ -24,6 +24,11 @@ Każda ma własną scenę, historię cofania i autozapis.
   wszystkie odmiany z rozmiarami S/M/L i ↺ (ostatnio użyte wymiary). Pudełka: prostokątne, okrągłe,
   sześciokątne, z przegródkami, z pokrywką, z pokrywką na zawiasie, z wsuwaną pokrywką. Pokrywki:
   płaska, z rantem, okrągła. Szuflady z obudową. Płyty: pełna, z otworami montażowymi, perforowana.
+- **Okrągłe pudełko z zakręcaną pokrywką (słoik):** górna część ścianki staje się gwintowaną szyjką,
+  cofniętą tak, że zakręcona pokrywka jest równo z pudełkiem. Pokrywka ma radełko, gwint wewnętrzny
+  i miejsce na płaską uszczelkę (TPU albo guma), którą zakręcenie ściska o 0,3 mm. Skok, długość
+  i dopasowanie gwintu ustawiasz w pudełku; pokrywka i uszczelka zmieniają się razem z nim. Do zwykłego
+  okrągłego pudełka dodaje je przycisk „Gwint i zakręcana pokrywka z uszczelką”.
 - **Pokrywka idzie za pudełkiem:** pokrywka dodana do pudełka sama zmienia wymiary razem z nim. Przy
   przegródkach rant dostaje szczeliny, a przy rowkach pokrywka jest wsuwana. Przegródki można obniżyć
   („Przegródki niższe o”). „Odłącz od pudełka” zostawia pokrywkę taką, jaka jest.
