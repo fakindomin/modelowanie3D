@@ -10,7 +10,8 @@ import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check
 import { placeMates } from './geom/gearMates';
 import { isFitting, pipeFor, placeArmMates } from './geom/armMates';
 import { fittingGeo, oringFor, pinSpots, screwSpots } from './parts/couplings';
-import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, Xform } from './types';
+import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, Vec3, WizValues, Xform } from './types';
+import { WIZARDS } from './wizards';
 import type { Feature } from './scene/measure';
 import { connOpening, sideOf, wallPose, type WallSide } from './parts/connectors';
 import { BOARDS, EDGE_SIDE } from './parts/raspberry';
@@ -189,6 +190,14 @@ interface State {
   afterMove(id: string): void;
   /** Offer shown after placing an element in a body's corner. */
   suggest: { id: string } | null;
+  /** Open project wizard: none picked yet (gallery), or a wizard with answers; `run` when editing one already in the model. */
+  wizard: { id: string | null; values?: WizValues; run?: string } | null;
+  openWizard(w: { id: string | null; values?: WizValues; run?: string } | null): void;
+  /** Puts what a wizard planned into the model (replacing that run's parts when editing). */
+  applyWizard(id: string, values: WizValues, run?: string): void;
+  /** Project manual (what to print, buy and how to assemble) shown over the editor. */
+  manual: boolean;
+  setManual(v: boolean): void;
   dismissSuggest(): void;
   mergeAll(): void;
   runCheck(): void;
@@ -685,6 +694,45 @@ export const useStore = create<State>((set, get) => {
     recent: loadRecent(),
     suggest: null,
     dismissSuggest: () => set({ suggest: null }),
+
+    wizard: null,
+    openWizard: (wizard) => set({ wizard }),
+    manual: false,
+    setManual: (manual) => set({ manual }),
+
+    applyWizard(id, values, run) {
+      const wz = WIZARDS[id];
+      if (!wz) return;
+      const plan = wz.plan(values);
+      let parts = get().parts;
+      let origin: Vec3;
+      if (run) {
+        origin = parts.find((p) => p.wiz?.run === run && p.wiz.recipe)?.wiz?.recipe?.origin ?? [0, 0, 0];
+        parts = parts.filter((p) => p.wiz?.run !== run);
+      } else origin = parts.length ? [besideAll(parts, new THREE.Vector3(40, 0, 0))[0], 0, 0] : [round(-plan.size[0] / 2), round(-plan.size[1] / 2), 0];
+      const tag = run ?? uid();
+      const next = [...parts];
+      const links: Record<string, string> = {};
+      const byRole = new Map(plan.items.map((it) => [it.role, it]));
+      for (const pl of plan.placements) {
+        const it = byRole.get(pl.role)!;
+        next.push(
+          makePart(it.type, next, {
+            name: `${it.role} ${it.name}`,
+            params: { ...it.params },
+            position: r3([pl.position[0] + origin[0], pl.position[1] + origin[1], pl.position[2] + origin[2]]),
+            rotation: pl.rotation,
+            color: it.color,
+            // Copies of one item stay linked: change one N1 and all corners follow.
+            link: (links[it.role] ??= uid()),
+            wiz: { run: tag, w: id, role: it.role, recipe: { values, origin } },
+          }),
+        );
+      }
+      commit(next, { selectedId: null, fitRequest: get().fitRequest + 1, wizard: null, suggest: null });
+      const n = plan.placements.length;
+      get().notify(`${run ? 'Zaktualizowano' : 'Utworzono'} „${wz.label}”: ${n} ${n === 1 ? 'element' : few(n) ? 'elementy' : 'elementów'}. Zaznacz dowolny i kliknij „Edytuj w kreatorze”, żeby zmienić odpowiedzi.`);
+    },
     pins: [],
     fit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),
     setMeasure: (on) => set({ measure: on, measureHover: null, pins: on ? get().pins : [], preview: false }),
@@ -838,6 +886,7 @@ export const useStore = create<State>((set, get) => {
           rigid: p.rigid ? link : undefined,
           pattern: undefined,
           armOf: undefined,
+          wiz: undefined,
         };
         if (!firstId) firstId = copy.id;
         next.push(copy);
@@ -2016,6 +2065,7 @@ export const useStore = create<State>((set, get) => {
           rigid: p.rigid ? (rigids[p.rigid] ??= uid()) : undefined,
           pattern: p.pattern ? { ...p.pattern, id: (pats[p.pattern.id] ??= uid()) } : undefined,
           armOf: undefined,
+          wiz: undefined,
         }));
       commit([...parts, ...copies], { selectedId: groupId(nb) });
     },

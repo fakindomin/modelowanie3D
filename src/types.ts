@@ -122,6 +122,18 @@ export interface Part {
   armOf?: { of: string; i: number; role: ArmRole; k: number };
   /** Member of a pattern that keeps its rule: move one member and the others follow. */
   pattern?: PatternRule;
+  /** Made by a project wizard: its run, the wizard and the item; one part of each run keeps the answers. */
+  wiz?: WizTag;
+}
+
+/** Answers given in a project wizard. */
+export type WizValues = Record<string, string | number | boolean>;
+
+export interface WizTag {
+  run: string;
+  w: string;
+  role: string;
+  recipe?: { values: WizValues; origin: Vec3 };
 }
 
 /**

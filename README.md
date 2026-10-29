@@ -167,6 +167,17 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Opisy ⓘ:** przy sekcjach i przyciskach panelu; najechanie albo stuknięcie pokazuje, co robi funkcja.
 - **Bryły do druku:** każdy element należy do bryły. Elementy jednej bryły są sklejane w jeden wydruk,
   a jej otwory wycinają tylko ją. Dzięki temu czop zostaje na jednej części, a gniazdo powstaje w drugiej.
+- **Kreatory projektów (✨ Kreatory):** galeria kreatorów w 6 grupach; gotowy jest „Rama z rur”
+  (namiot, regał, stolik, własna): wymiary, poziomy usztywniające, Ø rury i materiał, łączenie
+  (zatrzask U, wkręt M4, klej), odcinki z kielichem albo dwujnikami, drążek pod lampę, półki i blat,
+  drukarka (dzieli rury na odcinki mieszczące się na stole). Kroki po lewej, model z prawdziwych części
+  na żywo w środku (podświetla to, czego dotyczy krok), po prawej części, filament, czas, stoły i uwagi.
+  „Utwórz projekt” wstawia zwykłe elementy (kopie jednej części są powiązane), a „Edytuj w kreatorze”
+  przy każdej z nich otwiera kreator z zapisanymi odpowiedziami i wstawia ramę od nowa w tym samym miejscu.
+- **Instrukcja (📖):** dla każdego projektu: okładka z rysunkiem i filamentem, karty „do wydrukowania”
+  (miniatura, numer, ilość identycznych brył, wymiary, materiał, waga, ułożenie na stole), „do kupienia”
+  (magnesy, wkręty, płyty), „co do czego pasuje” (pokrywka–pudełko, rura–łącznik, zębatki, czop–gniazdo)
+  i kolejność składania. Drukuje się albo zapisuje jako PDF.
 - **Eksport:** STL (wszystko w jednym pliku) i 3MF (każda bryła jako osobny obiekt).
 - Zapis i wczytywanie projektu (JSON z obiema zakładkami), autozapis w przeglądarce, cofnij/ponów.
 

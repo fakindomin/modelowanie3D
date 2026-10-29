@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
 import { Library, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
+import { WizardDialog } from './ui/WizardDialog';
+import { Manual } from './ui/Manual';
 import { isLocked, useStore } from './store';
 import { buildBodies } from './geom/parts';
 import { export3MF, exportSTL, saveJSON } from './export';
@@ -76,6 +78,12 @@ function Toolbar() {
       </div>
       <span className="sep" />
       <div className="group">
+        <button className="wiz-open" onClick={() => st.openWizard({ id: null })} title="Kreatory projektów: rama, regał… krok po kroku, z modelem na żywo i instrukcją">
+          ✨ Kreatory
+        </button>
+      </div>
+      <span className="sep" />
+      <div className="group">
         <button onClick={st.fit} title="Pokaż cały model (F)">⤢ Całość</button>
         <button onClick={st.layoutOnBed} title="Ułóż na stole: kładzie każdą bryłę na jej największej płaskiej ściance i rozkłada wszystkie obok siebie na stole drukarki">
           ⊞ Ułóż
@@ -90,6 +98,9 @@ function Toolbar() {
           {st.preview ? '✓ Podgląd' : 'Podgląd'}
         </button>
         <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają">Sprawdź model</button>
+        <button onClick={() => (st.parts.length ? st.setManual(true) : st.notify('Model jest pusty. Dodaj elementy albo użyj kreatora.'))} title="Co wydrukować, co kupić, co do czego pasuje i jak złożyć. Do wydruku albo PDF">
+          📖 Instrukcja
+        </button>
         <button className="primary" onClick={() => exportAs('stl')}>Eksport STL</button>
         <button className="primary" onClick={() => exportAs('3mf')}>Eksport 3MF</button>
       </div>
@@ -264,6 +275,8 @@ export function App() {
         <CornerSuggest />
       </main>
       <Properties />
+      <WizardDialog />
+      <Manual />
     </div>
   );
 }

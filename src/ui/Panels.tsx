@@ -4,6 +4,7 @@ import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type Param
 import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
 import { bodyRisk, opOff, type Op } from './ops';
 import { BED_KEY, assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, loadBed, useStore, type PatternKind } from '../store';
+import { WIZARDS } from '../wizards';
 import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
 import { DEFAULT_EDGES } from '../geom/edges';
 import { DEFAULT_BEND } from '../geom/bend';
@@ -368,6 +369,11 @@ function Helpers({ part }: { part: Part }) {
     </div>
   );
   const out = [];
+  const wz = part.wiz && WIZARDS[part.wiz.w] ? part.wiz : undefined;
+  if (wz) {
+    out.push(b(`✎ Edytuj w kreatorze „${WIZARDS[wz.w].label}”`, () => st.openWizard({ id: wz.w, values: wz.recipe?.values, run: wz.run }), INFO.wizard));
+    out.push(b('📖 Instrukcja projektu', () => st.setManual(true), INFO.manual));
+  }
   if (part.type === 'peg' || part.type === 'pegSquare' || part.type === 'dovetail') out.push(b('+ Dodaj pasujące gniazdo (z luzem)', () => st.matchingHole(part.id), INFO.matchHole));
   if (part.type === 'angle' || part.type === 'channel' || part.type === 'tee')
     out.push(b('◣ Dodaj żebra w narożnikach', () => st.addRibs(part.id, Math.max(2, Math.round((Number(part.params.L) || 100) / 50) + 1)), INFO.ribs));
