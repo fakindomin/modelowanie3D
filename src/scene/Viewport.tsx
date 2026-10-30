@@ -216,6 +216,25 @@ function Scene() {
       st.setSnapTargets(targets);
       st.updateLive(cur.id, { position });
     };
+    // A second finger means pinch or pan: the element stays where it was.
+    const down = (ev: PointerEvent) => {
+      if (ev.pointerType !== 'touch') return;
+      touches.add(ev.pointerId);
+      if (touches.size > 1 && drag.current) {
+        const d = drag.current;
+        drag.current = null;
+        if (controls) (controls as unknown as { enabled: boolean }).enabled = true;
+        if (d.moved) {
+          const st = useStore.getState();
+          st.setSnapTargets([]);
+          st.undo();
+        }
+      }
+    };
+    const lift = (ev: PointerEvent) => touches.delete(ev.pointerId);
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('pointerup', lift, true);
+    window.addEventListener('pointercancel', lift, true);
     const up = () => {
       const d = drag.current;
       drag.current = null;
@@ -234,6 +253,9 @@ function Scene() {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('pointerup', lift, true);
+      window.removeEventListener('pointercancel', lift, true);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
@@ -263,7 +285,7 @@ function Scene() {
   };
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || touches.size > 1) return;
     // A point or edge of the selected sketch takes the press, even behind the solid.
     if (e.intersections.some((i) => i.object.userData.sketchHandle || i.object.userData.handle)) return;
     e.stopPropagation();
@@ -287,6 +309,8 @@ function Scene() {
     }
     st.select(target);
     if (isLocked(st.parts, target)) return;
+    // On a touch screen the first tap only picks; dragging an element needs it picked first, so the view can still be turned over it.
+    if (e.nativeEvent.pointerType === 'touch' && target !== sel && !(sel && groupBody(sel) === groupBody(target) && groupBody(target) !== null)) return;
     const gb = groupBody(target);
     const members = gb !== null ? assembly(st.parts, gb) : [];
     const part = st.parts.find((p) => p.id === target);
@@ -398,6 +422,12 @@ function GroupAnchor({ body }: { body: number }) {
   return <group name={groupId(body)} position={anchor.position} />;
 }
 
+/** Fingers on the screen right now; a second one turns the gesture into pinch or pan. */
+const touches = new Set<number>();
+
+/** Fingers need bigger arrows than a mouse. */
+const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+
 /** Arrow gizmo on the selection, mainly for lifting it up/down and precise axis moves. */
 function Gizmo() {
   const selectedId = useStore((s) => s.selectedId);
@@ -420,7 +450,7 @@ function Gizmo() {
       }}
       object={target}
       mode="translate"
-      size={0.85}
+      size={coarse ? 1.5 : 0.85}
       translationSnap={grid > 0 ? grid : null}
       onMouseDown={() => {
         const st = useStore.getState();

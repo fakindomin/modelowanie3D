@@ -1878,7 +1878,8 @@ function Welcome() {
   );
 }
 
-export function Properties() {
+/** Right panel; on a phone its two halves live in separate tabs of the bottom sheet. */
+export function Properties({ show = 'all' }: { show?: 'all' | 'list' | 'props' }) {
   const part = useStore((s) => s.parts.find((p) => p.id === s.selectedId));
   const body = useStore((s) => {
     const gb = groupBody(s.selectedId);
@@ -1890,9 +1891,10 @@ export function Properties() {
   const picks = multi.length && sel ? [sel, ...multi] : null;
   return (
     <aside className="properties">
-      <CheckPanel />
-      <Outliner />
-      {picks ? <MultiProperties ids={picks} /> : part ? <PartProperties key={part.id} part={part} /> : body !== null ? <GroupProperties key={body} body={body} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
+      {show !== 'props' && <CheckPanel />}
+      {show !== 'props' && <Outliner />}
+      {show === 'list' && empty && <p className="desc pad">Projekt jest pusty. Dodaj element w zakładce ➕ Dodaj albo użyj kreatora.</p>}
+      {show === 'list' ? null : picks ? <MultiProperties ids={picks} /> : part ? <PartProperties key={part.id} part={part} /> : body !== null ? <GroupProperties key={body} body={body} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
     </aside>
   );
 }

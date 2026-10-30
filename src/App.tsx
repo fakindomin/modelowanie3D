@@ -9,6 +9,7 @@ import { buildBodies } from './geom/parts';
 import { export3MF, exportSTL, saveJSON } from './export';
 import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
+import { MobileApp, useMobile } from './ui/Mobile';
 
 function projectOf(): Project {
   const s = useStore.getState();
@@ -18,10 +19,10 @@ function projectOf(): Project {
   return { version: 2, tech, fig, ...(refs.size ? { meshes: encodeMeshes(refs) } : {}) };
 }
 
-function Toolbar() {
+/** File, export and other project-wide actions shared by the desktop toolbar and the phone menu. */
+export function useProjectActions() {
   const st = useStore();
   const file = useRef<HTMLInputElement>(null);
-
   const exportAs = (fmt: 'stl' | '3mf') => {
     const bodies = buildBodies(st.parts);
     if (!bodies.length) return st.notify('Brak brył do eksportu. Dodaj jakiś element.');
@@ -33,6 +34,38 @@ function Toolbar() {
     const hidden = st.parts.filter((p) => p.hidden).length;
     st.notify(`Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`);
   };
+  const fresh = () => {
+    st.reset();
+    st.notify('Scena wyczyszczona. „Cofnij” przywróci poprzedni model.');
+  };
+  const open = () => file.current?.click();
+  const save = () => saveJSON(JSON.stringify(projectOf(), null, 1), 'projekt');
+  const manual = () => (st.parts.length ? st.setManual(true) : st.notify('Model jest pusty. Dodaj elementy albo użyj kreatora.'));
+  const input = (
+    <input
+      ref={file}
+      type="file"
+      accept=".json,application/json,.stl,model/stl"
+      hidden
+      onChange={async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = '';
+        if (!f) return;
+        if (/\.stl$/i.test(f.name)) return st.importSTL(f.name, await f.arrayBuffer());
+        try {
+          st.load(JSON.parse(await f.text()) as Project);
+        } catch {
+          st.notify('Nie udało się wczytać pliku projektu.');
+        }
+      }}
+    />
+  );
+  return { exportAs, fresh, open, save, manual, input };
+}
+
+function Toolbar() {
+  const st = useStore();
+  const act = useProjectActions();
 
   return (
     <header className="toolbar">
@@ -53,28 +86,12 @@ function Toolbar() {
       </div>
       <span className="sep" />
       <div className="group">
-        <button onClick={() => { st.reset(); st.notify('Scena wyczyszczona. „Cofnij” przywróci poprzedni model.'); }}>Nowy</button>
-        <button onClick={() => file.current?.click()} title="Otwiera zapisany projekt (.json) albo dodaje model z pliku STL">
+        <button onClick={act.fresh}>Nowy</button>
+        <button onClick={act.open} title="Otwiera zapisany projekt (.json) albo dodaje model z pliku STL">
           Otwórz
         </button>
-        <button onClick={() => saveJSON(JSON.stringify(projectOf(), null, 1), 'projekt')}>Zapisz</button>
-        <input
-          ref={file}
-          type="file"
-          accept=".json,application/json,.stl,model/stl"
-          hidden
-          onChange={async (e) => {
-            const f = e.target.files?.[0];
-            e.target.value = '';
-            if (!f) return;
-            if (/\.stl$/i.test(f.name)) return st.importSTL(f.name, await f.arrayBuffer());
-            try {
-              st.load(JSON.parse(await f.text()) as Project);
-            } catch {
-              st.notify('Nie udało się wczytać pliku projektu.');
-            }
-          }}
-        />
+        <button onClick={act.save}>Zapisz</button>
+        {act.input}
       </div>
       <span className="sep" />
       <div className="group">
@@ -98,11 +115,11 @@ function Toolbar() {
           {st.preview ? '✓ Podgląd' : 'Podgląd'}
         </button>
         <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają">Sprawdź model</button>
-        <button onClick={() => (st.parts.length ? st.setManual(true) : st.notify('Model jest pusty. Dodaj elementy albo użyj kreatora.'))} title="Co wydrukować, co kupić, co do czego pasuje i jak złożyć. Do wydruku albo PDF">
+        <button onClick={act.manual} title="Co wydrukować, co kupić, co do czego pasuje i jak złożyć. Do wydruku albo PDF">
           📖 Instrukcja
         </button>
-        <button className="primary" onClick={() => exportAs('stl')}>Eksport STL</button>
-        <button className="primary" onClick={() => exportAs('3mf')}>Eksport 3MF</button>
+        <button className="primary" onClick={() => act.exportAs('stl')}>Eksport STL</button>
+        <button className="primary" onClick={() => act.exportAs('3mf')}>Eksport 3MF</button>
       </div>
     </header>
   );
@@ -126,27 +143,37 @@ function Settings() {
       </button>
       {open && (
         <div className="settings-pop">
-          <label title="Krok przesuwania">
-            Siatka
-            <select value={st.settings.grid} onChange={(e) => st.setSettings({ grid: Number(e.target.value) })}>
-              <option value={0}>wył.</option>
-              <option value={0.5}>0,5 mm</option>
-              <option value={1}>1 mm</option>
-              <option value={5}>5 mm</option>
-              <option value={10}>10 mm</option>
-            </select>
-          </label>
-          <label className="check" title="Przytrzymaj Alt, by chwilowo wyłączyć">
-            Przyciąganie do ścianek
-            <input type="checkbox" checked={st.settings.snap} onChange={(e) => st.setSettings({ snap: e.target.checked })} />
-          </label>
-          <label className="check" title="Przytrzymaj Shift, by chwilowo wyłączyć">
-            Kładź na wierzchu
-            <input type="checkbox" checked={st.settings.stick} onChange={(e) => st.setSettings({ stick: e.target.checked })} />
-          </label>
+          <SettingsFields />
         </div>
       )}
     </div>
+  );
+}
+
+/** Grid, snapping and stacking controls (⚙ popup on desktop, ⋮ menu on a phone). */
+export function SettingsFields() {
+  const st = useStore();
+  return (
+    <>
+      <label title="Krok przesuwania">
+        Siatka
+        <select value={st.settings.grid} onChange={(e) => st.setSettings({ grid: Number(e.target.value) })}>
+          <option value={0}>wył.</option>
+          <option value={0.5}>0,5 mm</option>
+          <option value={1}>1 mm</option>
+          <option value={5}>5 mm</option>
+          <option value={10}>10 mm</option>
+        </select>
+      </label>
+      <label className="check" title="Przytrzymaj Alt, by chwilowo wyłączyć">
+        Przyciąganie do ścianek
+        <input type="checkbox" checked={st.settings.snap} onChange={(e) => st.setSettings({ snap: e.target.checked })} />
+      </label>
+      <label className="check" title="Przytrzymaj Shift, by chwilowo wyłączyć">
+        Kładź na wierzchu
+        <input type="checkbox" checked={st.settings.stick} onChange={(e) => st.setSettings({ stick: e.target.checked })} />
+      </label>
+    </>
   );
 }
 
@@ -238,7 +265,7 @@ function useShortcuts() {
 }
 
 /** "Skopiować do pozostałych 3 narożników?" after placing an element in a corner of its body. */
-function CornerSuggest() {
+export function CornerSuggest() {
   const suggest = useStore((s) => s.suggest);
   const part = useStore((s) => (s.suggest ? s.parts.find((p) => p.id === s.suggest!.id) : undefined));
   const st = useStore.getState();
@@ -264,6 +291,8 @@ export function App() {
     return () => clearTimeout(t);
   }, []);
   const toast = useStore((s) => s.toast);
+  const mobile = useMobile();
+  if (mobile) return <MobileApp />;
   return (
     <div className="app">
       <Toolbar />

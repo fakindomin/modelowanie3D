@@ -574,3 +574,90 @@ body.resizing { cursor: col-resize; user-select: none; }
 .quick { display: flex; flex-direction: column; gap: 2px; }
 .place { display: grid; grid-template-columns: auto 1fr; gap: 4px 6px; align-items: center; }
 .place-lbl { color: var(--muted); font-size: 11px; width: 18px; text-align: right; }
+
+/* ------------------------------------------------------------------ phone layout (ui/Mobile.tsx) */
+.app.mobile {
+  display: grid; height: 100dvh; min-height: 0; overflow: hidden;
+  grid-template-columns: 1fr; grid-template-rows: auto 1fr auto auto;
+  grid-template-areas: 'bar' 'view' 'sheet' 'tabs';
+  font-size: 15px;
+}
+.app.mobile .viewport { grid-area: view; }
+.mbar { grid-area: bar; display: flex; align-items: center; gap: 6px; padding: 6px 8px; padding-top: max(6px, env(safe-area-inset-top)); background: var(--panel); border-bottom: 1px solid var(--line); position: relative; z-index: 20; }
+.mbar .logo { font-size: 18px; padding: 0 2px; }
+.mbar .tabs { margin-right: auto; }
+.mbar .tabs button { border: none; background: transparent; padding: 6px 10px; border-radius: 6px; color: var(--muted); font-size: 14px; }
+.mbar .tabs button.on { background: var(--accent); color: #fff; font-weight: 600; }
+.mbar .icon { width: 40px; height: 38px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; font-size: 18px; }
+.mbar .icon:disabled { opacity: 0.4; }
+.mbar .icon.on { border-color: var(--accent); }
+.mmenu { position: absolute; top: 100%; left: 6px; right: 6px; margin-top: 4px; max-height: calc(100dvh - 80px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px #000a; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.mmenu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.mmenu-grid:nth-child(2) { grid-template-columns: 1fr 1fr; }
+.mmenu-grid button { min-height: 44px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px; font-size: 13.5px; line-height: 1.2; }
+.mmenu-grid button.on { border-color: var(--accent-2); color: var(--accent-2); }
+.mmenu-grid button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.mmenu-settings { display: flex; flex-direction: column; gap: 8px; padding: 8px 4px 0; border-top: 1px solid var(--line); }
+.mmenu-settings label { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #cfd0d2; min-height: 36px; }
+.mmenu-settings select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.mmenu-settings input[type='checkbox'] { width: 22px; height: 22px; }
+.mmenu-help { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+.sheet { grid-area: sheet; display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -8px 24px #0006; transition: height 0.2s ease; overflow: hidden; }
+.sheet-closed .sheet { height: 0; border-top: none; box-shadow: none; }
+.sheet-half .sheet { height: 48dvh; }
+.sheet-full .sheet { height: calc(100dvh - 190px); }
+.sheet-handle { flex: none; display: grid; place-items: center; height: 26px; cursor: grab; touch-action: none; }
+.sheet-handle span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.app.mobile .library, .app.mobile .properties { grid-area: auto; border: none; overflow: visible; height: auto; width: auto; }
+.app.mobile .outliner { max-height: none; border-bottom: none; }
+.mtabs { grid-area: tabs; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--panel); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+.mtabs button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px 8px; background: none; border: none; color: var(--muted); font-size: 11.5px; cursor: pointer; }
+.mtabs .mt-icon { font-size: 19px; line-height: 1; }
+.mtabs button.on { color: var(--accent); }
+.mtabs button.on .mt-icon { filter: drop-shadow(0 0 4px #e8873a88); }
+
+.selchip { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; gap: 4px; align-items: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px; box-shadow: 0 6px 20px #0008; z-index: 5; }
+.selchip button { min-width: 42px; height: 42px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; font-size: 17px; }
+.selchip button:disabled { opacity: 0.35; }
+.selchip .selchip-name { flex: 1; min-width: 0; text-align: left; font-size: 14px; font-weight: 600; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selchip .muted { color: var(--muted); font-weight: 400; }
+.app.mobile .toast { top: 8px; max-width: calc(100% - 16px); font-size: 13.5px; }
+.app.mobile .suggest { left: 8px; right: 8px; bottom: 62px; max-width: none; transform: none; }
+
+/* bigger targets for fingers */
+.app.mobile .props { padding: 4px 14px 28px; gap: 8px; }
+.app.mobile .num input { padding: 8px 0; font-size: 15px; width: 72px; }
+.app.mobile .field select, .app.mobile .props select { padding: 8px 6px; font-size: 14.5px; max-width: 180px; }
+.app.mobile .small { padding: 8px 12px; font-size: 14px; }
+.app.mobile .action { padding: 10px 12px; font-size: 14.5px; }
+.app.mobile .section summary { padding: 11px 10px; }
+.app.mobile .tile { padding: 8px 10px; font-size: 14px; }
+.app.mobile .tile svg { width: 30px; height: 30px; }
+.app.mobile .body li { padding: 9px 6px; font-size: 14.5px; }
+.app.mobile .body-head { padding: 8px 4px; }
+.app.mobile .mini { padding: 5px 10px; font-size: 12.5px; }
+.app.mobile .xyz .num input { width: 100%; }
+.app.mobile .props .name { font-size: 16px; }
+.app.mobile .library { padding: 0 12px 24px; }
+.app.mobile input, .app.mobile select, .app.mobile textarea { font-size: 16px; } /* iOS zooms into smaller fields */
+
+/* wizard on a phone: small live model pinned on top, the step's options under it, buttons pinned at the bottom */
+.app.mobile .wiz-bar .brand { display: none; }
+.app.mobile .wiz-bar { padding: 6px 10px; gap: 8px; }
+.app.mobile .wiz-crumb { flex: 1; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app.mobile .wiz-main { display: flex; flex-direction: column; overflow-y: auto; }
+.app.mobile .wiz-view { order: -1; position: sticky; top: 0; z-index: 2; flex: none; height: 30dvh; border-bottom: 1px solid var(--line); }
+.app.mobile .wiz-hint { display: none; }
+.app.mobile .wiz-steps { flex: none; min-height: auto; border-right: none; }
+.app.mobile .wiz-body { flex: none; overflow: visible; }
+.app.mobile .wiz-foot { position: sticky; bottom: 0; z-index: 2; background: var(--panel); padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.app.mobile .wiz-foot button { min-height: 44px; }
+.app.mobile .wiz-progress button { height: 6px; }
+.app.mobile .wiz-sum { order: 2; border-left: none; border-top: 1px solid var(--line); }
+.app.mobile .wiz-tiles.c4 { grid-template-columns: repeat(2, 1fr); }
+.app.mobile .wiz-tile { padding: 11px 12px; }
+.app.mobile .wiz-tile .t { font-size: 14px; }
+.app.mobile .wiz-slider input[type='range'] { height: 30px; }
+.app.mobile .wiz-sum { overflow: visible; }
