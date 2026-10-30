@@ -383,20 +383,23 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
     cuts.push(cyl(stop + 0.02, idR).translate([0, 0, -0.01]));
     const r1 = D / 2 + g - geo.pinD, r2 = Ro + 1;
     if (end === 'bayonet') {
-      // Two L-slots: in from the mouth at -30°, then a quarter-ish turn to 0° where the pin rests.
+      // Two L-slots: in from the mouth at -50°, then a turn to 0° where the pin rests.
       const w = geo.pinD + 2 * g;
+      // Long enough that the narrowing sits in the run, well clear of the corner of the L.
+      const TURN = 50;
       const zp = L - Math.max(geo.pinD, 4) - 2;
       for (const s of [0, 180]) {
-        const turn = -30;
+        const turn = -TURN;
         cuts.push(box(r1, -w / 2, zp - w / 2, r2, w / 2, L + 1).rotate([0, 0, s + turn]));
-        const arc = M().Manifold.revolve(poly([[r1, zp - w / 2], [r2, zp - w / 2], [r2, zp + w / 2], [r1, zp + w / 2]]), 96, 30 + (w / (2 * Math.PI * r1)) * 360).rotate([0, 0, s + turn - (w / (2 * Math.PI * r1)) * 180]);
+        const arc = M().Manifold.revolve(poly([[r1, zp - w / 2], [r2, zp - w / 2], [r2, zp + w / 2], [r1, zp + w / 2]]), 96, TURN + (w / (2 * Math.PI * r1)) * 360).rotate([0, 0, s + turn - (w / (2 * Math.PI * r1)) * 180]);
         cuts.push(arc);
       }
       // Narrowing just before the rest position: the pin snaps past two small bumps and stays there.
       const lock = num(p, 'bayLock');
       if (lock > 0) {
-        const rIn = D / 2 + g - 0.01, rMid = (D / 2 + g + Ro) / 2;
-        const at = (((w / 2 + 1.1) / rMid) * 180) / Math.PI;
+        const rIn = D / 2 + g - 0.01;
+        // Just past the resting pin's side (measured at the bore, where the angle is widest).
+        const at = (((geo.pinD / 2 + 1.2) / rIn) * 180) / Math.PI;
         const bumps: Manifold[] = [];
         for (const s of [0, 180])
           for (const [z0, dir] of [[zp - w / 2, 1], [zp + w / 2, -1]] as const) {
