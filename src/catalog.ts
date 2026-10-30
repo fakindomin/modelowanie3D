@@ -12,11 +12,18 @@ import { TEXT_DEFS } from './parts/text';
 import { PIPE_DEFS } from './parts/pipes';
 import { COUPLING_DEFS } from './parts/couplings';
 import { SKETCH_DEFS } from './parts/sketch';
+import { stockEndParams, stockEnds, stockMarks, type StockKind, type StockShape } from './parts/ends';
 import { gasket, isJar, jarBox, jarCap, jarParams } from './parts/jar';
 import { meshSolid } from './geom/meshes';
 import { dividerSolid, segmentsOf } from './geom/dividers';
 
 export type { Category, ParamDef, ParamValue, Params, PartDef } from './parts/def';
+
+/** A cross-section (drawn in Y, Z) run along X from 0 to L, with its ends A and B, then centred like bar(). */
+function stock(cs: ReturnType<typeof poly>, L: number, kind: StockKind, p: Params, s: Omit<StockShape, 'L'> = {}) {
+  const m = stockEnds(cs.extrude(L).rotate([90, 0, 90]), kind, p, { L, ...s });
+  return settle(m);
+}
 
 export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'ready', label: 'Gotowe elementy' },
@@ -478,8 +485,10 @@ const BASE: PartDef[] = [
       L(100),
       { key: 'W', label: 'Szerokość', type: 'number', def: 20, min: 1, max: 500, unit: 'mm' },
       { key: 'T', label: 'Grubość', type: 'number', def: 3, min: 0.4, max: 100, step: 0.2, unit: 'mm' },
+      ...stockEndParams('bar'),
     ],
-    build: (p) => settle(cube(num(p, 'L'), num(p, 'W'), num(p, 'T'))),
+    build: (p) => settle(stockEnds(cube(num(p, 'L'), num(p, 'W'), num(p, 'T')), 'bar', p, { L: num(p, 'L') })),
+    endMarks: stockMarks,
   },
   {
     type: 'angle',
@@ -492,11 +501,13 @@ const BASE: PartDef[] = [
       { key: 'A', label: 'Ramię poziome', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       { key: 'B', label: 'Ramię pionowe', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       T(2),
+      ...stockEndParams('bar'),
     ],
     build: (p) => {
       const a = num(p, 'A'), b = num(p, 'B'), t = num(p, 'T');
-      return bar(poly([[0, 0], [a, 0], [a, t], [t, t], [t, b], [0, b]]), num(p, 'L'));
+      return stock(poly([[0, 0], [a, 0], [a, t], [t, t], [t, b], [0, b]]), num(p, 'L'), 'bar', p, { holeY: (t + a) / 2 });
     },
+    endMarks: stockMarks,
   },
   {
     type: 'tee',
@@ -509,12 +520,14 @@ const BASE: PartDef[] = [
       { key: 'W', label: 'Szerokość półki', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       { key: 'H', label: 'Wysokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       T(2),
+      ...stockEndParams('bar'),
     ],
     build: (p) => {
       const w = num(p, 'W'), h = num(p, 'H'), t = num(p, 'T');
       const cs = M().CrossSection.union([poly(rect(-w / 2, 0, w / 2, t)), poly(rect(-t / 2, 0, t / 2, h))]);
-      return bar(cs, num(p, 'L'));
+      return stock(cs, num(p, 'L'), 'bar', p, { holeY: (t / 2 + w / 2) / 2 });
     },
+    endMarks: stockMarks,
   },
   {
     type: 'channel',
@@ -527,6 +540,7 @@ const BASE: PartDef[] = [
       { key: 'W', label: 'Szerokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       { key: 'H', label: 'Wysokość ścianek', type: 'number', def: 15, min: 1, max: 300, unit: 'mm' },
       T(2),
+      ...stockEndParams('bar'),
     ],
     build: (p) => {
       const w = num(p, 'W'), h = num(p, 'H'), t = num(p, 'T');
@@ -535,32 +549,40 @@ const BASE: PartDef[] = [
         poly(rect(-w / 2, 0, -w / 2 + t, h)),
         poly(rect(w / 2 - t, 0, w / 2, h)),
       ]);
-      return bar(cs, num(p, 'L'));
+      return stock(cs, num(p, 'L'), 'bar', p);
     },
+    endMarks: stockMarks,
   },
   {
     type: 'rhs',
     label: 'Profil zamknięty',
     category: 'profile',
     hole: false,
-    description: 'Prostokątna rura (profil zamknięty).',
+    description: 'Prostokątna rura (profil zamknięty). Koniec A i B: gładki, czop do następnego profilu, otwory na zatrzask U albo śrubę, okienka na klik, zaślepiony.',
     params: [
       L(100),
       { key: 'W', label: 'Szerokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       { key: 'H', label: 'Wysokość', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       T(2),
+      ...stockEndParams('rhs'),
     ],
     build: (p) => {
-      const w = num(p, 'W'), h = num(p, 'H'), t = num(p, 'T');
+      const w = num(p, 'W'), h = num(p, 'H'), t = num(p, 'T'), l = num(p, 'L');
       const cs = poly(rect(-w / 2, 0, w / 2, h)).subtract(poly(rect(-w / 2 + t, t, w / 2 - t, h - t)));
-      return bar(cs, num(p, 'L'));
+      // Centred on the body, not on the box: a plug on one end must not shift the profile.
+      return stockEnds(cs.extrude(l).rotate([90, 0, 90]), 'rhs', p, { L: l, W: w, H: h, T: t }).translate([-l / 2, 0, 0]);
     },
+    endMarks: (p) => [
+      { l: 'A', at: [-num(p, 'L') / 2, 0, num(p, 'H') / 2] },
+      { l: 'B', at: [num(p, 'L') / 2, 0, num(p, 'H') / 2] },
+    ],
   },
   {
     type: 'tube',
-    label: 'Rura',
+    label: 'Rura (bez końców)',
     category: 'profile',
     hole: false,
+    hidden: true,
     description: 'Okrągła rura (stoi pionowo).',
     params: [
       { key: 'D', label: 'Średnica zewn.', type: 'number', def: 20, min: 1, max: 500, unit: 'mm' },
@@ -578,9 +600,10 @@ const BASE: PartDef[] = [
     label: 'Pręt',
     category: 'profile',
     hole: false,
-    description: 'Pełny okrągły pręt (leży wzdłuż osi X).',
-    params: [L(100), { key: 'D', label: 'Średnica', type: 'number', def: 8, min: 0.5, max: 300, step: 0.5, unit: 'mm' }],
-    build: (p) => bar(M().CrossSection.circle(num(p, 'D') / 2), num(p, 'L')),
+    description: 'Pełny okrągły pręt (leży wzdłuż osi X). Koniec A i B: gładki, fazka, gwint zewnętrzny albo otwór gwintowany w czole.',
+    params: [L(100), { key: 'D', label: 'Średnica', type: 'number', def: 8, min: 0.5, max: 300, step: 0.5, unit: 'mm' }, ...stockEndParams('rod')],
+    build: (p) => stock(M().CrossSection.circle(num(p, 'D') / 2), num(p, 'L'), 'rod', p, { D: num(p, 'D') }),
+    endMarks: stockMarks,
   },
   // ----------------------------------------------------------------- basic
   {

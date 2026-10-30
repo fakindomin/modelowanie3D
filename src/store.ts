@@ -9,7 +9,7 @@ import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurin
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
 import { placeMates } from './geom/gearMates';
 import { isFitting, pipeFor, placeArmMates } from './geom/armMates';
-import { fittingGeo, oringFor, pinSpots, screwSpots } from './parts/couplings';
+import { END_LETTERS, fittingGeo, oringFor, pinSpots, screwSpots, type FitGeo } from './parts/couplings';
 import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, TextureFace, Vec3, WizValues, Xform } from './types';
 import { WIZARDS } from './wizards';
 import { host } from './wizards/host';
@@ -109,6 +109,8 @@ interface State {
   matingGear(id: string, kind: 'gear' | 'rack' | 'bevel' | 'worm' | 'wheel'): void;
   /** Pipes (or profiles) in every arm of a fitting, with their screw / pin holes and spring clips. */
   matchingPipes(id: string): void;
+  /** Turns a pipe or profile into the one that fits arm i of a fitting (ends, sizes) and puts it in that arm. */
+  fitPipeTo(pipeId: string, fitId: string, i: number): void;
   /** Printable o-rings for a fitting's grooves (or an o-ring groove), beside the model. */
   addOrings(id: string): void;
   matchingNut(id: string): void;
@@ -158,6 +160,9 @@ interface State {
   /** Face pointed at in the list of faces: lit up in the scene. */
   faceHover: { id: string; face: TextureFace } | null;
   setFaceHover(f: { id: string; face: TextureFace } | null): void;
+  /** End letter pointed at in the „Końce” section: lit up on the model. */
+  endHover: string | null;
+  setEndHover(l: string | null): void;
   /** Replaces all textures of a part at once (one undo step). */
   setTextures(id: string, textures: Texture[]): void;
   /** A label (raised or cut) on a wall of the body this part belongs to. */
@@ -427,6 +432,23 @@ export const useStore = create<State>((set, get) => {
       ...overrides,
       params: { ...defaultParams(def), ...(overrides.params ?? {}) },
     };
+  };
+
+  /** Holes (screws, clip pins) and the spring clip that go with the pipe in arm i of a fitting; pushed onto `next`. */
+  const armExtras = (next: Part[], fit: Part, geo: FitGeo, i: number, body: number) => {
+    let holes = 0, clips = 0;
+    const end = geo.ends[i];
+    if (end === 'male' || end === 'female' || end === 'closed') return { holes, clips };
+    const add = (role: 'screw' | 'pin', k: number) => {
+      next.push(makePart('hole', next, { name: `${role === 'pin' ? 'Otwór na bolec' : 'Otwór na śrubę'} ${END_LETTERS[i]}.${k + 1}`, body, avoidBody: fit.body, armOf: { of: fit.id, i, role, k } }));
+      holes++;
+    };
+    if (end === 'pin') {
+      pinSpots(geo, fit.params).angles.forEach((_, k) => add('pin', k));
+      next.push(makePart('springClip', next, { name: `Zatrzask ${END_LETTERS[i]} do: ${fit.name}`, armOf: { of: fit.id, i, role: 'clip', k: 0 } }));
+      clips++;
+    } else if (geo.screwOf(i).s) screwSpots(geo, fit.params, i).angles.forEach((_, k) => add('screw', k));
+    return { holes, clips };
   };
 
   /**
@@ -1024,28 +1046,21 @@ export const useStore = create<State>((set, get) => {
       const geo = fittingGeo(fit!.params, square);
       const next = [...parts];
       const len = Math.max(40, Math.round(geo.depth * 2 + 20));
-      const seatedOn = (i: number) => geo.ends[i] !== 'male' && geo.ends[i] !== 'female';
       let holes = 0, clips = 0;
       geo.dirs.forEach((_, i) => {
         const want = pipeFor(fit!, geo, i);
+        if (!want) return;
         const body = nextBody(next);
         const pipe = makePart(want.type, next, {
-          name: `${want.type === 'pipeFitting' ? 'Złączka' : square ? 'Profil' : 'Rura'} ${i + 1} do: ${fit!.name}`,
+          name: `${want.type === 'pipeFitting' ? 'Złączka' : square ? 'Profil' : 'Rura'} ${END_LETTERS[i]} do: ${fit!.name}`,
           body,
-          params: { ...want.params, ...(want.type === 'rhs' ? { L: len } : want.type === 'tube' ? { H: len } : want.type === 'pipeEnd' ? { L: len } : {}) },
+          params: { ...want.params, ...(want.type === 'rhs' || want.type === 'pipeEnd' ? { L: len } : {}) },
           armOf: { of: id, i, role: 'pipe', k: 0 },
         });
         next.push(pipe);
-        if (!seatedOn(i)) return;
-        const add = (role: 'screw' | 'pin', k: number) => {
-          next.push(makePart('hole', next, { name: `${role === 'pin' ? 'Otwór na bolec' : 'Otwór na śrubę'} ${i + 1}.${k + 1}`, body, avoidBody: fit!.body, armOf: { of: id, i, role, k } }));
-          holes++;
-        };
-        if (geo.ends[i] === 'pin') {
-          pinSpots(geo, fit!.params).angles.forEach((_, k) => add('pin', k));
-          next.push(makePart('springClip', next, { name: `Zatrzask ${i + 1} do: ${fit!.name}`, armOf: { of: id, i, role: 'clip', k: 0 } }));
-          clips++;
-        } else if (geo.screw) screwSpots(geo, fit!.params, i).angles.forEach((_, k) => add('screw', k));
+        const r = armExtras(next, fit!, geo, i, body);
+        holes += r.holes;
+        clips += r.clips;
       });
       commit(placeArmMates(next), { selectedId: id });
       if (fit!.params.oring === 'yes' && !parts.some((p) => p.type === 'oringPart' && p.name.endsWith(`do: ${fit!.name}`))) get().addOrings(id);
@@ -1053,13 +1068,35 @@ export const useStore = create<State>((set, get) => {
         holes ? `${holes} ${holes === 1 ? 'otwór' : holes < 5 ? 'otwory' : 'otworów'} w rurach` : '',
         clips ? `${clips} ${clips === 1 ? 'zatrzask' : clips < 5 ? 'zatrzaski' : 'zatrzasków'} sprężynowe` : '',
       ].filter(Boolean);
+      const seatedOn = (i: number) => !['male', 'female', 'closed'].includes(geo.ends[i]);
       get().notify(
         !geo.dirs.some((_, i) => seatedOn(i))
           ? geo.ends.every((e) => e === 'male')
             ? 'Do gwintów zewnętrznych dodałem złączki z gwintem wewnętrznym, czekają przed ramionami.'
             : 'Rury i złączki do gwintów czekają przed ramionami: wkręć je.'
-          : `Rury stoją w ramionach${what.length ? ', dodałem ' + what.join(' i ') : ''}. Idą za łącznikiem; położenie śrub i bolców zmieniasz w łączniku. Przesunięta ręcznie rura odpina się.`,
+          : `Rury stoją w ramionach, koniec A każdej pasuje do swojego ramienia${what.length ? ', dodałem ' + what.join(' i ') : ''}. Idą za łącznikiem i zmieniają koniec razem z ramieniem; położenie śrub i bolców zmieniasz w łączniku. Przesunięta ręcznie rura odpina się.`,
       );
+    },
+
+    fitPipeTo(pipeId, fitId, i) {
+      const parts = get().parts;
+      const pipe = parts.find((p) => p.id === pipeId);
+      const fit = parts.find((p) => p.id === fitId);
+      if (!pipe || !isFitting(fit)) return;
+      const geo = fittingGeo(fit!.params, fit!.type === 'profileFitting');
+      const want = pipeFor(fit!, geo, i);
+      if (!want) return get().notify(`Koniec ${END_LETTERS[i]} łącznika jest zaślepiony.`);
+      if (want.type === 'pipeFitting') return get().notify('Na gwint zewnętrzny pasuje złączka z gwintem wewnętrznym, nie rura. Wstawi ją „Dodaj pasujące rury” w łączniku.');
+      const round = pipe.type === 'tube' || pipe.type === 'pipeEnd';
+      if ((want.type === 'rhs') !== (pipe.type === 'rhs') || (!round && pipe.type !== 'rhs')) return get().notify(want.type === 'rhs' ? 'Do łącznika profili pasuje profil zamknięty.' : 'Do łącznika rur pasuje rura.');
+      // An old plain tube becomes a pipe with ends (same sizes, its height is the length).
+      const base = pipe.type === 'tube' ? { ...defaultParams(DEFS.pipeEnd), std: 'custom', D: pipe.params.D, T: pipe.params.T, L: pipe.params.H } : pipe.params;
+      const rest = parts.filter((p) => p.id !== pipeId && !(p.armOf?.of === fitId && p.armOf.i === i));
+      const moved: Part = { ...pipe, type: want.type, params: { ...base, ...want.params }, armOf: { of: fitId, i, role: 'pipe', k: 0 } };
+      const next = [...rest, moved];
+      armExtras(next, fit!, geo, i, pipe.body);
+      commit(placeArmMates(next), { selectedId: pipeId });
+      get().notify(`„${pipe.name}” stoi w ramieniu ${END_LETTERS[i]} łącznika „${fit!.name}”, a jej koniec A pasuje do niego. Idzie za łącznikiem.`);
     },
 
     addOrings(id) {
@@ -1823,6 +1860,8 @@ export const useStore = create<State>((set, get) => {
     setFaceSel: (faceSel) => set({ faceSel }),
     faceHover: null,
     setFaceHover: (faceHover) => set({ faceHover }),
+    endHover: null,
+    setEndHover: (endHover) => set({ endHover }),
     setTextures(id, textures) {
       get().update(id, { texture: undefined, textures: textures.length ? textures : undefined });
     },

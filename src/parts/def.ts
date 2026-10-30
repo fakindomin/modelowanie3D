@@ -13,6 +13,8 @@ interface ParamBase {
   show?: (p: Params) => boolean;
   /** Section heading shown above this field. */
   group?: string;
+  /** Letter of the element's end this field chooses (shown in the „Końce” section, with the letter on the model). */
+  end?: string;
 }
 
 export type ParamDef =
@@ -50,4 +52,6 @@ export interface PartDef {
   normalize?: (prev: Params, next: Params) => Params;
   /** Not shown in the library (made by helper buttons). */
   hidden?: boolean;
+  /** Where the letters of the ends (A, B…) stand on the built part, in its own frame (bb = built box). */
+  endMarks?: (p: Params, bb: THREE.Box3) => { l: string; at: Vec3 }[];
 }

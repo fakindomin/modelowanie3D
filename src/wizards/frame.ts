@@ -63,6 +63,10 @@ function originFor(rot: Vec3, local: THREE.Vector3, world: THREE.Vector3): Vec3 
   return [r3(p.x), r3(p.y), r3(p.z)];
 }
 
+/** How a pipe holds in a fitting: the fitting's arm and the pipe's end that go together (as in the editor's „Końce”). */
+const ARM_END: Record<string, string> = { clip: 'pin', screw: 'socket', bolt: 'bolt', click: 'click', glue: 'socket' };
+const PIPE_END: Record<string, string> = { clip: 'pin', screw: 'screw', bolt: 'screw', click: 'click', glue: 'socket' };
+
 const pl = (n: number, one: string, few: string, many: string) => {
   const f = n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14);
   return `${n} ${n === 1 ? one : f ? few : many}`;
@@ -77,7 +81,7 @@ function plan(v: WizValues): Plan {
   const T = Math.max(1.6, r1(D * 0.1));
   const wall = Math.max(2, r1(D * 0.1));
   const depth = Math.round(D * 1.2);
-  const joint = String(v.joint) as 'clip' | 'screw' | 'glue';
+  const joint = String(v.joint) as 'clip' | 'screw' | 'bolt' | 'click' | 'glue';
   const luz = joint === 'glue' ? 0.3 : 0.25;
   const pinD = D <= 20 ? 4 : D <= 25 ? 5 : 6;
   const mat = String(v.mat) === 'PLA' ? 'PLA' : 'PETG';
@@ -87,12 +91,14 @@ function plan(v: WizValues): Plan {
   const bellMode = v.seg !== 'coupler';
   const bell = Math.max(20, Math.round(D * 1.2));
   const lamp = !!v.lamp && lampFits(v);
-  const holes = joint !== 'glue';
+  const holes = joint === 'clip' || joint === 'screw' || joint === 'bolt';
+  // The pipe's end that goes into an arm (A at the bottom, B at the top).
+  const pipeEnd = PIPE_END[joint] ?? 'socket';
 
   const fitParams = (kind: string): Params => ({
     ...defaults('pipeFitting'),
     kind,
-    end: joint === 'clip' ? 'pin' : 'socket',
+    end: ARM_END[joint] ?? 'socket',
     std: 'custom',
     D,
     T,
@@ -179,20 +185,23 @@ function plan(v: WizValues): Plan {
   const pinAt = r1(depth * 0.5);
   const pipeP = (L: number, bellTop: boolean, at: 'none' | 'bottom' | 'top' | 'both'): Params => ({
     ...defaults('pipeEnd'),
-    end: 'socket',
+    end: at === 'bottom' || at === 'both' ? pipeEnd : 'socket',
     std: 'custom',
     D,
     T,
     L: r1(L),
     luz,
-    bell: bellTop ? 'yes' : 'none',
+    bell: bellTop ? 'yes' : at === 'top' || at === 'both' ? (pipeEnd === 'socket' ? 'none' : pipeEnd) : 'none',
     bellD: bell,
     bellW: 2.4,
     bellL: 0.15,
-    pinHoles: holes ? at : 'none',
+    pinHoles: 'none',
     pinAt,
-    // Screws: a pilot hole for an M4 wood / plastic screw.
-    pinD: joint === 'screw' ? 2.9 : pinD,
+    pinD,
+    depth,
+    wall,
+    // Screws: a pilot hole for an M4 plastic screw; bolts: a through hole for M5.
+    screwD: joint === 'bolt' ? 5.4 : 2.9,
   });
 
   const run = (a: THREE.Vector3, b: THREE.Vector3, stopA: number, stopB: number, label: string) => {
@@ -325,6 +334,10 @@ function plan(v: WizValues): Plan {
   // ------------------------------------------------------------------ buy, steps, notes
   const buy: Plan['buy'] = [];
   if (joint === 'screw') buy.push({ name: 'Wkręt do tworzyw M4 × 12 (np. typu PT)', qty: `${pipeEnds + (bellMode ? 0 : couplers * 2)} szt.`, note: 'Jeden w każdym ramieniu łącznika, przez otwór w ramieniu w otwór pilotowy rury.' });
+  if (joint === 'bolt') {
+    const len = Math.ceil((D + 2 * (luz + wall) + 6) / 5) * 5;
+    buy.push({ name: `Śruba M5 × ${len} z nakrętką M5`, qty: `${pipeEnds + (bellMode ? 0 : couplers * 2)} kpl.`, note: 'Na wylot przez ramię łącznika i rurę, nakrętka wchodzi w sześciokątne gniazdo.' });
+  }
   if (joint === 'glue') buy.push({ name: 'Klej do tworzyw (cyjanoakryl żelowy albo epoksyd 2K)', qty: '1 opakowanie', note: 'Połączenia na stałe, ramy nie rozbierzesz.' });
   const board = (what: string) => `${what} ${mm(W - 2 * Ro + D)} × ${mm(Dp - 2 * Ro + D)} mm`;
   const shelfZ = [...(v.bottom ? [zs[0]] : []), ...(v.shelves ? zs.slice(1, -1) : [])];
@@ -351,6 +364,10 @@ function plan(v: WizValues): Plan {
       ? 'W każdy koniec rury przy łączniku włóż zatrzask Z: ściśnij bolce, wsuń rurę w ramię łącznika i obracaj, aż bolce wskoczą w otwory.'
       : joint === 'screw'
         ? 'Rurę wsuń w ramię łącznika do oporu i wkręć wkręt M4 przez otwór w ramieniu w otwór pilotowy rury.'
+        : joint === 'bolt'
+          ? 'Rurę wsuń w ramię łącznika do oporu, przełóż śrubę M5 na wylot przez ramię i rurę i dokręć nakrętkę w gnieździe.'
+          : joint === 'click'
+            ? 'Wciśnij rurę w ramię łącznika do kliknięcia: zaczepy wskakują w rowek na końcu rury. Rozłączasz, rozchylając zaczepy śrubokrętem.'
         : 'Posmaruj klejem koniec rury i wsuń ją w ramię łącznika do oporu. Złóż całość od razu, zanim klej zwiąże.',
     'Złóż dolny prostokąt: 4 narożniki N1 i rury krawędzi.',
     levels > 1 ? `Wstaw słupki, łączniki 4-ramienne ${fitRole.corner4} i rury poziomów (${pl(levels - 1, 'poziom', 'poziomy', 'poziomów')}).` : 'Wstaw 4 słupki.',
@@ -421,7 +438,19 @@ export const FRAME_WIZARD: Wizard = {
       focus: ['fit', 'clip', 'seg'],
       focusLabel: 'łączniki',
       fields: () => [
-        tiles('joint', [{ value: 'clip', label: 'Zatrzask U', desc: 'bez narzędzi, rozbieralne' }, { value: 'screw', label: 'Wkręt M4', desc: 'sztywniej, rozbieralne' }, { value: 'glue', label: 'Klej', desc: 'najsztywniej, na stałe' }], 'Rura w łączniku', 3),
+        tiles(
+          'joint',
+          [
+            { value: 'clip', label: 'Zatrzask U', desc: 'bez narzędzi, rozbieralne' },
+            { value: 'click', label: 'Na klik', desc: 'wciskana, bez dodatkowych części' },
+            { value: 'screw', label: 'Wkręt M4', desc: 'sztywniej, rozbieralne' },
+            { value: 'bolt', label: 'Śruba M5 z nakrętką', desc: 'najmocniej z rozbieralnych' },
+            { value: 'glue', label: 'Klej', desc: 'najsztywniej, na stałe' },
+          ],
+          'Rura w łączniku (koniec rury i ramię łącznika)',
+          3,
+        ),
+        { kind: 'hint', text: 'Gwintu i bagnetu tu nie ma: w zamkniętej ramie ostatnich rur nie da się wkręcić ani przekręcić. Są w edytorze, w sekcji „Końce” łącznika i rury.' },
         tiles('seg', [{ value: 'bell', label: 'Kielich', desc: 'odcinek wchodzi w odcinek, mniej części' }, { value: 'coupler', label: 'Dwujnik', desc: 'osobna złączka, odcinki równe' }], 'Odcinki rury między sobą'),
       ],
     },

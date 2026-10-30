@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { DEFS, MAGNETS } from './catalog';
 import { buildBodies, built, partMatrix } from './geom/parts';
-import { fittingGeo } from './parts/couplings';
+import { END_LETTERS, END_NAMES, fittingGeo, oringFor } from './parts/couplings';
 import { WIZARDS } from './wizards';
 import { DENSITY } from './wizards/estimate';
 import type { Plan, PlanItem } from './wizards/types';
@@ -65,6 +65,13 @@ function howOf(p: Part, single: boolean, wiz?: PlanItem) {
   if (p.type === 'pipeEnd' || p.type === 'tube') return 'Stoi pionowo, brim 5 mm.';
   if (single && p.type === 'pipeFitting') return 'Stoi na jednym ramieniu, podpory drzewkowe pod resztą ramion.';
   return 'Połóż na największej płaskiej ściance (przycisk ⊞ Ułóż robi to samo).';
+}
+
+/** Name of an end as its select shows it, shortened (no explanation in brackets), lower case. */
+function endName(type: string, key: string, value: string) {
+  const d = DEFS[type]?.params.find((q) => q.key === key);
+  const o = d && d.type === 'select' ? d.options.find((x) => x.value === value) : undefined;
+  return (o ? o.label.replace(/\s*\(.*\)$/, '') : END_NAMES[value] ?? value).toLowerCase();
 }
 
 const plural = (n: number, one: string, few: string, many: string) => {
@@ -153,10 +160,32 @@ export function makeManual(parts: Part[]): Manual {
     const box = to(p.fitTo);
     if (box) fits.add(`${label(p.body)} zamyka ${label(box.body)}.`);
     const fit = p.armOf ? to(p.armOf.of) : undefined;
-    if (fit && !p.hole) fits.add(p.armOf!.role === 'clip' ? `Zatrzask ${label(p.body)} siedzi w rurze przy łączniku ${label(fit.body)}.` : `${label(p.body)} wchodzi w ramię łącznika ${label(fit.body)}.`);
+    if (fit && !p.hole) {
+      const i = p.armOf!.i;
+      const armEnd = fittingGeo(fit.params, fit.type === 'profileFitting').ends[i];
+      const ownKey = p.params.end !== undefined ? 'end' : 'endA';
+      const own = p.params[ownKey] !== undefined ? endName(p.type, ownKey, String(p.params[ownKey])) : '';
+      fits.add(
+        p.armOf!.role === 'clip'
+          ? `Zatrzask ${label(p.body)} siedzi w rurze przy ramieniu ${END_LETTERS[i]} łącznika ${label(fit.body)}.`
+          : `${label(p.body)}${own ? ` (koniec A: ${own})` : ''} wchodzi w ramię ${END_LETTERS[i]} łącznika ${label(fit.body)} (${endName(fit.type, 'end', armEnd)}).`,
+      );
+    }
     const gear = p.gearMate ? to(p.gearMate.of) : undefined;
     if (gear) fits.add(`${label(p.body)} zazębia się z ${label(gear.body)}.`);
     if (p.hole && !p.armOf && p.avoidBody !== undefined && noOf.has(p.avoidBody)) fits.add(`${label(p.avoidBody)} wchodzi w gniazdo w ${label(p.body)}.`);
+  }
+  // Elements with their own ends: what each end is, so the right pieces go together.
+  for (const p of parts) {
+    if (p.wiz || p.hole || p.armOf) continue;
+    const ends = (DEFS[p.type]?.params ?? []).filter((d) => d.end && d.type === 'select' && (!d.show || d.show(p.params)));
+    if (!ends.length) continue;
+    const vals = ends.map((d) => ({ l: d.end!, v: String(p.params[d.key] ?? d.def) }));
+    const firstPlain = (d: (typeof ends)[number]) => d.type === 'select' && d.options[0].value;
+    if (ends.every((d, k) => vals[k].v === firstPlain(d) || vals[k].v === 'same')) continue;
+    const a = vals[0].v;
+    const txt = vals.map((x, k) => `${x.l}: ${endName(p.type, x.v === 'same' ? ends[0].key : ends[k].key, x.v === 'same' ? a : x.v)}`).join(', ');
+    fits.add(`${label(p.body)}, końce ${txt}.`);
   }
   const rigid = new Map<string, Set<number>>();
   for (const p of parts) if (p.rigid && !p.wiz) rigid.set(p.rigid, (rigid.get(p.rigid) ?? new Set()).add(p.body));
@@ -171,15 +200,26 @@ export function makeManual(parts: Part[]): Manual {
     buy.push({ name: `Magnes neodymowy Ø${d} × ${h} mm`, qty: `${k} szt.`, note: 'Wklej kroplą kleju CA. Przed wklejeniem sprawdź, czy pary się przyciągają.' });
   }
   const screws = new Map<string, number>();
+  const rings = new Map<string, number>();
   for (const p of parts) {
-    if (p.wiz || (p.type !== 'pipeFitting' && p.type !== 'profileFitting') || p.params.screw === 'none') continue;
-    const arms = fittingGeo(p.params, p.type === 'profileFitting').ends.filter((e) => e !== 'pin').length;
-    if (!arms) continue;
-    const k = arms * (p.params.screwMode === 'through' ? 1 : Number(p.params.screwN) || 1);
-    const what = p.params.screwMode === 'through' ? `Śruba ${p.params.screw} z nakrętką` : `Wkręt do tworzyw ${p.params.screw}`;
-    screws.set(what, (screws.get(what) ?? 0) + k);
+    if (p.wiz || (p.type !== 'pipeFitting' && p.type !== 'profileFitting')) continue;
+    const geo = fittingGeo(p.params, p.type === 'profileFitting');
+    geo.ends.forEach((_, i) => {
+      const so = geo.screwOf(i);
+      if (so.s) {
+        const what = so.through ? `Śruba M${so.s} z nakrętką M${so.s}` : `Wkręt do tworzyw M${so.s}`;
+        screws.set(what, (screws.get(what) ?? 0) + (so.through ? 1 : Number(p.params.screwN) || 1));
+      }
+      // O-rings not printed with „Dodaj o-ring do druku” are bought.
+      const r = oringFor(geo, p.params, i);
+      if (r && !parts.some((q) => q.type === 'oringPart' && q.name.endsWith(`do: ${p.name}`))) {
+        const k = `${String(r.ID).replace('.', ',')} × ${String(r.CS).replace('.', ',')}`;
+        rings.set(k, (rings.get(k) ?? 0) + 1);
+      }
+    });
   }
-  for (const [what, k] of screws) buy.push({ name: what, qty: `${k} szt.`, note: 'Długość: przez ściankę łącznika i rurę.' });
+  for (const [what, k] of screws) buy.push({ name: what, qty: `${k} szt.`, note: 'Długość: przez ściankę łącznika i rurę (śruba na wylot: przez całą rurę i obie ścianki).' });
+  for (const [k, n] of rings) buy.push({ name: `O-ring ${k} mm (średnica wewn. × przekrój)`, qty: `${n} szt.`, note: 'Do rowków w ramionach łączników. Albo wydrukuj z TPU: „Dodaj o-ring do druku”.' });
   for (const { plan } of plans.values()) buy.push(...plan.buy);
   const boughtOring = parts.filter((p) => p.type === 'oring').length;
   if (boughtOring) buy.push({ name: 'O-ring (wymiary w gnieździe w modelu)', qty: `${boughtOring} szt.`, note: 'Albo wydrukuj z TPU: „Dodaj o-ring do druku”.' });

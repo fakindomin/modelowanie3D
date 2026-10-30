@@ -128,7 +128,7 @@ export const FAMILIES: Family[] = [
     icon: 'tube',
     category: 'profile',
     variants: [
-      { label: 'Rura', type: 'tube' },
+      { label: 'Rura', type: 'pipeEnd' },
       { label: 'Pręt', type: 'rod' },
       { label: 'Walec', type: 'cylinder' },
       { label: 'Stożek', type: 'cone' },

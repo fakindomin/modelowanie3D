@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Edges, GizmoHelper, GizmoViewport, Grid, Html, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
+import { DEFS } from '../catalog';
 import { assembly, bodyBox, groupBody, groupId, isLocked, useStore } from '../store';
 import { built, buildBodies, partMatrix, worldBox, type BodyResult } from '../geom/parts';
 import { finishing, warped } from '../geom/modify';
@@ -535,19 +536,23 @@ function FaceSelMark() {
 }
 
 /** Letters A and B on the two ends of the selected pipe, matching "Koniec A / Koniec B" in the panel. */
-function PipeEndMarks() {
-  const part = useStore((s) => s.parts.find((p) => p.id === s.selectedId && (p.type === 'pipeEnd' || p.type === 'tube')));
-  if (!part) return null;
+/** Letters of the selected element's ends (A, B, C…), the one pointed at in the panel lit up. */
+function EndMarks() {
+  const part = useStore((s) => s.parts.find((p) => p.id === s.selectedId));
+  const hover = useStore((s) => s.endHover);
+  const def = part && DEFS[part.type];
+  if (!part || !def || (!def.endMarks && part.type !== 'tube')) return null;
   const g = built(part).geometry;
   if (!g.boundingBox) g.computeBoundingBox();
   const bb = g.boundingBox!;
   const m = partMatrix(part.position, part.rotation);
-  const at = (z: number) => new THREE.Vector3(0, 0, z).applyMatrix4(m).toArray() as Vec3;
+  // An old plain tube shows its ends too: they become A and B once it gets ends.
+  const marks = def.endMarks ? def.endMarks(part.params, bb) : [{ l: 'A', at: [0, 0, bb.min.z] as Vec3 }, { l: 'B', at: [0, 0, bb.max.z] as Vec3 }];
   return (
     <>
-      {(['A', 'B'] as const).map((l, i) => (
-        <Html key={l} position={at(i ? bb.max.z : bb.min.z)} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
-          <span className="end-mark">{l}</span>
+      {marks.map((k) => (
+        <Html key={k.l} position={new THREE.Vector3(...k.at).applyMatrix4(m).toArray() as Vec3} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+          <span className={hover === k.l ? 'end-mark on' : 'end-mark'}>{k.l}</span>
         </Html>
       ))}
     </>
@@ -752,7 +757,7 @@ export function Viewport() {
       <MeasureMarks />
       <FaceSelMark />
       <FaceHoverMark />
-      {!preview && <PipeEndMarks />}
+      {!preview && <EndMarks />}
       <CutPlane />
       <OrbitControls makeDefault enableDamping={false} />
       <CameraFit />

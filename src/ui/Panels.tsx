@@ -19,6 +19,7 @@ import { INFO, Info, PATTERN_INFO } from './Info';
 import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
 import { WALL_SIDES, sideOf, type WallSide } from '../parts/connectors';
 import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, segmentsOf, toggleSegment, type DivLayout } from '../geom/dividers';
+import { fittingGeo } from '../parts/couplings';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 
@@ -401,7 +402,7 @@ function Helpers({ part }: { part: Part }) {
     );
   if (part.type === 'text' && !st.parts.some((p) => p.body === part.body && p.bend)) {
     // Wrap around the largest round part in the model, otherwise a 40 mm cylinder (changed in Gięcie).
-    const round = st.parts.filter((p) => !p.hole && ['cylinder', 'tube', 'rod'].includes(p.type)).sort((a, c) => Number(c.params.D) - Number(a.params.D))[0];
+    const round = st.parts.filter((p) => !p.hole && ['cylinder', 'tube', 'pipeEnd', 'rod'].includes(p.type)).sort((a, c) => Number(c.params.D) - Number(a.params.D))[0];
     const D = round ? Number(round.params.D) : 40;
     out.push(b(`↪ Owiń napis na walec (Ø ${D} mm)`, () => st.setBend(part.id, { ...DEFAULT_BEND, axis: 'x', dir: 'down', D, luz: 0 }), INFO.wrapText));
   }
@@ -423,6 +424,7 @@ function Helpers({ part }: { part: Part }) {
           params: { ...Object.fromEntries(DEFS.pipeEnd.params.map((d) => [d.key, d.def])), std: 'custom', D: part.params.D, T: part.params.T, L: part.params.H, end: 'socket', bell: 'none' },
         }), INFO.pipeEnds),
     );
+  if (part.type === 'pipeEnd' || part.type === 'tube' || part.type === 'rhs') out.push(<FitPipeTo key="fit-pipe" part={part} />);
   if (part.type === 'oring' || ((part.type === 'pipeFitting') && part.params.oring === 'yes'))
     out.push(b('+ Dodaj o-ring do druku', () => st.addOrings(part.id), INFO.oringPart));
   const armFit = part.armOf ? st.parts.find((p) => p.id === part.armOf!.of) : undefined;
@@ -1102,6 +1104,95 @@ function DividerEditor({ part }: { part: Part }) {
   );
 }
 
+/** One row per end of the element (A, B, C…), its letter lit up on the model while pointed at. */
+function EndsSection({ part, fields }: { part: Part; fields: ParamDef[] }) {
+  const st = useStore();
+  const setHover = useStore((s) => s.setEndHover);
+  useEffect(() => () => setHover(null), [setHover]);
+  const sel = fields.filter((f): f is Extract<ParamDef, { type: 'select' }> => f.type === 'select');
+  const fit = part.armOf?.role === 'pipe' ? st.parts.find((p) => p.id === part.armOf!.of) : undefined;
+  const a = sel[0];
+  const likeA = () => {
+    const v = String(part.params[a.key]);
+    const plainA = a.options[0].value;
+    const next = { ...part.params };
+    for (const f of sel.slice(1)) {
+      if (f.options.some((o) => o.value === 'same')) next[f.key] = 'same';
+      else if (f.options.some((o) => o.value === v)) next[f.key] = v;
+      else if (v === plainA) next[f.key] = f.options[0].value;
+    }
+    st.update(part.id, { params: next });
+  };
+  return (
+    <div className="ends">
+      <h5>
+        Końce <Info text={INFO.ends} />
+      </h5>
+      {fit && <p className="desc">Koniec A dobiera się sam do ramienia {'ABCDEF'[part.armOf!.i]} łącznika „{fit.name}”.</p>}
+      {sel.map((f) => {
+        const rest = f.label.replace(/^Koniec [A-F]\s*/, '');
+        return (
+          <label key={f.key} className="field end-row" title={f.hint} onMouseEnter={() => setHover(f.end!)} onMouseLeave={() => setHover(null)}>
+            <span>
+              <b className="end-letter">{f.end}</b> {rest}
+            </span>
+            <select value={String(part.params[f.key] ?? f.def)} onFocus={() => setHover(f.end!)} onBlur={() => setHover(null)} onChange={(e) => st.update(part.id, { params: { ...part.params, [f.key]: e.target.value } })}>
+              {f.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
+      {sel.length > 1 && (
+        <button className="small" onClick={likeA} title="Pozostałe końce dostają to samo co koniec A">
+          Wszystkie jak A
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Puts a pipe or profile into a chosen arm of a fitting in the model, with the matching end. */
+function FitPipeTo({ part }: { part: Part }) {
+  const st = useStore();
+  const square = part.type === 'rhs';
+  const fits = st.parts.filter((p) => p.type === (square ? 'profileFitting' : 'pipeFitting'));
+  if (!fits.length) return null;
+  const opts = fits.flatMap((f) => {
+    const geo = fittingGeo(f.params, square);
+    return geo.dirs.map((_, i) => {
+      const taken = st.parts.find((p) => p.id !== part.id && p.armOf?.of === f.id && p.armOf.i === i && p.armOf.role === 'pipe');
+      const closed = geo.ends[i] === 'closed';
+      return { value: `${f.id}:${i}`, label: `${f.name}, ramię ${'ABCDEF'[i]}${closed ? ' (zaślepione)' : taken ? ' (zajęte)' : ''}`, off: closed };
+    });
+  });
+  const now = part.armOf?.role === 'pipe' ? `${part.armOf.of}:${part.armOf.i}` : '';
+  return (
+    <label className="field" title={INFO.fitPipe}>
+      <span>
+        ⇄ Dopasuj do łącznika <Info text={INFO.fitPipe} />
+      </span>
+      <select
+        value={now}
+        onChange={(e) => {
+          const [id, i] = e.target.value.split(':');
+          if (id) st.fitPipeTo(part.id, id, Number(i));
+        }}
+      >
+        <option value="">wybierz ramię…</option>
+        {opts.map((o) => (
+          <option key={o.value} value={o.value} disabled={o.off}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function PartProperties({ part }: { part: Part }) {
   const st = useStore();
   const def = DEFS[part.type];
@@ -1112,8 +1203,9 @@ function PartProperties({ part }: { part: Part }) {
   const pieces = part.rigid ? st.parts.filter((p) => p.rigid === part.rigid).length : 1;
   const [height, setHeight] = useState(150);
   const fields = paramsOf(def, part.params).filter((p) => !p.show || p.show(part.params));
-  const main = fields.filter((p) => !isMore(p));
-  const more = fields.filter(isMore);
+  const ends = fields.filter((p) => p.end && p.type === 'select');
+  const main = fields.filter((p) => !p.end && !isMore(p));
+  const more = fields.filter((p) => !p.end && isMore(p));
   const field = (p: ParamDef) => (
     <div key={p.key}>
       {p.group && <h5>{p.group}</h5>}
@@ -1187,6 +1279,7 @@ function PartProperties({ part }: { part: Part }) {
         Wymiary <Info text={INFO.dims} />
       </h4>
       {main.map(field)}
+      {ends.length > 0 && <EndsSection part={part} fields={ends} />}
       {more.length > 0 && (
         <Section title="Więcej wymiarów" info={INFO.moreDims} open={more.some((p) => part.params[p.key] !== undefined && part.params[p.key] !== p.def)}>
           {more.map(field)}
