@@ -176,57 +176,29 @@ export function plates(sizes: { w: number; d: number; group: string }[], bed: [n
   return { at: out, count: plate + 1 };
 }
 
-/**
- * 3MF with one object per body, on as many plates as the bed needs. Plates are written the way Bambu Studio and
- * OrcaSlicer read them (Metadata/model_settings.config, plates side by side); other slicers see the parts spread out.
- */
-export function export3MF(bodies: BodyResult[], name: string, names: Map<number, string> = new Map(), _numbered = false, bed: [number, number] = [256, 256], groups: Map<number, string> = new Map()) {
+/** A plain 3MF (geometry only, every slicer reads it) with the given objects at their places. */
+function make3MF(objs: { mesh: ReturnType<BodyResult['manifold']['getMesh']>; name: string; dx: number; dy: number; dz: number }[], title: string) {
   const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const fmt = (n: number) => (Math.round(n * 1e4) / 1e4).toString();
-  const boxes = bodies.map((b) => b.manifold.boundingBox());
-  const lay = plates(
-    boxes.map((bb, i) => ({ w: bb.max[0] - bb.min[0], d: bb.max[1] - bb.min[1], group: groups.get(bodies[i].body) ?? '' })),
-    bed,
-  );
-  // Bambu Studio puts plate k at column k % cols, row k / cols, 1.2 bed sizes apart (rows going towards -Y).
-  const cols = Math.ceil(Math.sqrt(lay.count));
-  const plateOrigin = (k: number) => [(k % cols) * bed[0] * 1.2, -Math.floor(k / cols) * bed[1] * 1.2];
   let objects = '';
   let items = '';
-  let settings = '';
-  const perPlate: number[][] = Array.from({ length: lay.count }, () => []);
-  bodies.forEach((b, i) => {
-    const m = b.manifold.getMesh();
-    const bb = boxes[i];
-    const at = lay.at[i];
-    const [ox, oy] = plateOrigin(at.plate);
-    const tr = `1 0 0 0 1 0 0 0 1 ${fmt(ox + at.x - bb.min[0])} ${fmt(oy + at.y - bb.min[1])} ${fmt(-bb.min[2])}`;
-    perPlate[at.plate].push(i + 1);
-    const v = m.vertProperties, np = m.numProp, t = m.triVerts;
+  objs.forEach((o, i) => {
+    const v = o.mesh.vertProperties, np = o.mesh.numProp, t = o.mesh.triVerts;
     const verts: string[] = [];
     for (let k = 0; k < v.length; k += np) verts.push(`<vertex x="${fmt(v[k])}" y="${fmt(v[k + 1])}" z="${fmt(v[k + 2])}"/>`);
     const tris: string[] = [];
     for (let k = 0; k < t.length; k += 3) tris.push(`<triangle v1="${t[k]}" v2="${t[k + 1]}" v3="${t[k + 2]}"/>`);
-    const nm = esc(names.get(b.body) ?? `Bryla ${b.body}`);
-    objects += `<object id="${i + 1}" name="${nm}" type="model"><mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh></object>`;
-    items += `<item objectid="${i + 1}" transform="${tr}" printable="1"/>`;
-    settings += `<object id="${i + 1}"><metadata key="name" value="${nm}"/><metadata key="extruder" value="1"/><part id="1" subtype="normal_part"><metadata key="name" value="${nm}"/></part></object>`;
-  });
-  perPlate.forEach((ids, k) => {
-    settings += `<plate><metadata key="plater_id" value="${k + 1}"/><metadata key="plater_name" value="${esc(groups.size ? (groups.get(bodies[ids[0] - 1].body) ?? '') : '')}"/><metadata key="locked" value="false"/>`;
-    for (const id of ids) settings += `<model_instance><metadata key="object_id" value="${id}"/><metadata key="instance_id" value="0"/></model_instance>`;
-    settings += '</plate>';
+    objects += `<object id="${i + 1}" name="${esc(o.name)}" type="model"><mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh></object>`;
+    items += `<item objectid="${i + 1}" transform="1 0 0 0 1 0 0 0 1 ${fmt(o.dx)} ${fmt(o.dy)} ${fmt(o.dz)}"/>`;
   });
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="pl-PL" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
-<metadata name="Application">BambuStudio-01.09.00.00</metadata>
-<metadata name="BambuStudio:3mfVersion">1</metadata>
-<metadata name="Title">${esc(name)}</metadata>
+<metadata name="Title">${esc(title)}</metadata>
 <resources>${objects}</resources>
 <build>${items}</build>
 </model>`;
   const enc = new TextEncoder();
-  const data = zip([
+  return zip([
     {
       name: '[Content_Types].xml',
       data: enc.encode(
@@ -240,9 +212,31 @@ export function export3MF(bodies: BodyResult[], name: string, names: Map<number,
       ),
     },
     { name: '3D/3dmodel.model', data: enc.encode(model) },
-    { name: 'Metadata/model_settings.config', data: enc.encode(`<?xml version="1.0" encoding="UTF-8"?>\n<config>${settings}</config>`) },
   ]);
-  download(data, `${name}.3mf`, 'model/3mf');
+}
+
+/**
+ * 3MF laid out bed by bed: one file per bed (each material on its own beds), several packed in a .zip.
+ * Plain geometry files: slicers' own multi-plate projects need their full printer settings, which would replace the user's.
+ */
+export function export3MF(bodies: BodyResult[], name: string, names: Map<number, string> = new Map(), _numbered = false, bed: [number, number] = [256, 256], groups: Map<number, string> = new Map()) {
+  const boxes = bodies.map((b) => b.manifold.boundingBox());
+  const lay = plates(
+    boxes.map((bb, i) => ({ w: bb.max[0] - bb.min[0], d: bb.max[1] - bb.min[1], group: groups.get(bodies[i].body) ?? '' })),
+    bed,
+  );
+  const perPlate = Array.from({ length: lay.count }, () => [] as number[]);
+  lay.at.forEach((a, i) => perPlate[a.plate].push(i));
+  const files = perPlate.map((ids, k) => {
+    const group = groups.get(bodies[ids[0]].body) ?? '';
+    const objs = ids.map((i) => {
+      const bb = boxes[i], at = lay.at[i];
+      return { mesh: bodies[i].manifold.getMesh(), name: names.get(bodies[i].body) ?? `Bryla ${bodies[i].body}`, dx: at.x - bb.min[0], dy: at.y - bb.min[1], dz: -bb.min[2] };
+    });
+    return { name: `${name} - stol ${k + 1}${group ? ` (${group})` : ''}.3mf`, data: make3MF(objs, `${name}, stół ${k + 1}`) };
+  });
+  if (files.length === 1) download(files[0].data, `${name}.3mf`, 'model/3mf');
+  else download(zip(files), `${name}-3mf.zip`, 'application/zip');
   return lay.count;
 }
 

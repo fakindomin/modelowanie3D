@@ -71,7 +71,7 @@ export function useProjectActions() {
       fmt === 'stl' && bodies.length > 1
         ? `Wyeksportowano ${out.length} ${out.length === 1 ? 'rodzaj części' : 'rodzajów części'} (${bodies.length} wydruków): każdy rodzaj raz, w osobnym pliku STL, w nazwie numer z Instrukcji i ile sztuk wydrukować („x4”).${hidden ? ' Ukryte elementy też są w plikach.' : ''}`
         : fmt === '3mf'
-          ? `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'część' : 'części'} do 3MF na ${plateN} ${plateN === 1 ? 'stole' : 'stołach'} (stół ${loadBed()[0]} × ${loadBed()[1]} mm z ustawień, każdy materiał osobno). Bambu Studio i Orca otworzą je jako osobne płyty.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`
+          ? `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'część' : 'części'} do 3MF na ${plateN} ${plateN === 1 ? 'stole' : 'stołach'} (stół ${loadBed()[0]} × ${loadBed()[1]} mm z ustawień, każdy materiał osobno). ${plateN > 1 ? 'Każdy stół to osobny plik 3MF w archiwum .zip: otwórz jeden plik na jedną płytę.' : ''}${hidden ? ' Ukryte elementy też są w pliku.' : ''}`
           : `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`,
     );
   };
