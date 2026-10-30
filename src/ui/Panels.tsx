@@ -425,7 +425,13 @@ function Helpers({ part }: { part: Part }) {
   if (fitBox && part.type !== 'boxHinge') out.push(b(`⛓ Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit));
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
     out.push(b(`⧉ Pokaż gotowy element (bryła ${part.body})`, () => st.merge(part.body), INFO.merge));
-  return <>{out}</>;
+  if (!out.length) return null;
+  return (
+    <div className="quick">
+      <h4>Szybkie akcje</h4>
+      {out}
+    </div>
+  );
 }
 
 /** Buttons that move a connector cut-out onto another wall of its body. */
@@ -758,6 +764,10 @@ function EdgesTool({ part }: { part: Part }) {
   );
 }
 
+/** Rarely changed fields (gaps, thread fit, per-arm ends…) go under "Więcej wymiarów". */
+const MORE_KEYS = new Set(['luz', 'fit', 'fw', 'chamfer']);
+const isMore = (p: ParamDef) => MORE_KEYS.has(p.key) || /^e\d$/.test(p.key);
+
 const PATTERN_LABEL = { linear: 'w rzędzie', circle: 'po okręgu', sym: 'symetryczny' } as const;
 
 function Section({ title, children, open = false, info }: { title: string; children: React.ReactNode; open?: boolean; info?: string }) {
@@ -1000,6 +1010,39 @@ function PartProperties({ part }: { part: Part }) {
   const pieces = part.rigid ? st.parts.filter((p) => p.rigid === part.rigid).length : 1;
   const [height, setHeight] = useState(150);
   const fields = paramsOf(def, part.params).filter((p) => !p.show || p.show(part.params));
+  const main = fields.filter((p) => !isMore(p));
+  const more = fields.filter(isMore);
+  const field = (p: ParamDef) => (
+    <div key={p.key}>
+      {p.group && <h5>{p.group}</h5>}
+      <ParamField def={p} value={part.params[p.key]} onChange={(v) => st.update(part.id, { params: { ...part.params, [p.key]: v } })} />
+    </div>
+  );
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const showNote = !!part.note || noteFor === part.id;
+  const wiz = part.wiz && WIZARDS[part.wiz.w];
+  const status = [];
+  if (part.locked)
+    status.push(
+      <div key="lock" className="linkbar">
+        🔒 Zablokowany: nie przesuniesz go ani nie usuniesz.
+        <button className="small" onClick={() => st.setFlags([part.id], { locked: false })}>
+          Odblokuj
+        </button>
+      </div>,
+    );
+  if (linked > 0 || patterned > 0)
+    status.push(
+      <div key="link" className="linkbar">
+        🔗 {linked > 0 ? `Powiązany z ${linked} ${linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.` : ''}
+        {patterned > 0 && ` Szyk (${PATTERN_LABEL[part.pattern!.kind]}): przesuń ten element, a ${patterned === 1 ? 'druga kopia przesunie się' : `${patterned} pozostałe przesuną się`} ${part.pattern!.kind === 'linear' ? 'razem z nim' : 'symetrycznie'}.`}
+        <button className="small" onClick={() => st.unlink(part.id)}>
+          Odłącz
+        </button>
+      </div>,
+    );
+  if (pieces > 1) status.push(<div key="set" className="linkbar">🧩 Część zestawu ({pieces} elementy): przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</div>);
+  if (wiz) status.push(<div key="wiz" className="linkbar">✨ Z kreatora „{wiz.label}”{part.wiz!.role ? `, część ${part.wiz!.role}` : ''}.</div>);
   const setPos = (i: number, v: number) => {
     const position = [...part.position] as Vec3;
     position[i] = v;
@@ -1016,45 +1059,37 @@ function PartProperties({ part }: { part: Part }) {
       <div className="props-head">
         <Icon type={part.type} hole={part.hole} />
         <input className="name" value={part.name} onChange={(e) => st.updateLive(part.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
+        <Info text={def.description} />
+        {!showNote && (
+          <button className="small ghost" title="Notatka trafi do Instrukcji projektu" onClick={() => setNoteFor(part.id)}>
+            + Notatka
+          </button>
+        )}
       </div>
-      <p className="desc">{def.description}</p>
-      <textarea
-        className="note"
-        rows={part.note ? 2 : 1}
-        placeholder="Notatka do instrukcji"
-        value={part.note ?? ''}
-        onChange={(e) => st.updateLive(part.id, { note: e.target.value })}
-        onKeyDown={(e) => e.stopPropagation()}
-      />
+      {showNote && (
+        <textarea
+          className="note"
+          rows={2}
+          autoFocus={!part.note}
+          placeholder="Notatka do instrukcji"
+          value={part.note ?? ''}
+          onChange={(e) => st.updateLive(part.id, { note: e.target.value })}
+          onKeyDown={(e) => e.stopPropagation()}
+        />
+      )}
       <FaceSection part={part} />
-      {part.locked && (
-        <div className="linkbar">
-          🔒 Zablokowany: nie przesuniesz go ani nie usuniesz.
-          <button className="small" onClick={() => st.setFlags([part.id], { locked: false })}>
-            Odblokuj
-          </button>
-        </div>
-      )}
-      {(linked > 0 || patterned > 0) && (
-        <div className="linkbar">
-          🔗 {linked > 0 ? `Powiązany z ${linked} ${linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.` : ''}
-          {patterned > 0 && ` Szyk (${PATTERN_LABEL[part.pattern!.kind]}): przesuń ten element, a ${patterned === 1 ? 'druga kopia przesunie się' : `${patterned} pozostałe przesuną się`} ${part.pattern!.kind === 'linear' ? 'razem z nim' : 'symetrycznie'}.`}
-          <button className="small" onClick={() => st.unlink(part.id)}>
-            Odłącz
-          </button>
-        </div>
-      )}
-      {pieces > 1 && <p className="desc">Część zestawu ({pieces} elementy). Przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</p>}
+      {status.length > 0 && <div className="statusbar">{status}</div>}
+      <Helpers part={part} />
 
       <h4>
         Wymiary <Info text={INFO.dims} />
       </h4>
-      {fields.map((p) => (
-        <div key={p.key}>
-          {p.group && <h5>{p.group}</h5>}
-          <ParamField def={p} value={part.params[p.key]} onChange={(v) => st.update(part.id, { params: { ...part.params, [p.key]: v } })} />
-        </div>
-      ))}
+      {main.map(field)}
+      {more.length > 0 && (
+        <Section title="Więcej wymiarów" info={INFO.moreDims} open={more.some((p) => part.params[p.key] !== undefined && part.params[p.key] !== p.def)}>
+          {more.map(field)}
+        </Section>
+      )}
       {part.type === 'figurine' && (
         <div className="row">
           <NumberInput value={height} min={30} max={300} unit="mm" onChange={setHeight} />
@@ -1069,7 +1104,6 @@ function PartProperties({ part }: { part: Part }) {
           <DividerEditor part={part} />
         </Section>
       )}
-      <Helpers part={part} />
       {part.type === 'connector' && <ConnectorWalls part={part} />}
       {(part.type === 'text' || part.type === 'textCut') && (
         <>
@@ -1085,21 +1119,21 @@ function PartProperties({ part }: { part: Part }) {
       )}
 
       <h4>
-        Położenie <Info text={INFO.position} />
+        Położenie i obrót <Info text={`${INFO.position} ${INFO.rotation}`} />
       </h4>
-      <XYZ value={part.position} step={st.settings.grid || 1} onChange={setPos} />
-      <button className="small" onClick={() => st.dropToFloor(part.id)}>
-        Połóż na stole
-      </button>
-
-      <h4>
-        Obrót <Info text={INFO.rotation} />
-      </h4>
-      <XYZ value={part.rotation} step={15} unit="°" onChange={setRot} />
+      <div className="place">
+        <span className="place-lbl">mm</span>
+        <XYZ value={part.position} step={st.settings.grid || 1} onChange={setPos} />
+        <span className="place-lbl">°</span>
+        <XYZ value={part.rotation} step={15} unit="°" onChange={setRot} />
+      </div>
       <div className="row">
+        <button className="small" onClick={() => st.dropToFloor(part.id)}>
+          Połóż na stole
+        </button>
         {(['X', 'Y', 'Z'] as const).map((a, i) => (
           <button key={a} className="small" title={`Obróć o 90° wokół osi ${a}`} onClick={() => st.rotateBy(part.id, i as 0 | 1 | 2, 90)}>
-            ⟳ {a} 90°
+            ⟳ {a}
           </button>
         ))}
       </div>

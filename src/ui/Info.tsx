@@ -9,6 +9,7 @@ export const INFO = {
   armOf: 'Ta część należy do ramienia łącznika i idzie za nim. Położenie śrub wzdłuż ramienia i kąt wokół ramienia zmieniasz w Wymiarach łącznika: otwór w łączniku i w rurze przesuwają się razem. Przesunięcie tej części ręcznie (albo „Odepnij”) odłącza ją i od tej chwili stoi tam, gdzie ją postawisz.',
   jar: 'Słoik: górna część ścianki staje się gwintowaną szyjką (cofniętą tak, że zakręcona pokrywka jest równo z pudełkiem). Pokrywka ma gwint wewnętrzny i miejsce na płaską uszczelkę, którą zakręcenie ściska o 0,3 mm. Uszczelkę drukuj z TPU albo wytnij z gumy. Szyjkę i pokrywkę drukuj bez podpór; pokrywkę wierzchem do stołu.',
   wrapText: 'Zawija napis na walec o podanej średnicy, litery na zewnątrz (np. etykieta na kubek albo skala na pokrętle). Średnicę zmienisz w sekcji Gięcie. Bierze średnicę największego walca, rury lub pręta w modelu.',
+  moreDims: 'Pola zmieniane rzadko: luzy, dopasowanie gwintu, fazki, wzmocnienia i inne zakończenia ramion. Rozwija się samo, gdy coś w nim zmienisz.',
   dims: 'Wymiary tego elementu w milimetrach. Strzałki ↑↓ w polu zmieniają o krok, z Shiftem o 10 kroków.',
   position: 'Położenie środka elementu (X, Y) i jego spodu (Z) w mm. Element postawiony w innej bryle sam do niej dołącza.',
   rotation: 'Obrót wokół osi X, Y, Z w stopniach. Przyciski obracają o 90° i zostawiają element na tej samej wysokości.',
