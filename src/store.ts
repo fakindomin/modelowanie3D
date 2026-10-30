@@ -1017,12 +1017,12 @@ export const useStore = create<State>((set, get) => {
       if (!isFitting(fit)) return;
       const square = fit!.type === 'profileFitting';
       const geo = fittingGeo(fit!.params, square);
-      const want = pipeFor(fit!, geo);
       const next = [...parts];
       const len = Math.max(40, Math.round(geo.depth * 2 + 20));
-      const seated = geo.end !== 'male' && geo.end !== 'female';
+      const seatedOn = (i: number) => geo.ends[i] !== 'male' && geo.ends[i] !== 'female';
       let holes = 0, clips = 0;
       geo.dirs.forEach((_, i) => {
+        const want = pipeFor(fit!, geo, i);
         const body = nextBody(next);
         const pipe = makePart(want.type, next, {
           name: `${want.type === 'pipeFitting' ? 'Złączka' : square ? 'Profil' : 'Rura'} ${i + 1} do: ${fit!.name}`,
@@ -1031,16 +1031,16 @@ export const useStore = create<State>((set, get) => {
           armOf: { of: id, i, role: 'pipe', k: 0 },
         });
         next.push(pipe);
-        if (!seated) return;
+        if (!seatedOn(i)) return;
         const add = (role: 'screw' | 'pin', k: number) => {
           next.push(makePart('hole', next, { name: `${role === 'pin' ? 'Otwór na bolec' : 'Otwór na śrubę'} ${i + 1}.${k + 1}`, body, avoidBody: fit!.body, armOf: { of: id, i, role, k } }));
           holes++;
         };
-        if (geo.end === 'pin') {
+        if (geo.ends[i] === 'pin') {
           pinSpots(geo, fit!.params).angles.forEach((_, k) => add('pin', k));
           next.push(makePart('springClip', next, { name: `Zatrzask ${i + 1} do: ${fit!.name}`, armOf: { of: id, i, role: 'clip', k: 0 } }));
           clips++;
-        } else if (geo.screw) screwSpots(geo, fit!.params).angles.forEach((_, k) => add('screw', k));
+        } else if (geo.screw) screwSpots(geo, fit!.params, i).angles.forEach((_, k) => add('screw', k));
       });
       commit(placeArmMates(next), { selectedId: id });
       if (fit!.params.oring === 'yes' && !parts.some((p) => p.type === 'oringPart' && p.name.endsWith(`do: ${fit!.name}`))) get().addOrings(id);
@@ -1049,10 +1049,10 @@ export const useStore = create<State>((set, get) => {
         clips ? `${clips} ${clips === 1 ? 'zatrzask' : clips < 5 ? 'zatrzaski' : 'zatrzasków'} sprężynowe` : '',
       ].filter(Boolean);
       get().notify(
-        !seated
-          ? geo.end === 'male'
+        !geo.dirs.some((_, i) => seatedOn(i))
+          ? geo.ends.every((e) => e === 'male')
             ? 'Do gwintów zewnętrznych dodałem złączki z gwintem wewnętrznym, czekają przed ramionami.'
-            : 'Rury z gwintem zewnętrznym czekają przed ramionami: wkręć je.'
+            : 'Rury i złączki do gwintów czekają przed ramionami: wkręć je.'
           : `Rury stoją w ramionach${what.length ? ', dodałem ' + what.join(' i ') : ''}. Idą za łącznikiem; położenie śrub i bolców zmieniasz w łączniku. Przesunięta ręcznie rura odpina się.`,
       );
     },

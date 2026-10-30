@@ -19,9 +19,9 @@ const inward = (r: number, a: number, z: number) => pose(r * Math.cos(a), r * Ma
 const seated = (end: string) => end !== 'male' && end !== 'female';
 
 /** The pipe that fits fitting arm i: its type and the parameters that must match. */
-export function pipeFor(fit: Part, geo: FitGeo): { type: string; params: Params } {
+export function pipeFor(fit: Part, geo: FitGeo, i = 0): { type: string; params: Params } {
   const p = fit.params;
-  const { end } = geo;
+  const end = geo.ends[i];
   if (geo.square) return { type: 'rhs', params: {} };
   if (end === 'male')
     return { type: 'pipeFitting', params: { kind: 'straight', end: 'female', std: p.std, D: p.D, T: p.T, depth: p.depth, wall: p.wall, luz: p.luz, P: p.P, fit: p.fit, screw: 'none' } };
@@ -37,8 +37,9 @@ function armLocal(fit: Part, mate: Part, geo: FitGeo): { m: THREE.Matrix4; param
   const p = fit.params;
   const arm = pose(0, 0, fittingLift(p, geo.square), armQuat(geo.dirs[a.i]));
   const pipeStd = geo.kind === 'reducer' && a.i === 1 ? p.std2 : p.std;
+  const end = geo.ends[a.i];
   if (a.role === 'pipe') {
-    const want = pipeFor(fit, geo);
+    const want = pipeFor(fit, geo, a.i);
     if (want.type !== mate.type) return null;
     if (mate.type === 'rhs') {
       // Profile: length along its X (centred), section centred on Y and standing on Z = 0..H. Turn X onto the arm.
@@ -54,24 +55,24 @@ function armLocal(fit: Part, mate: Part, geo: FitGeo): { m: THREE.Matrix4; param
       const z = mouth + other.stop + other.depth;
       return { m: arm.multiply(pose(0, 0, z, rotY(-Math.PI / 2))), params: { ...want.params, std: pipeStd, D, T } };
     }
-    const z = mate.type === 'pipeEnd' && geo.end === 'female' ? geo.stop + geo.depth + 5 : geo.stop;
+    const z = mate.type === 'pipeEnd' && end === 'female' ? geo.stop + geo.depth + 5 : geo.stop;
     return { m: arm.multiply(pose(0, 0, z)), params: { ...want.params, std: pipeStd, D, T } };
   }
-  if (!seated(geo.end)) return null;
+  if (!seated(end)) return null;
   if (a.role === 'screw') {
-    if (!geo.screw || geo.end === 'pin') return null;
-    const sp = screwSpots(geo, p);
+    if (!geo.screw || end === 'pin') return null;
+    const sp = screwSpots(geo, p, a.i);
     const ang = sp.angles[a.k];
     if (ang === undefined) return null;
     const h = halfAt(geo, a.i, ang);
-    const plug = geo.end === 'plug';
+    const plug = end === 'plug';
     const through = !plug && p.screwMode === 'through';
     // Socket: pilot hole for a wood screw (or a through hole for a bolt); plug: the pipe gets the clearance hole.
     const d = plug || through ? geo.screw + 0.4 : geo.screw * 0.8;
     const depth = through ? 2 * h + 1 : T + 1 + d / 2;
     return { m: arm.multiply(inward(h + 0.5, ang, sp.z)), params: { D: Math.round(d * 100) / 100, H: Math.round(depth * 100) / 100, luz: 0 } };
   }
-  if (geo.end !== 'pin') return null;
+  if (end !== 'pin') return null;
   const ps = pinSpots(geo, p);
   if (a.role === 'pin') {
     const ang = ps.angles[a.k];

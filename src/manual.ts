@@ -172,8 +172,9 @@ export function makeManual(parts: Part[]): Manual {
   }
   const screws = new Map<string, number>();
   for (const p of parts) {
-    if (p.wiz || (p.type !== 'pipeFitting' && p.type !== 'profileFitting') || p.params.screw === 'none' || p.params.end === 'pin') continue;
-    const arms = fittingGeo(p.params, p.type === 'profileFitting').dirs.length;
+    if (p.wiz || (p.type !== 'pipeFitting' && p.type !== 'profileFitting') || p.params.screw === 'none') continue;
+    const arms = fittingGeo(p.params, p.type === 'profileFitting').ends.filter((e) => e !== 'pin').length;
+    if (!arms) continue;
     const k = arms * (p.params.screwMode === 'through' ? 1 : Number(p.params.screwN) || 1);
     const what = p.params.screwMode === 'through' ? `Śruba ${p.params.screw} z nakrętką` : `Wkręt do tworzyw ${p.params.screw}`;
     screws.set(what, (screws.get(what) ?? 0) + k);

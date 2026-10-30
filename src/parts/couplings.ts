@@ -142,10 +142,16 @@ export function fittingGeo(p: Params, square: boolean) {
     return { D, T, H: square ? num(p, 'H') || D : D };
   };
   const dirs = ARMS[kind].map((d) => d.clone());
+  // Each arm may have its own end; „same” (or none) takes the fitting's main choice.
+  const ends = dirs.map((_, i) => {
+    const e = String(p[`e${i}`] ?? 'same');
+    return (e === 'same' ? end : e) as EndKind;
+  });
+  const socketLike = (e: EndKind) => e === 'socket' || e === 'pin' || e === 'bayonet' || e === 'click' || e === 'female';
   // Arms start where the pipes no longer touch each other (pipes meeting at an angle need room).
-  let stop = end === 'plug' ? 3 : 1.5;
+  let stop = ends.includes('plug') ? 3 : 1.5;
   let minAngle = Math.PI;
-  const Rp = Math.max(...dirs.map((_, i) => Math.max(size(i).D, size(i).H))) / 2 + (end === 'socket' || end === 'pin' || end === 'bayonet' || end === 'click' || end === 'female' ? g : 0);
+  const Rp = Math.max(...dirs.map((_, i) => Math.max(size(i).D, size(i).H))) / 2 + (ends.some(socketLike) ? g : 0);
   for (let i = 0; i < dirs.length; i++)
     for (let j = i + 1; j < dirs.length; j++) {
       const a = dirs[i].angleTo(dirs[j]);
@@ -161,7 +167,7 @@ export function fittingGeo(p: Params, square: boolean) {
   };
   const pinD = num(p, 'pinD') || 5;
   const screw = SCREWS[String(p.screw)] ?? 0;
-  return { kind, end, g, wall, size, dirs, stop, minAngle, depth, thread, pinD, screw, square };
+  return { kind, end, ends, g, wall, size, dirs, stop, minAngle, depth, thread, pinD, screw, square };
 }
 export type FitGeo = ReturnType<typeof fittingGeo>;
 
@@ -175,10 +181,10 @@ const place = (m: Manifold, d: THREE.Vector3) => {
 };
 
 /** Height of the arm's screw / pin along the arm, and the outward directions (arm frame) of each. */
-export function screwSpots(geo: FitGeo, p: Params) {
+export function screwSpots(geo: FitGeo, p: Params, i = 0) {
   const z = geo.stop + geo.depth * Math.min(0.85, Math.max(0.15, num(p, 'screwAt') || 0.5));
   // Bayonet pins rest at 0° and 180°: screws go between them.
-  const a0 = (num(p, 'screwAngle') || 0) * (Math.PI / 180) + (geo.end === 'bayonet' ? Math.PI / 2 : 0);
+  const a0 = (num(p, 'screwAngle') || 0) * (Math.PI / 180) + (geo.ends[i] === 'bayonet' ? Math.PI / 2 : 0);
   const n = Math.round(num(p, 'screwN')) === 2 && p.screwMode !== 'through' ? 2 : 1;
   const angles = Array.from({ length: n }, (_, k) => a0 + k * Math.PI);
   return { z, angles };
@@ -198,12 +204,12 @@ const ORING_ENDS = new Set(['socket', 'plug', 'bayonet', 'click', 'pin']);
  * or on the plug (sealing on the pipe's inside), squeezed 20 %. Null when the arm has none.
  */
 export function oringFor(geo: FitGeo, p: Params, i: number) {
-  if (geo.square || p.oring !== 'yes' || !ORING_ENDS.has(geo.end)) return null;
+  if (geo.square || p.oring !== 'yes' || !ORING_ENDS.has(geo.ends[i])) return null;
   const { D, T } = geo.size(i);
   const CS = num(p, 'orCS') || 2;
   const z = geo.stop + Math.max(CS * 1.5, geo.depth * 0.25);
   const w = CS * 1.4;
-  if (geo.end === 'plug') {
+  if (geo.ends[i] === 'plug') {
     const bottom = D / 2 - T - 0.8 * CS;
     // Stretched about 2 % onto the groove bottom so it stays put while the pipe goes on.
     return { CS, z, w, r0: bottom, r1: D / 2 - T, ID: Math.round(2 * bottom * 0.98 * 10) / 10 };
@@ -223,7 +229,8 @@ const sq = (w: number, h: number, z0: number, z1: number) => box(-w / 2, -h / 2,
 /** The outer shell of an arm and what is cut out of it (in the arm frame, arm along +Z from the centre). */
 function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut: Manifold; post?: Manifold } {
   const { D, T, H } = geo.size(i);
-  const { g, wall, stop, depth, end, square } = geo;
+  const { g, wall, stop, depth, square } = geo;
+  const end = geo.ends[i];
   const L = stop + depth;
   const adds: Manifold[] = [], cuts: Manifold[] = [];
   let post: Manifold | undefined;
@@ -299,7 +306,7 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut: Manifold;
   }
   // Screws: a clearance hole with a counterbore in the arm (a pilot hole in a plug).
   if (geo.screw && (end !== 'pin')) {
-    const s = geo.screw, sp = screwSpots(geo, p);
+    const s = geo.screw, sp = screwSpots(geo, p, i);
     for (const a of sp.angles) {
       const h = halfAt(geo, i, a);
       if (end === 'plug') {
@@ -353,7 +360,11 @@ function rawFitting(p: Params, square: boolean): Manifold {
   const big = Math.max(...geo.dirs.map((_, i) => Math.max(geo.size(i).D, geo.size(i).H)));
   // A plug's hub must not reach into the pipe pushed over it (only up to the stop at the pipe's bore).
   const bore = Math.min(...geo.dirs.map((_, i) => geo.size(i).D / 2 - geo.size(i).T - geo.g));
-  const hubR = geo.end === 'plug' ? Math.min(big / 2, square ? geo.stop : Math.hypot(geo.stop, bore)) : geo.end === 'male' ? big / 2 : big / 2 + geo.g + geo.wall;
+  const hubR = geo.ends.includes('plug')
+    ? Math.min(big / 2, square ? geo.stop : Math.hypot(geo.stop, bore))
+    : geo.ends.every((e) => e === 'male')
+      ? big / 2
+      : big / 2 + geo.g + geo.wall;
   const hub = square ? sq(2 * hubR, 2 * hubR, -hubR, hubR) : M().Manifold.sphere(hubR, 64);
   let m = union([hub, ...parts.map((x) => x.add)]);
   m = m.subtract(union(parts.map((x) => x.cut)));
@@ -443,20 +454,34 @@ export const clipWidth = (p: Params) => num(p, 'pinD') + 3;
 const n = (key: string, label: string, def: number, min: number, max: number, step = 0.5, extra: Partial<ParamDef> = {}): ParamDef =>
   ({ key, label, type: 'number', def, min, max, step, unit: 'mm', ...extra }) as ParamDef;
 
+/** Ends in use: the main one and the arms' own (hidden arms may keep an old choice, which is harmless here). */
+const endsOf = (p: Params) => [String(p.end), ...Array.from({ length: 6 }, (_, i) => String(p[`e${i}`] ?? 'same')).filter((e) => e !== 'same')];
+const uses = (p: Params, ...es: string[]) => endsOf(p).some((e) => es.includes(e));
+const notOnly = (p: Params, e: string) => endsOf(p).some((x) => x !== e);
+
 const fitSel = { ...select('fit', 'Dopasowanie gwintu', 'normal', Object.entries(FITS).map(([k, v]) => [k, v.label] as [string, string])) };
-const threaded = (p: Params) => p.end === 'male' || p.end === 'female';
+const threaded = (p: Params) => uses(p, 'male', 'female');
 
 const screwParams = (round: boolean): ParamDef[] => [
-  { ...select('screw', 'Skręcanie śrubą', 'none', [['none', 'Bez śrub'], ['M3', 'M3'], ['M4', 'M4'], ['M5', 'M5'], ['M6', 'M6'], ['M8', 'M8']]), hint: 'Otwór w łączniku (z gniazdem na łeb) i pasujący otwór w rurze. Przy „Dodaj pasujące rury” otwory w rurach wstawiają się same.', show: (p) => p.end !== 'pin' },
-  { ...select('screwMode', 'Rodzaj', 'pilot', [['pilot', 'Wkręt w rurę (otwór pod wkręt)'], ['through', 'Śruba na wylot z nakrętką']]), show: (p) => p.screw !== 'none' && p.end !== 'pin' && p.end !== 'plug' },
-  { key: 'screwN', label: 'Śrub na ramię', type: 'number', def: 1, min: 1, max: 2, step: 1, show: (p) => p.screw !== 'none' && p.end !== 'pin' && p.screwMode !== 'through' },
-  { key: 'screwAt', label: 'Położenie śruby wzdłuż ramienia', type: 'number', def: 0.5, min: 0.15, max: 0.85, step: 0.05, show: (p) => p.screw !== 'none' && p.end !== 'pin', hint: '0,5 = środek wsuniętej części.' },
-  { key: 'screwAngle', label: 'Kąt śruby wokół ramienia', type: 'number', def: 0, min: -180, max: 180, step: round ? 15 : 90, unit: '°', show: (p) => p.screw !== 'none' && p.end !== 'pin' } as ParamDef,
+  { ...select('screw', 'Skręcanie śrubą', 'none', [['none', 'Bez śrub'], ['M3', 'M3'], ['M4', 'M4'], ['M5', 'M5'], ['M6', 'M6'], ['M8', 'M8']]), hint: 'Otwór w łączniku (z gniazdem na łeb) i pasujący otwór w rurze. Przy „Dodaj pasujące rury” otwory w rurach wstawiają się same.', show: (p) => notOnly(p, 'pin') },
+  { ...select('screwMode', 'Rodzaj', 'pilot', [['pilot', 'Wkręt w rurę (otwór pod wkręt)'], ['through', 'Śruba na wylot z nakrętką']]), show: (p) => p.screw !== 'none' && notOnly(p, 'pin') && uses(p, 'socket', 'female', 'bayonet', 'click') },
+  { key: 'screwN', label: 'Śrub na ramię', type: 'number', def: 1, min: 1, max: 2, step: 1, show: (p) => p.screw !== 'none' && notOnly(p, 'pin') && p.screwMode !== 'through' },
+  { key: 'screwAt', label: 'Położenie śruby wzdłuż ramienia', type: 'number', def: 0.5, min: 0.15, max: 0.85, step: 0.05, show: (p) => p.screw !== 'none' && notOnly(p, 'pin'), hint: '0,5 = środek wsuniętej części.' },
+  { key: 'screwAngle', label: 'Kąt śruby wokół ramienia', type: 'number', def: 0, min: -180, max: 180, step: round ? 15 : 90, unit: '°', show: (p) => p.screw !== 'none' && notOnly(p, 'pin') } as ParamDef,
 ];
 
+/** One „Ramię N” select per arm of the chosen shape: its own end, or the same as the rest. */
+const armEnds = (ends: [EndKind, string][]): ParamDef[] =>
+  Array.from({ length: 6 }, (_, i) => ({
+    ...select(`e${i}`, `Ramię ${i + 1}`, 'same', [['same', 'Jak „Zakończenie ramion”'], ...ends]),
+    group: 'Inne zakończenie na ramieniu',
+    show: (p: Params) => i < (ARMS[String(p.kind) as FitKind] ?? ARMS.tee).length,
+    ...(i === 0 ? { hint: 'Ramiona numerowane jak przy „Dodaj pasujące rury” (Rura 1, Rura 2…). Np. trójnik z dwoma kielichami i gwintem na trzecim.' } : {}),
+  }));
+
 const pinParams: ParamDef[] = [
-  n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => p.end === 'pin' || p.end === 'bayonet' }),
-  { ...select('pins', 'Bolce', '2', [['2', 'Dwa (U)'], ['1', 'Jeden (V)']]), show: (p) => p.end === 'pin' },
+  n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => uses(p, 'pin', 'bayonet') }),
+  { ...select('pins', 'Bolce', '2', [['2', 'Dwa (U)'], ['1', 'Jeden (V)']]), show: (p) => uses(p, 'pin') },
 ];
 
 export const COUPLING_DEFS: PartDef[] = [
@@ -469,6 +494,7 @@ export const COUPLING_DEFS: PartDef[] = [
     params: [
       select('kind', 'Kształt', 'tee', KINDS),
       select('end', 'Zakończenie ramion', 'socket', ROUND_ENDS),
+      ...armEnds(ROUND_ENDS),
       pipeStd(),
       n('D', 'Średnica zewn. rury', 20, 3, 300, 0.1),
       n('T', 'Ścianka rury', 1.9, 0.5, 30, 0.1),
@@ -481,8 +507,8 @@ export const COUPLING_DEFS: PartDef[] = [
       n('P', 'Skok gwintu', 1.5, 0.75, 4, 0.25, { show: (p: Params) => threaded(p) && !String(p.std).startsWith('g'), hint: 'Rury G mają gwint rurowy z normy, bez wyboru skoku.' }),
       { ...fitSel, show: threaded },
       ...pinParams,
-      { ...select('oring', 'Uszczelka o-ring', 'none', [['none', 'Bez uszczelki'], ['yes', 'Rowek na o-ring']]), show: (p) => ORING_ENDS.has(String(p.end)), hint: 'Rowek w ramieniu i o-ring do druku z TPU (dodaje go „Dodaj pasujące rury” albo „Dodaj o-ringi”). Ściska się o 20 %.' },
-      n('orCS', 'Przekrój o-ringu', 2, 1, 6, 0.1, { show: (p: Params) => p.oring === 'yes' && ORING_ENDS.has(String(p.end)), hint: 'Ścianka łącznika musi być grubsza niż 0,8 × przekrój + 1 mm.' }),
+      { ...select('oring', 'Uszczelka o-ring', 'none', [['none', 'Bez uszczelki'], ['yes', 'Rowek na o-ring']]), show: (p) => endsOf(p).some((e) => ORING_ENDS.has(e)), hint: 'Rowek w ramieniu i o-ring do druku z TPU (dodaje go „Dodaj pasujące rury” albo „Dodaj o-ringi”). Ściska się o 20 %.' },
+      n('orCS', 'Przekrój o-ringu', 2, 1, 6, 0.1, { show: (p: Params) => p.oring === 'yes' && endsOf(p).some((e) => ORING_ENDS.has(e)), hint: 'Ścianka łącznika musi być grubsza niż 0,8 × przekrój + 1 mm.' }),
       ...screwParams(true),
     ],
     normalize: (prev, next) => stdNormalize({ std: 'std2', D: 'D2', T: 'T2' }, 'pipe')(prev, stdNormalize({ std: 'std', D: 'D', T: 'T' }, 'pipe')(prev, next)),
@@ -502,6 +528,7 @@ export const COUPLING_DEFS: PartDef[] = [
         KINDS.filter(([k]) => k !== 'reducer' && k !== 'wye' && k !== 'elbow45').map(([k, l]) => [k, l.replace('Kolano 90°', 'Narożnik L').replace('Trójnik T', 'Trójnik T').replace('Czwórnik (krzyż)', 'Krzyżak X')] as [string, string]),
       ),
       select('end', 'Rodzaj', 'plug', SQUARE_ENDS),
+      ...armEnds(SQUARE_ENDS),
       profileStd(),
       n('D', 'Szerokość profilu', 20, 5, 200, 0.1),
       n('H', 'Wysokość profilu', 20, 5, 200, 0.1),
