@@ -63,11 +63,11 @@ const safe = (s: string) => s.replace(/[^\p{L}\p{N} _.-]+/gu, ' ').replace(/\s+/
  * STL: one file per printed part, packed in a .zip. Each part stands on the bed (z = 0) centred on the origin,
  * so the slicer lays them out; one body alone gives a plain .stl.
  */
-export function exportSTL(bodies: BodyResult[], name: string, names: Map<number, string> = new Map()) {
+export function exportSTL(bodies: BodyResult[], name: string, names: Map<number, string> = new Map(), numbered = false) {
   const files = bodies.map((b, i) => {
     const m = b.manifold.getMesh();
     const [x0, y0, z0] = b.manifold.boundingBox().min, [x1, y1] = b.manifold.boundingBox().max;
-    const nm = `${String(i + 1).padStart(2, '0')} ${safe(names.get(b.body) ?? `Bryla ${b.body}`)}.stl`;
+    const nm = `${numbered ? '' : String(i + 1).padStart(2, '0') + ' '}${safe(names.get(b.body) ?? `Bryla ${b.body}`)}.stl`;
     return { name: nm, data: stlOf(m, -(x0 + x1) / 2, -(y0 + y1) / 2, -z0) };
   });
   if (files.length === 1) return download(files[0].data, `${name}.stl`, 'model/stl');
@@ -142,7 +142,7 @@ function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffe
 }
 
 /** 3MF with one object per body, so each printed part stays separate in the slicer. */
-export function export3MF(bodies: BodyResult[], name: string, names: Map<number, string> = new Map()) {
+export function export3MF(bodies: BodyResult[], name: string, names: Map<number, string> = new Map(), _numbered = false) {
   const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const fmt = (n: number) => (Math.round(n * 1e4) / 1e4).toString();
   let objects = '';

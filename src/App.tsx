@@ -8,6 +8,7 @@ import { isLocked, useStore } from './store';
 import { buildBodies, built } from './geom/parts';
 import * as THREE from 'three';
 import { export3MF, exportSTL, saveJSON } from './export';
+import { makeManual } from './manual';
 import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
 import { MobileApp, useMobile } from './ui/Mobile';
@@ -42,7 +43,18 @@ export function useProjectActions() {
         b.manifold = turned;
       }
     }
-    (fmt === 'stl' ? exportSTL : export3MF)(bodies, st.tab === 'fig' ? 'figurki' : 'model', names);
+    // STL: one file per kind of print (as in the manual: number, name, how many to print), not one per copy.
+    let out = bodies;
+    if (fmt === 'stl') {
+      const items = makeManual(st.parts).items;
+      out = items.flatMap((it) => {
+        const b = bodies.find((x) => x.body === it.bodies[0]);
+        if (!b) return [];
+        names.set(b.body, `${/^\d+$/.test(it.no) ? it.no.padStart(2, '0') : it.no} ${it.name}${it.qty > 1 ? ` x${it.qty}` : ''}`);
+        return [b];
+      });
+    }
+    (fmt === 'stl' ? exportSTL : export3MF)(out, st.tab === 'fig' ? 'figurki' : 'model', names, fmt === 'stl');
     bodies.forEach((b) => {
       b.geometry.dispose();
       b.manifold.delete();
@@ -50,7 +62,7 @@ export function useProjectActions() {
     const hidden = st.parts.filter((p) => p.hidden).length;
     st.notify(
       fmt === 'stl' && bodies.length > 1
-        ? `Wyeksportowano ${bodies.length} części: każda w osobnym pliku STL, razem w archiwum .zip. Każda stoi na stole na środku, slicer sam je rozłoży.${hidden ? ' Ukryte elementy też są w plikach.' : ''}`
+        ? `Wyeksportowano ${out.length} ${out.length === 1 ? 'rodzaj części' : 'rodzajów części'} (${bodies.length} wydruków): każdy rodzaj raz, w osobnym pliku STL, w nazwie numer z Instrukcji i ile sztuk wydrukować („x4”).${hidden ? ' Ukryte elementy też są w plikach.' : ''}`
         : `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`,
     );
   };
