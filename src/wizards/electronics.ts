@@ -2,6 +2,8 @@ import { MAGNETS, type Params } from '../catalog';
 import { worldBox } from '../geom/parts';
 import { connectorParams, CONNECTORS, type WallSide } from '../parts/connectors';
 import { BOARDS, EDGE_SIDE } from '../parts/raspberry';
+import { glandSize } from '../parts/fittings';
+import { THREADS } from '../parts/threads';
 import type { Part, TextureFace, Vec3, WizValues } from '../types';
 import { addLabel, bedOf, lidFace, mm, pl, printerField, r1, SIDES, texField, texture, tiles } from './common';
 import { host, type WizTools } from './host';
@@ -362,5 +364,166 @@ export const PANEL_WIZARD: Wizard = {
     },
     { title: 'Drukarka', desc: 'Sprawdzam, czy pudełko i płyta mieszczą się na stole.', focus: [], focusLabel: 'wielkość', fields: () => [printerField] },
     { title: 'Podsumowanie', desc: '„Utwórz projekt” wstawia pudełko, płytę z otworami i gałki jako zwykłe elementy.', focus: [], focusLabel: 'całość', fields: () => [] },
+  ],
+};
+
+// ------------------------------------------------------------------------------------- junction box with glands
+
+const GLAND_SIDES: [string, WallSide, string][] = [
+  ['gFront', 'front', 'Przód'],
+  ['gBack', 'back', 'Tył'],
+  ['gLeft', 'left', 'Lewy bok'],
+  ['gRight', 'right', 'Prawy bok'],
+];
+const PIECE_NAMES: Record<string, [string, string, string]> = {
+  body: ['D1', 'Dławik: korpus', 'Wkręcony w ściankę, kołnierzem na zewnątrz'],
+  nut: ['D2', 'Dławik: nakrętka kontrująca', 'Od środka puszki na korpusie'],
+  cap: ['D3', 'Dławik: nakrętka dociskowa', 'Na korpusie od zewnątrz, ściska uszczelkę'],
+  seal: ['D4', 'Dławik: uszczelka', 'W korpusie, wokół kabla'],
+};
+
+function junctionPlan(v: WizValues): Plan {
+  const bed = bedOf(v);
+  const W = Number(v.W), D = Number(v.D), H = Number(v.H), wall = Number(v.wall), B = 2.4;
+  const cable = Number(v.cable);
+  const g = glandSize({ cable, size: 'auto' });
+  const thread = THREADS[g.thread];
+  const af = Math.round(thread.d * 1.35 + 3) + 2; // the cap nut, the widest piece
+  const pitch = af + 6;
+  const label = String(v.text ?? '').trim();
+  const posts: [number, number][] = [-1, 1].flatMap((sx) => [-1, 1].map((sy) => [sx * (W / 2 - wall - 3.5), sy * (D / 2 - wall - 3.5)] as [number, number]));
+  const dropped: string[] = [];
+  const built = host.simulate((t) => {
+    const id = t.add('box', { name: 'Puszka', params: { shape: 'rect', W, D, H, T: wall, B, nx: 1, ny: 1, rad: Number(v.rad), divMode: 'grid', div: '' }, color: '#a9aeb3' });
+    let box = t.parts().find((p) => p.id === id)!;
+    const [cx, cy] = box.position;
+    // Corner posts for the lid screws, merged with both walls.
+    for (const [i, [x, y]] of posts.entries()) {
+      t.add('cylinder', { name: `Słupek ${i + 1}`, params: { D: 9, H: H - B + 0.01 }, position: [r1(cx + x), r1(cy + y), B - 0.01], body: box.body, color: box.color });
+      t.add('hole', { name: `Otwór pod wkręt ${i + 1}`, params: { D: 2.6, H: 14, luz: 0 }, position: [r1(cx + x), r1(cy + y), r1(H - 13)], body: box.body });
+    }
+    box = t.parts().find((p) => p.id === id)!;
+    const b = worldBox(box);
+    // Glands spread along each wall, between the corner posts, at half height.
+    for (const [key, side] of GLAND_SIDES) {
+      const along = side === 'front' || side === 'back' ? W : D;
+      // Nuts (corner to corner) stay clear of the corner posts.
+      const maxU = along / 2 - wall - 9 - af / Math.sqrt(3);
+      const fit = maxU < 0 ? 0 : Math.floor((2 * maxU) / pitch) + 1;
+      const n = Math.min(Number(v[key]) || 0, fit);
+      if ((Number(v[key]) || 0) > n) dropped.push(key);
+      for (let i = 0; i < n; i++) {
+        const u = -((n - 1) * pitch) / 2 + i * pitch;
+        const z = r1(B + (H - B) / 2);
+        const at: Vec3 =
+          side === 'front' ? [r1(cx + u), r1(b.min.y), z] : side === 'back' ? [r1(cx + u), r1(b.max.y), z] : side === 'left' ? [r1(b.min.x), r1(cy + u), z] : [r1(b.max.x), r1(cy + u), z];
+        t.addOnWall(id, 'gland', { cable, size: 'auto', wall }, side, at);
+      }
+    }
+    if (v.mount === 'ears') addEars(t, box);
+    if (v.mount === 'holes')
+      for (const sx of [-1, 1]) t.add('hole', { name: 'Otwór na wkręt do ściany', params: { D: 4.5, H: B + 2, luz: 0 }, position: [r1(cx + sx * Math.min(W / 4, W / 2 - wall - 15)), r1(cy), -1], body: box.body });
+    // Flat lid with screw holes, and a TPU gasket as wide as the posts.
+    const lx = r1(b.max.x + 20 + W / 2 + (v.mount === 'ears' ? 20 : 0));
+    const lidId = t.add('lid', { name: 'Pokrywka puszki', params: { shape: 'rect', W, D, T: 3, wall, R: 0, luz: 0.3, rad: Number(v.rad), nx: 1, ny: 1 }, fitTo: id, position: [lx, r1(cy), 0], color: '#e8873a' });
+    const lid = t.parts().find((p) => p.id === lidId)!;
+    for (const [x, y] of posts) t.add('hole', { name: 'Otwór na wkręt', params: { D: 3.4, H: 5, luz: 0 }, position: [r1(lx + x), r1(cy + y), -1], body: lid.body });
+    if (v.gasket) {
+      const gy = r1(cy + D + 15);
+      const gid = t.add('cube', { name: 'Uszczelka pokrywki', params: { W: r1(W - 1), D: r1(D - 1), H: 1.5 }, position: [lx, gy, 0], color: '#3d4148' });
+      const gs = t.parts().find((p) => p.id === gid)!;
+      t.add('holeBox', { name: 'Środek uszczelki', params: { W: r1(W - 2 * (wall + 8)), D: r1(D - 2 * (wall + 8)), H: 3.5, luz: 0 }, position: [lx, gy, -1], body: gs.body });
+      for (const [x, y] of posts) t.add('hole', { name: 'Otwór na wkręt', params: { D: 3.4, H: 3.5, luz: 0 }, position: [r1(lx + x), r1(gy + y), -1], body: gs.body });
+    }
+    if (label) {
+      const lb = worldBox(lid);
+      addLabel(t, t.parts().find((p) => p.id === lid.id)!, label, 'top', true, (lb.max.x - lb.min.x) * 0.7, (lb.max.y - lb.min.y) * 0.4);
+    }
+  });
+
+  const { parts, items, size } = rawPlan(built, (main) => {
+    if (main.type === 'gland') {
+      const [role, name, where] = PIECE_NAMES[String(main.params.piece)] ?? PIECE_NAMES.body;
+      return { role, name: `${name} ${g.key}`, group: 'gland', material: main.params.piece === 'seal' ? 'TPU' : 'PETG', where, how: main.params.piece === 'seal' ? 'Na stojąco, TPU, wolno.' : 'Na stojąco, bez podpór.' };
+    }
+    if (main.type === 'lid') return { role: 'K', name: 'Pokrywka puszki', group: 'box', material: 'PETG', where: 'Przykręcona czterema wkrętami do słupków', how: 'Płasko, bez podpór.' };
+    if (main.type === 'cube') return { role: 'U', name: 'Uszczelka pokrywki', group: 'box', material: 'TPU', where: 'Między puszką a pokrywką', how: 'Płasko, TPU 85A–95A.' };
+    return { role: 'P', name: 'Puszka', group: 'box', material: 'PETG', where: '', how: 'Dnem do stołu. 3–4 obrysy, żeby ścianki były szczelne.' };
+  });
+
+  const glands = parts.filter((p) => p.type === 'gland' && p.params.piece === 'body').length;
+  const buy: Plan['buy'] = [{ name: 'Wkręt do tworzyw 3 × 12 mm', qty: '4 szt.', note: 'Przykręca pokrywkę.' }];
+  if (v.mount !== 'none') buy.push({ name: 'Wkręt do drewna 4 × 25 mm z kołkiem', qty: '2 szt.', note: 'Do ściany.' });
+  const steps = ['Wydrukuj puszkę, pokrywkę i dławiki z PETG, uszczelki z TPU.'];
+  if (glands) steps.push(`Wkręć korpusy dławików (${glands} szt.) w otwory w ściankach i skontruj je od środka nakrętkami.`, 'Przełóż kable przez nakrętki dociskowe i uszczelki, włóż uszczelki do korpusów i dokręć nakrętki dociskowe.');
+  if (v.mount !== 'none') steps.push('Przykręć puszkę do ściany.');
+  steps.push(v.gasket ? 'Połóż uszczelkę na krawędzi puszki i przykręć pokrywkę czterema wkrętami.' : 'Przykręć pokrywkę czterema wkrętami.');
+
+  const notes: Plan['notes'] = [{ text: `Dławiki ${g.key} na kabel Ø${g.min}–${g.max} mm.` }];
+  if (cable < g.min || cable > g.max) notes.push({ warn: true, text: `Kabel Ø${mm(cable)} mm jest poza zakresem dławika ${g.key}.` });
+  if (dropped.length) notes.push({ warn: true, text: `Na ściance (${dropped.map((k) => GLAND_SIDES.find((x) => x[0] === k)![2]).join(', ')}) nie mieści się tyle dławików: wstawiłem ile się da. Powiększ puszkę.` });
+  if (H - B < 2 * thread.d + 4) notes.push({ warn: true, text: 'Puszka jest niska dla tych dławików: nakrętki od środka mogą zahaczać o dno lub pokrywkę.' });
+  if (W > bed[0] || D > bed[1] || H > bed[2]) notes.push({ warn: true, text: 'Puszka nie mieści się na stole drukarki.' });
+  notes.push({ text: 'Szczelność: PETG, 3–4 obrysy i 4 warstwy dna. Dławiki i uszczelka TPU chronią przed kurzem i chlapaniem (nie do zanurzenia).' });
+  return { items, placements: [], parts, buy, steps, notes, bed, longest: H, size: size as Vec3 };
+}
+
+export const JUNCTION_WIZARD: Wizard = {
+  id: 'junction',
+  label: 'Puszka z dławikami',
+  desc: 'Szczelna puszka z przykręcaną pokrywką, uszczelką z TPU i dławikami kablowymi na wybranych ściankach.',
+  defaults: { W: 120, D: 80, H: 60, wall: 2.5, rad: 4, cable: 6, gFront: 0, gBack: 0, gLeft: 1, gRight: 1, gasket: true, mount: 'holes', text: '', printer: 'p1s' },
+  set: (v, key, value) => ({ ...v, [key]: value }),
+  plan: junctionPlan,
+  steps: [
+    {
+      title: 'Wymiary',
+      desc: 'Wymiary zewnętrzne puszki bez pokrywki.',
+      focus: [],
+      focusLabel: 'puszka',
+      fields: () => [
+        { kind: 'slider', key: 'W', label: 'Szerokość', min: 50, max: 250, step: 1, unit: 'mm' },
+        { kind: 'slider', key: 'D', label: 'Głębokość', min: 40, max: 250, step: 1, unit: 'mm' },
+        { kind: 'slider', key: 'H', label: 'Wysokość', min: 30, max: 150, step: 1, unit: 'mm' },
+        tiles('wall', [{ value: 2, label: '2 mm' }, { value: 2.5, label: '2,5 mm' }, { value: 3, label: '3 mm' }], 'Ścianka', 3),
+        tiles('rad', [{ value: 0, label: 'Ostre' }, { value: 4, label: '4 mm' }, { value: 8, label: '8 mm' }], 'Narożniki', 3),
+      ],
+    },
+    {
+      title: 'Dławiki',
+      desc: 'Średnica kabla dobiera rozmiar dławika. Ile dławików na każdej ściance.',
+      focus: [],
+      focusLabel: 'dławiki',
+      fields: (v) => [
+        { kind: 'slider', key: 'cable', label: 'Średnica kabla', min: 3, max: 16, step: 0.5, unit: 'mm' },
+        { kind: 'hint', text: `Dławik ${glandSize({ cable: Number(v.cable), size: 'auto' }).key}.` },
+        ...GLAND_SIDES.map(([key, , label]) => ({ kind: 'slider' as const, key, label, min: 0, max: 4, step: 1, unit: 'szt.' })),
+      ],
+    },
+    {
+      title: 'Zamknięcie',
+      desc: 'Pokrywka przykręcana czterema wkrętami do słupków w narożnikach.',
+      focus: [],
+      focusLabel: 'pokrywka',
+      fields: () => [
+        { kind: 'toggle', key: 'gasket', label: 'Uszczelka pod pokrywką (TPU)', desc: 'Płaska ramka na krawędzi puszki.' },
+        { kind: 'text', key: 'text', label: 'Napis na pokrywce', placeholder: 'np. 230 V', max: 20 },
+      ],
+    },
+    {
+      title: 'Mocowanie',
+      desc: 'Jak puszka trzyma się ściany.',
+      focus: [],
+      focusLabel: 'mocowanie',
+      fields: () => [
+        tiles('mount', [
+          { value: 'holes', label: 'Otwory w dnie', desc: 'wkręty od środka' },
+          { value: 'ears', label: 'Uszy na wkręty', desc: 'na zewnątrz' },
+          { value: 'none', label: 'Bez' },
+        ], undefined, 3),
+      ],
+    },
+    { title: 'Drukarka', desc: 'Sprawdzam, czy puszka mieści się na stole.', focus: [], focusLabel: 'wielkość', fields: () => [printerField] },
+    { title: 'Podsumowanie', desc: '„Utwórz projekt” wstawia puszkę, pokrywkę, uszczelkę i dławiki jako zwykłe elementy.', focus: [], focusLabel: 'całość', fields: () => [] },
   ],
 };

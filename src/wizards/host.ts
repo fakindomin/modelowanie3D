@@ -1,7 +1,7 @@
 import type { Params } from '../catalog';
 import type { FaceMagnetOptions, MagnetOptions } from '../geom/magnets';
 import type { WallSide } from '../parts/connectors';
-import type { Part } from '../types';
+import type { Part, Vec3 } from '../types';
 
 /** Editor tools a wizard may use to build its parts in a scratch scene (nothing reaches the real model or history). */
 export interface WizTools {
@@ -21,6 +21,8 @@ export interface WizTools {
   connectorToWall(id: string, side: WallSide): void;
   /** Connector cut-out (with its inner frame) on a wall of the box; `at` sets x/y along the wall and z. Returns the cut-out id. */
   addConnector(box: string, params: Params, side: WallSide, at?: Partial<Record<0 | 1 | 2, number>>): string;
+  /** A part made of pieces (cable gland…) whose frame has the wall's outer surface at z = 0, set on a wall of the box at `at`. */
+  addOnWall(box: string, type: string, params: Params, side: WallSide, at: Vec3): string;
   /** Puts a label (text / textCut) onto a face of the body it belongs to. */
   textToWall(id: string, side: WallSide): void;
   parts(): Part[];

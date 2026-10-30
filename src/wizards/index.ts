@@ -1,9 +1,10 @@
 import { FRAME_WIZARD } from './frame';
 import { BOX_WIZARD, CABINET_WIZARD, ORGANIZER_WIZARD } from './containers';
-import { CASE_WIZARD, PANEL_WIZARD } from './electronics';
+import { CASE_WIZARD, JUNCTION_WIZARD, PANEL_WIZARD } from './electronics';
+import { POT_WIZARD, STAND_WIZARD } from './home';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD].map((w) => [w.id, w]));
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD].map((w) => [w.id, w]));
 const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
 
 const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
@@ -16,7 +17,6 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
       ready(FRAME_WIZARD),
       soon('profileFrame', 'Rama z profili', 'Kwadratowe profile, łączniki z czopem, panele.'),
       soon('rack', 'Regał modułowy', 'Półki, przegrody, rozbudowa w górę i w bok.'),
-      soon('stand', 'Stojak', 'Na rośliny, monitor, telefon, narzędzia.'),
       soon('dome', 'Kopuła geodezyjna', 'Pręty i węzły, rozmiar i częstotliwość podziału.'),
     ],
   },
@@ -34,7 +34,7 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
     items: [
       ready(CASE_WIZARD),
       ready(PANEL_WIZARD),
-      soon('junction', 'Puszka z dławikami', 'Szczelna puszka z wejściami kabli.'),
+      ready(JUNCTION_WIZARD),
     ],
   },
   {
@@ -48,7 +48,8 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
   {
     label: 'Dom i ogród',
     items: [
-      soon('pot', 'Doniczka z podstawką', 'Rozmiar, odpływ, podstawka.'),
+      ready(POT_WIZARD),
+      ready(STAND_WIZARD),
       soon('holders', 'Uchwyty ścienne', 'Na narzędzia, kable, rowery.'),
       soon('irrigation', 'Nawadnianie z rur', 'Rury, trójniki i kroplowniki.'),
     ],

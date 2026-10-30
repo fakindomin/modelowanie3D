@@ -184,6 +184,9 @@ Każda ma własną scenę, historię cofania i autozapis.
   i dioda w pokrywce, wentylacja (ażur w pokrywce albo szczeliny z tyłu), uszy na wkręty albo magnesy w dnie.
   „Panel sterowania”: przyciski 12/16 mm, potencjometry z gałkami do druku, diody, okno na OLED 0,96"
   albo LCD 16×2, gniazda DC / USB-C / wyłącznik w tylnej ściance.
+  „Puszka z dławikami”: przykręcana pokrywka, uszczelka TPU, dławiki dobrane do kabla na wybranych ściankach.
+  „Doniczka z podstawką”: kształt, otwory odpływowe, nóżki, podstawka, faktura i napis.
+  „Stojak na telefon lub tablet”: kąt, oparcie, rant z wycięciem na kabel, napis.
   Te kreatory budują części narzędziami edytora (pokrywka śledzi pudełko, gniazda magnesów, zawias,
   otwory na złącza), więc dalej działają jak zwykłe elementy.
 - **Instrukcja (📖):** dla każdego projektu: okładka z rysunkiem i filamentem, karty „do wydrukowania”

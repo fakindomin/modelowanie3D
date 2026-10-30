@@ -2604,6 +2604,14 @@ host.simulate = (fn) => {
         return id;
       },
       textToWall: (id, side) => st().textToWall(id, side),
+      addOnWall: (box, type, params, side, at) => {
+        st().select(box);
+        const id = st().add(type, { params });
+        st().select(null);
+        const turn: Record<WallSide, Vec3> = { front: [90, 0, 0], back: [-90, 0, 0], left: [0, -90, 0], right: [0, 90, 0], top: [0, 0, 0], bottom: [180, 0, 0] };
+        st().update(id, { position: at, rotation: turn[side] });
+        return id;
+      },
       parts: () => st().parts,
     });
     return st().parts;
