@@ -534,6 +534,47 @@ function FaceSelMark() {
   return <FeatureMark f={f} color="#e8873a" />;
 }
 
+const FACE_DIR: Record<string, [number, number, number]> = { top: [0, 0, 1], bottom: [0, 0, -1], front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0] };
+
+/** The face a row of the texture list points at, lit up on the part (outermost triangles facing that way). */
+function FaceHoverMark() {
+  const fh = useStore((s) => s.faceHover);
+  const parts = useStore((s) => s.parts);
+  const { scene } = useThree();
+  const tris = useMemo(() => {
+    const part = fh && parts.find((p) => p.id === fh.id);
+    const obj = fh && scene.getObjectByName(fh.id);
+    if (!fh || !part || !obj) return null;
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(part.rotation.map((r) => (r * Math.PI) / 180) as Vec3)));
+    const around = fh.face === 'around';
+    const dir = (fh.face.startsWith('n:') ? new THREE.Vector3(...fh.face.slice(2).split(',').map(Number)) : new THREE.Vector3(...(FACE_DIR[fh.face] ?? [0, 0, 1]))).normalize().applyQuaternion(q);
+    const axis = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    const found: { level: number; v: number[] }[] = [];
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    obj.updateWorldMatrix(true, true);
+    obj.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.geometry?.attributes.position || m.userData.handle || m.userData.sketchHandle) return;
+      const pos = m.geometry.attributes.position, idx = m.geometry.index;
+      const n = idx ? idx.count : pos.count;
+      for (let i = 0; i + 2 < n; i += 3) {
+        const at = (k: number, v: THREE.Vector3) => v.fromBufferAttribute(pos, idx ? idx.getX(k) : k).applyMatrix4(m.matrixWorld);
+        at(i, a), at(i + 1, b), at(i + 2, c);
+        const nn = new THREE.Triangle(a, b, c).getNormal(new THREE.Vector3());
+        if (around ? Math.abs(nn.dot(axis)) > 0.3 : nn.dot(dir) < 0.97) continue;
+        found.push({ level: around ? 0 : (a.dot(dir) + b.dot(dir) + c.dot(dir)) / 3, v: [a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z] });
+      }
+    });
+    if (!found.length) return null;
+    // Only the outer face, not inner walls facing the same way; texture relief stays within a couple of mm.
+    const top = Math.max(...found.map((f) => f.level));
+    return found.filter((f) => around || f.level > top - 2.5).flatMap((f) => f.v);
+  }, [fh, parts, scene]);
+  const f = useMemo(() => (tris ? ({ kind: 'face', pick: fh!.id, label: '', values: [], tris, anchor: [0, 0, 0] } as Feature) : null), [tris, fh]);
+  if (!f) return null;
+  return <FeatureMark f={f} color="#ffd54a" />;
+}
+
 const HOVER_COLOR = '#ffd54a';
 const PIN_COLOR = '#5bb974';
 
@@ -690,6 +731,7 @@ export function Viewport() {
       {!preview && !measure && <DimHandles />}
       <MeasureMarks />
       <FaceSelMark />
+      <FaceHoverMark />
       <CutPlane />
       <OrbitControls makeDefault enableDamping={false} />
       <CameraFit />

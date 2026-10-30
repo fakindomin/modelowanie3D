@@ -251,6 +251,22 @@ function Steps({ wz, initial, run }: { wz: Wizard; initial: WizValues; run?: str
 
 function FieldView({ f, values, set }: { f: Field; values: WizValues; set: (k: string, v: string | number | boolean) => void }) {
   if (f.kind === 'hint') return <div className="hint">{f.text}</div>;
+  if (f.kind === 'select')
+    return (
+      <>
+        {f.head && <span className="wiz-label wiz-head-label">{f.head}</span>}
+        <label className="wiz-sel">
+          <span>{f.label}</span>
+          <select value={String(values[f.key] ?? f.def ?? '')} onChange={(e) => set(f.key, e.target.value)}>
+            {f.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </>
+    );
   if (f.kind === 'toggle')
     return (
       <label className="wiz-toggle">

@@ -23,28 +23,33 @@ export const SIDES: Record<string, string> = { front: 'Przód', back: 'Tył', le
 export const texField = (round: boolean): Field[] => [tiles('tex', [{ value: 'none', label: 'Gładko' }, ...Object.entries(TEXTURE_LABELS).map(([k, l]) => ({ value: k, label: l }))], 'Faktura ścianki', 3)];
 /** Faces picked for the texture ('front,left,lid'); older recipes hold a single face. */
 export const texSides = (v: WizValues): string[] => String(v.texOn ?? '').split(',').filter(Boolean);
-/** Which faces get the texture: any walls (or all around a round box) and the top of the lid. */
-export const texSideField = (v: WizValues, round: boolean, lid = false): Field[] =>
-  v.tex === 'none'
-    ? []
-    : [
-        {
-          kind: 'tiles',
-          key: 'texOn',
-          label: 'Na których ściankach (możesz zaznaczyć kilka)',
-          cols: round ? 2 : 4,
-          options: [...(round ? [{ value: 'around', label: 'Dookoła' }] : Object.entries(SIDES).map(([k, l]) => ({ value: k, label: l }))), ...(lid ? [{ value: 'lid', label: 'Góra pokrywki' }] : [])],
-          multi: true,
-        },
-      ];
-/** Wall textures of a box for the picked faces; a round box only has "around". */
-export const wallTextures = (v: WizValues, round: boolean): Texture[] => {
-  if (v.tex === 'none') return [];
-  const on = texSides(v).filter((f) => f !== 'lid');
-  // A round box has no sides: any wall picked (also from a rectangular box before) means all around.
-  if (round) return on.length ? [texture(String(v.tex), 'around')] : [];
-  return on.filter((f) => f in SIDES).map((f) => texture(String(v.tex), f as TextureFace));
+/** Pattern on one face: its own choice (tx_front…), or older recipes' one texture on the picked faces. */
+export const faceTex = (v: WizValues, face: string): string => {
+  const own = v[`tx_${face}`];
+  if (own !== undefined) return String(own);
+  if (!v.tex || v.tex === 'none') return 'none';
+  // The cabinet had one texture, always on the drawer fronts.
+  const on = v.texOn === undefined ? ['drawer'] : texSides(v);
+  return on.includes(face) || (face === 'around' && on.some((f) => f !== 'lid')) ? String(v.tex) : 'none';
 };
+/** One row per face, each with its own pattern. */
+export const faceTexFields = (v: WizValues, faces: [string, string][], head = 'Faktura: każda ścianka osobno'): Field[] =>
+  faces.map(([face, label], i) => ({
+    kind: 'select',
+    key: `tx_${face}`,
+    label,
+    def: faceTex(v, face),
+    head: i === 0 ? head : undefined,
+    options: [{ value: 'none', label: 'Gładko' }, ...Object.entries(TEXTURE_LABELS).map(([k, l]) => ({ value: k, label: l }))],
+  }));
+/** Wall faces of a box (or all around a round one) for faceTexFields. */
+export const wallFaces = (round: boolean): [string, string][] => (round ? [['around', 'Ścianka dookoła']] : Object.entries(SIDES));
+/** Textures for the given faces of a part, from the per-face choices. */
+export const faceTextures = (v: WizValues, faces: string[], as: (face: string) => TextureFace = (f) => f as TextureFace): Texture[] =>
+  faces.flatMap((f) => {
+    const p = faceTex(v, f);
+    return p === 'none' ? [] : [texture(p, as(f))];
+  });
 
 /** A label on one face of the body `host` belongs to, as large as the face allows. */
 export function addLabel(t: WizTools, on: Part, text: string, side: WallSide, cut: boolean, maxW: number, maxH: number) {

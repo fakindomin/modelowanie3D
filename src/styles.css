@@ -661,3 +661,25 @@ body.resizing { cursor: col-resize; user-select: none; }
 .app.mobile .wiz-tile .t { font-size: 14px; }
 .app.mobile .wiz-slider input[type='range'] { height: 30px; }
 .app.mobile .wiz-sum { overflow: visible; }
+
+/* ---- texture list: shared textures A, B, C and one row per face ---- */
+.tex-slots { display: flex; flex-direction: column; gap: 6px; }
+.tex-slot { display: flex; flex-direction: column; gap: 3px; }
+.tex-slot .chip { align-self: flex-start; font-size: 12px; padding: 3px 8px; }
+.tex-slot .chip b { color: var(--accent); }
+.tex-rows { display: flex; flex-direction: column; gap: 3px; }
+.tex-row { border-radius: 6px; padding: 2px 4px; }
+.tex-row:hover { background: var(--hover); }
+.tex-row.on { outline: 1px solid var(--accent); background: #2a2622; }
+.tex-line { display: flex; align-items: center; gap: 6px; }
+.tex-face { flex: 1; color: #cfd0d2; font-size: 12.5px; }
+.tex-line select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; max-width: 150px; font-size: 12.5px; }
+.tex-line .mini { margin-left: 0; }
+.mini.on { border-color: var(--accent); color: var(--accent); }
+.tex-set { display: flex; flex-direction: column; gap: 4px; padding: 6px 0 6px 8px; border-left: 2px solid var(--line); margin: 2px 0 4px 2px; }
+.app.mobile .tex-line select { padding: 7px 4px; max-width: 170px; }
+.app.mobile .tex-face { font-size: 14.5px; }
+.wiz-sel { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; margin-top: -6px; }
+.wiz-sel select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; min-width: 150px; }
+.wiz-head-label { margin-bottom: -4px; }
+.app.mobile .wiz-sel select { padding: 9px 6px; font-size: 16px; }

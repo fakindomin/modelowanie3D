@@ -590,57 +590,23 @@ function PatternTool({ part }: { part: Part }) {
   );
 }
 
-function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) {
-  const setFaceTexture = useStore((s) => s.setFaceTexture);
-  const list = texturesOf(part);
-  const [pick, setPick] = useState<TextureFace>(fixed ?? list[0]?.face ?? 'top');
-  const face = fixed ?? pick;
-  const t = list.find((x) => x.face === face);
-  const set = (patch: Partial<Texture>) => setFaceTexture(part.id, face, { ...(t ?? DEFAULT_TEXTURE), ...patch, face });
+const ROUND_TYPES = new Set(['cylinder', 'tube', 'rod', 'cone', 'pipeEnd']);
+const PLAIN_FACES: PlainFace[] = ['top', 'bottom', 'front', 'back', 'left', 'right'];
+const SLOT_LETTERS = 'ABCDEFGH';
+
+/** Pattern, relief and spacing of one texture. */
+function TextureSettings({ t, onChange }: { t: Texture; onChange: (patch: Partial<Texture>) => void }) {
   const n = (key: keyof Texture, label: string, min: number, max: number, step: number, unit?: string) => (
     <label className="field">
       <span>{label}</span>
-      <NumberInput value={Number(t![key])} min={min} max={max} step={step} unit={unit} onChange={(v) => set({ [key]: v })} />
+      <NumberInput value={Number(t[key])} min={min} max={max} step={step} unit={unit} onChange={(v) => onChange({ [key]: v })} />
     </label>
   );
   return (
-    <div className="tool">
-      {!fixed && (
-        <>
-          <p className="desc">Dwuklik w ściankę modelu wybiera ją od razu. Każda ścianka może mieć własną fakturę.</p>
-          {list.length > 0 && (
-            <div className="row">
-              {list.map((x) => (
-                <button key={x.face} className={x.face === face ? 'chip on' : 'chip'} onClick={() => setPick(x.face)}>
-                  {faceLabel(x.face)}: {TEXTURE_LABELS[x.pattern]}
-                </button>
-              ))}
-            </div>
-          )}
-          <label className="field">
-            <span>Ścianka</span>
-            <select value={face} onChange={(e) => setPick(e.target.value as TextureFace)}>
-              {Object.entries(FACE_LABELS).map(([k, l]) => (
-                <option key={k} value={k}>
-                  {l}
-                  {list.some((x) => x.face === k) ? ' ✓' : ''}
-                </option>
-              ))}
-              {list
-                .filter((x) => x.face.startsWith('n:'))
-                .map((x, i) => (
-                  <option key={x.face} value={x.face}>
-                    Skośna {i + 1} ✓
-                  </option>
-                ))}
-            </select>
-          </label>
-        </>
-      )}
+    <div className="tex-set">
       <label className="field">
-        <span>Faktura</span>
-        <select value={t ? t.pattern : 'none'} onChange={(e) => (e.target.value === 'none' ? setFaceTexture(part.id, face, undefined) : set({ pattern: e.target.value as Texture['pattern'], mode: e.target.value === 'grooves' ? 'cut' : (t?.mode ?? 'add') }))}>
-          <option value="none">Gładka</option>
+        <span>Wzór</span>
+        <select value={t.pattern} onChange={(e) => onChange({ pattern: e.target.value as Texture['pattern'], mode: e.target.value === 'grooves' ? 'cut' : t.mode })}>
           {Object.entries(TEXTURE_LABELS).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
@@ -648,35 +614,149 @@ function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) 
           ))}
         </select>
       </label>
-      {t && (
-        <>
-          {t.pattern !== 'grooves' && (
-            <label className="field">
-              <span>Wzór</span>
-              <select value={t.mode} onChange={(e) => set({ mode: e.target.value as Texture['mode'] })}>
-                <option value="add">Wypukły</option>
-                <option value="cut">Wklęsły (wycięty)</option>
-              </select>
-            </label>
+      {t.pattern !== 'grooves' && (
+        <label className="field">
+          <span>Relief</span>
+          <select value={t.mode} onChange={(e) => onChange({ mode: e.target.value as Texture['mode'] })}>
+            <option value="add">Wypukły</option>
+            <option value="cut">Wklęsły (wycięty)</option>
+          </select>
+        </label>
+      )}
+      {n('depth', t.mode === 'add' && t.pattern !== 'grooves' ? 'Wysokość' : 'Głębokość', 0.2, 10, 0.1, 'mm')}
+      {n('spacing', 'Odstęp', 0.8, 50, 0.2, 'mm')}
+      {n('angle', 'Kierunek', -180, 180, 15, '°')}
+      {n('margin', 'Margines od krawędzi', 0, 50, 0.5, 'mm')}
+    </div>
+  );
+}
+
+/**
+ * Textures of a part: shared textures A, B, C… set once, and a list of faces where each picks one of them
+ * (or its own settings). With `face` it shows just that face (picked by a double click).
+ */
+function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) {
+  const setTextures = useStore((s) => s.setTextures);
+  const setFaceHover = useStore((s) => s.setFaceHover);
+  const picked = useStore((s) => (s.faceSel?.id === part.id ? s.faceSel.face : null));
+  const list = texturesOf(part);
+  const [edit, setEdit] = useState<string | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  // A face picked by a double click: its row comes into view.
+  useEffect(() => {
+    if (picked && !fixed) box.current?.querySelector(`[data-face="${picked}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [picked, fixed]);
+  const slots = [...new Set(list.map((t) => t.slot).filter((x): x is string => !!x))].sort();
+  const def = (slot: string) => list.find((t) => t.slot === slot)!;
+  const save = (next: Texture[]) => setTextures(part.id, next);
+  const on = (face: TextureFace) => list.find((t) => t.face === face);
+  const assign = (face: TextureFace, value: string) => {
+    const rest = list.filter((t) => t.face !== face);
+    const cur = on(face);
+    if (value === 'none') return save(rest);
+    if (value === 'own') return;
+    if (value.startsWith('new:')) {
+      const letter = [...SLOT_LETTERS].find((l) => !slots.includes(l)) ?? 'Z';
+      const pattern = value.slice(4) as Texture['pattern'];
+      save([...rest, { ...(cur ?? DEFAULT_TEXTURE), pattern, mode: pattern === 'grooves' ? 'cut' : (cur?.mode ?? 'add'), face, slot: letter }]);
+      return;
+    }
+    save([...rest, { ...def(value), face, slot: value }]);
+  };
+  const editSlot = (slot: string, patch: Partial<Texture>) => save(list.map((t) => (t.slot === slot ? { ...t, ...patch } : t)));
+  const editFace = (face: TextureFace, patch: Partial<Texture>) => save(list.map((t) => (t.face === face ? { ...t, ...patch } : t)));
+  const faces: TextureFace[] = fixed
+    ? [fixed]
+    : [
+        ...PLAIN_FACES,
+        ...(ROUND_TYPES.has(part.type) || part.params.shape === 'round' || on('around') ? (['around'] as TextureFace[]) : []),
+        ...list.filter((t) => t.face.startsWith('n:')).map((t) => t.face),
+      ];
+  const label = (face: TextureFace) => (face.startsWith('n:') ? `Skośna ${list.filter((t) => t.face.startsWith('n:')).findIndex((t) => t.face === face) + 1}` : FACE_LABELS[face as PlainFace].replace(' (walec, rura)', ''));
+  const front = on('front');
+
+  const row = (face: TextureFace) => {
+    const t = on(face);
+    const value = t ? (t.slot ?? 'own') : 'none';
+    const own = !!t && !t.slot;
+    const open = edit === `face:${face}` || (!!fixed && !!t);
+    return (
+      <div key={face} className={picked === face ? 'tex-row on' : 'tex-row'} onMouseEnter={() => setFaceHover({ id: part.id, face })} onMouseLeave={() => setFaceHover(null)} data-face={face}>
+        <div className="tex-line">
+          <span className="tex-face">{label(face)}</span>
+          <select value={value} onChange={(e) => assign(face, e.target.value)}>
+            <option value="none">Gładka</option>
+            {slots.map((sl) => (
+              <option key={sl} value={sl}>
+                {sl}: {TEXTURE_LABELS[def(sl).pattern]}
+              </option>
+            ))}
+            {own && <option value="own">Własna: {TEXTURE_LABELS[t!.pattern]}</option>}
+            <optgroup label={`+ Nowa faktura ${[...SLOT_LETTERS].find((l) => !slots.includes(l)) ?? ''}`}>
+              {Object.entries(TEXTURE_LABELS).map(([k, l]) => (
+                <option key={k} value={`new:${k}`}>
+                  {l}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+          {t && !fixed && (
+            <button
+              className={open ? 'mini on' : 'mini'}
+              title={t.slot ? `Własne ustawienia tej ścianki (odłącza ją od faktury ${t.slot})` : 'Ustawienia faktury tej ścianki'}
+              onClick={() => {
+                if (t.slot) editFace(face, { slot: undefined });
+                setEdit(open ? null : `face:${face}`);
+              }}
+            >
+              ⚙
+            </button>
           )}
-          {n('depth', t.mode === 'add' && t.pattern !== 'grooves' ? 'Wysokość' : 'Głębokość', 0.2, 10, 0.1, 'mm')}
-          {n('spacing', 'Odstęp', 0.8, 50, 0.2, 'mm')}
-          {n('angle', 'Kierunek', -180, 180, 15, '°')}
-          {n('margin', 'Margines od krawędzi', 0, 50, 0.5, 'mm')}
-          <h5>Ta sama faktura także na</h5>
-          <div className="row">
-            {(Object.keys(FACE_LABELS) as PlainFace[])
-              .filter((k) => k !== face && k !== 'around')
-              .map((k) => {
-                const has = list.some((x) => x.face === k);
-                return (
-                  <button key={k} className={has ? 'chip on' : 'chip'} title={has ? 'Kliknij, żeby zdjąć fakturę z tej ścianki' : 'Kliknij, żeby dać tu tę samą fakturę'} onClick={() => setFaceTexture(part.id, k, has ? undefined : { ...t, face: k })}>
-                    {has ? '☑' : '☐'} {FACE_LABELS[k]}
+        </div>
+        {open && t && (
+          <>
+            {t.slot && <p className="desc">Zmiana zmienia fakturę {t.slot} na wszystkich jej ściankach.</p>}
+            <TextureSettings t={t} onChange={(patch) => (t.slot ? editSlot(t.slot, patch) : editFace(face, patch))} />
+          </>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="tool">
+      {!fixed && (
+        <>
+          <p className="desc">Ustaw fakturę raz jako A, B, C i wybieraj ją przy ściankach. Dwuklik w ściankę modelu pokazuje ją na liście.</p>
+          {slots.length > 0 && (
+            <div className="tex-slots">
+              {slots.map((sl) => (
+                <div key={sl} className="tex-slot">
+                  <button className={edit === sl ? 'chip on' : 'chip'} onClick={() => setEdit(edit === sl ? null : sl)} title="Ustawienia tej faktury">
+                    <b>{sl}</b> {TEXTURE_LABELS[def(sl).pattern]} ✎
                   </button>
-                );
-              })}
-          </div>
+                  <span className="desc">{list.filter((t) => t.slot === sl).map((t) => label(t.face)).join(', ')}</span>
+                  {edit === sl && <TextureSettings t={def(sl)} onChange={(patch) => editSlot(sl, patch)} />}
+                </div>
+              ))}
+            </div>
+          )}
         </>
+      )}
+      <div className="tex-rows" ref={box}>
+        {faces.map(row)}
+      </div>
+      {!fixed && list.length > 0 && (
+        <div className="row">
+          {front && (
+            <button className="small" title="Przód, tył i oba boki z tą samą fakturą co przód" onClick={() => save([...list.filter((t) => !['back', 'left', 'right'].includes(t.face)), ...(['back', 'left', 'right'] as TextureFace[]).map((f) => ({ ...front, face: f }))])}>
+              Wszystkie boki jak przód
+            </button>
+          )}
+          <button className="small" onClick={() => (save([]), setEdit(null))}>
+            Wyczyść
+          </button>
+        </div>
       )}
     </div>
   );

@@ -14,7 +14,9 @@ export type Field =
   | { kind: 'slider'; key: string; label: string; min: number; max: number; step: number; unit: string }
   | { kind: 'toggle'; key: string; label: string; desc: string }
   | { kind: 'text'; key: string; label: string; placeholder?: string; max?: number }
-  | { kind: 'hint'; text: string };
+  | { kind: 'hint'; text: string }
+  /** A dropdown in one row with its label; `def` shows when the value is not set yet; `head` is a heading above the row. */
+  | { kind: 'select'; key: string; label: string; options: { value: string; label: string }[]; def?: string; head?: string };
 
 export interface Step {
   title: string;

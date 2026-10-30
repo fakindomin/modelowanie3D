@@ -20,6 +20,8 @@ export interface Texture {
   angle: number;
   /** Plain border left around the pattern, mm. */
   margin: number;
+  /** Shared texture (A, B, C…) this face uses: changing it changes every face with the same letter. */
+  slot?: string;
 }
 
 /** Rounded or chamfered outer edges of a solid. */

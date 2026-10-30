@@ -155,6 +155,11 @@ interface State {
   /** Face picked by a double click: its texture face (part's own axes), wall side (world) and triangles to highlight. */
   faceSel: { id: string; face: TextureFace | null; side: WallSide | null; tris: number[] } | null;
   setFaceSel(f: { id: string; face: TextureFace | null; side: WallSide | null; tris: number[] } | null): void;
+  /** Face pointed at in the list of faces: lit up in the scene. */
+  faceHover: { id: string; face: TextureFace } | null;
+  setFaceHover(f: { id: string; face: TextureFace } | null): void;
+  /** Replaces all textures of a part at once (one undo step). */
+  setTextures(id: string, textures: Texture[]): void;
   /** A label (raised or cut) on a wall of the body this part belongs to. */
   addLabel(id: string, side: WallSide, text: string, cut: boolean): void;
   setEdges(id: string, edges: Edges | undefined): void;
@@ -1816,6 +1821,11 @@ export const useStore = create<State>((set, get) => {
 
     faceSel: null,
     setFaceSel: (faceSel) => set({ faceSel }),
+    faceHover: null,
+    setFaceHover: (faceHover) => set({ faceHover }),
+    setTextures(id, textures) {
+      get().update(id, { texture: undefined, textures: textures.length ? textures : undefined });
+    },
 
     addLabel(id, side, text, cut) {
       const p = get().parts.find((x) => x.id === id);
