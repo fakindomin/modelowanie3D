@@ -256,13 +256,17 @@ function pressOf(geo: FitGeo, p: Params, i: number) {
   return num(p, 'rib') || 0.15;
 }
 /**
- * One rib along +Z on the +X side, from r0 (the tip touching the pipe) to r1 (inside the wall), 1.2 mm wide,
- * tapering to `flush` near the mouth so the pipe finds its way in. Negative radii put it on −X (a plug's outside).
+ * One rib along +Z on the +X side, from r0 (the tip touching the pipe) to r1 (inside the wall).
+ * Prints without supports in any position: a pointed section (flanks steeper than 45°) and both ends
+ * sloping back at 45° to `flush` (the surface it stands on). Negative radii put it on −X (a plug's outside).
  */
 function crushRib(r0: number, r1: number, flush: number, z0: number, L: number) {
-  const [a, b] = r0 < r1 ? [r0, r1] : [r1, r0];
-  const [fa, fb] = r0 < r1 ? [flush, r1] : [r1, flush];
-  return M().Manifold.hull([box(a, -0.6, z0, b, 0.6, L - 4), box(fa, -0.6, L - 1.2, fb, 0.6, L - 1.19)]);
+  const reach = Math.abs(flush - r0);
+  // Flanks at about 50° from the surface (half-width grows 0.8 per 1 of height).
+  const hw = 0.1 + 0.8 * reach;
+  const base = (r: number, za: number, zb: number) => box(Math.min(r, r1), -hw, za, Math.max(r, r1), hw, zb);
+  const tip = box(Math.min(r0, r0 + Math.sign(r1 - r0) * 0.01), -0.1, z0 + reach + 0.2, Math.max(r0, r0 + Math.sign(r1 - r0) * 0.01), 0.1, L - 4);
+  return M().Manifold.hull([base(flush, z0, L - 1.2), tip]);
 }
 
 const sq = (w: number, h: number, z0: number, z1: number) => box(-w / 2, -h / 2, z0, w / 2, h / 2, z1);
@@ -290,7 +294,8 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
       const pw = inW - 2 * g, ph = inH - 2 * g;
       adds.push(sq(pw, ph, stop - 0.01, L - 0.95).add(M().Manifold.hull([sq(pw, ph, L - 1, L - 0.99), sq(pw - 1.6, ph - 1.6, L - 0.01, L)])));
       // Ribs that bite into the profile a little: holds without glue.
-      if (pressOf(geo, p, i)) for (const s of [-1, 1]) adds.push(box(-0.6, s * (ph / 2) - 0.01 + (s < 0 ? -0.25 : 0), stop + 2, 0.6, s * (ph / 2) + 0.01 + (s > 0 ? 0.25 : 0), L - 3));
+      const prib = pressOf(geo, p, i) && 0.25;
+      if (prib) for (const s of [-1, 1]) adds.push(crushRib(ph / 2 + prib, ph / 2 - 0.3, ph / 2, stop + 1, L).rotate([0, 0, s * 90]));
     } else {
       const ow = D + 2 * (g + wall), oh = H + 2 * (g + wall);
       adds.push(sq(ow, oh, 0, L));
