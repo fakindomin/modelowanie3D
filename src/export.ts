@@ -11,7 +11,7 @@ async function hostSave(bytes: Uint8Array<ArrayBuffer>, name: string): Promise<b
   if (!host?.use) return false;
   const downloads = await host.use('downloads').catch(() => null);
   if (!downloads) return false;
-  const direct = name.endsWith('.json');
+  const direct = name.endsWith('.json') || name.endsWith('.zip');
   try {
     await downloads.save(direct ? { filename: name, data: bytes } : { filename: name.replace(/\.\w+$/, '') + '.zip', data: zip([{ name, data: bytes }]) });
   } catch {
@@ -33,29 +33,45 @@ async function download(data: ArrayBuffer | Uint8Array<ArrayBuffer> | string, na
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/** Binary STL with every body in one file (slicers split it back into objects). */
-export function exportSTL(bodies: BodyResult[], name: string) {
-  const meshes = bodies.map((b) => b.manifold.getMesh());
-  const tris = meshes.reduce((n, m) => n + m.triVerts.length / 3, 0);
+/** Binary STL of one mesh, moved by (dx, dy, dz). */
+function stlOf(m: ReturnType<BodyResult['manifold']['getMesh']>, dx = 0, dy = 0, dz = 0): Uint8Array<ArrayBuffer> {
+  const tris = m.triVerts.length / 3;
   const buf = new ArrayBuffer(84 + tris * 50);
   const dv = new DataView(buf);
   dv.setUint32(80, tris, true);
   let o = 84;
-  for (const m of meshes) {
-    const v = m.vertProperties, np = m.numProp, t = m.triVerts;
-    for (let i = 0; i < t.length; i += 3) {
-      const a = t[i] * np, b = t[i + 1] * np, c = t[i + 2] * np;
-      const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2];
-      const wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
-      let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
-      const len = Math.hypot(nx, ny, nz) || 1;
-      nx /= len; ny /= len; nz /= len;
-      for (const f of [nx, ny, nz]) { dv.setFloat32(o, f, true); o += 4; }
-      for (const idx of [a, b, c]) for (let k = 0; k < 3; k++) { dv.setFloat32(o, v[idx + k], true); o += 4; }
-      o += 2;
-    }
+  const v = m.vertProperties, np = m.numProp, t = m.triVerts;
+  const d = [dx, dy, dz];
+  for (let i = 0; i < t.length; i += 3) {
+    const a = t[i] * np, b = t[i + 1] * np, c = t[i + 2] * np;
+    const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2];
+    const wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
+    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    nx /= len; ny /= len; nz /= len;
+    for (const f of [nx, ny, nz]) { dv.setFloat32(o, f, true); o += 4; }
+    for (const idx of [a, b, c]) for (let k = 0; k < 3; k++) { dv.setFloat32(o, v[idx + k] + d[k], true); o += 4; }
+    o += 2;
   }
-  download(buf, `${name}.stl`, 'model/stl');
+  return new Uint8Array(buf);
+}
+
+/** File-safe name: letters (Polish ones too), digits, spaces, dashes. */
+const safe = (s: string) => s.replace(/[^\p{L}\p{N} _.-]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'czesc';
+
+/**
+ * STL: one file per printed part, packed in a .zip. Each part stands on the bed (z = 0) centred on the origin,
+ * so the slicer lays them out; one body alone gives a plain .stl.
+ */
+export function exportSTL(bodies: BodyResult[], name: string, names: Map<number, string> = new Map()) {
+  const files = bodies.map((b, i) => {
+    const m = b.manifold.getMesh();
+    const [x0, y0, z0] = b.manifold.boundingBox().min, [x1, y1] = b.manifold.boundingBox().max;
+    const nm = `${String(i + 1).padStart(2, '0')} ${safe(names.get(b.body) ?? `Bryla ${b.body}`)}.stl`;
+    return { name: nm, data: stlOf(m, -(x0 + x1) / 2, -(y0 + y1) / 2, -z0) };
+  });
+  if (files.length === 1) return download(files[0].data, `${name}.stl`, 'model/stl');
+  download(zip(files), `${name}-stl.zip`, 'application/zip');
 }
 
 // ---- minimal ZIP (stored, no compression) for 3MF -------------------------------------------
@@ -86,6 +102,9 @@ function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffe
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
     local.setUint16(4, 20, true);
+    // UTF-8 names (Polish letters), date 1980-01-01.
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(12, 0x0021, true);
     local.setUint32(14, crc, true);
     local.setUint32(18, f.data.length, true);
     local.setUint32(22, f.data.length, true);
@@ -95,6 +114,8 @@ function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffe
     cd.setUint32(0, 0x02014b50, true);
     cd.setUint16(4, 20, true);
     cd.setUint16(6, 20, true);
+    cd.setUint16(8, 0x0800, true);
+    cd.setUint16(14, 0x0021, true);
     cd.setUint32(16, crc, true);
     cd.setUint32(20, f.data.length, true);
     cd.setUint32(24, f.data.length, true);
@@ -121,19 +142,32 @@ function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffe
 }
 
 /** 3MF with one object per body, so each printed part stays separate in the slicer. */
-export function export3MF(bodies: BodyResult[], name: string) {
+export function export3MF(bodies: BodyResult[], name: string, names: Map<number, string> = new Map()) {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const fmt = (n: number) => (Math.round(n * 1e4) / 1e4).toString();
   let objects = '';
   let items = '';
+  // Parts side by side on the bed (rows 250 mm wide, 5 mm apart), not inside each other as assembled.
+  let x = 0, y = 0, row = 0;
   bodies.forEach((b, i) => {
     const m = b.manifold.getMesh();
+    const bb = b.manifold.boundingBox();
+    const w = bb.max[0] - bb.min[0], d = bb.max[1] - bb.min[1];
+    if (x > 0 && x + w > 250) {
+      x = 0;
+      y += row + 5;
+      row = 0;
+    }
+    const tr = `1 0 0 0 1 0 0 0 1 ${fmt(x - bb.min[0])} ${fmt(y - bb.min[1])} ${fmt(-bb.min[2])}`;
+    x += w + 5;
+    row = Math.max(row, d);
     const v = m.vertProperties, np = m.numProp, t = m.triVerts;
     const verts: string[] = [];
     for (let k = 0; k < v.length; k += np) verts.push(`<vertex x="${fmt(v[k])}" y="${fmt(v[k + 1])}" z="${fmt(v[k + 2])}"/>`);
     const tris: string[] = [];
     for (let k = 0; k < t.length; k += 3) tris.push(`<triangle v1="${t[k]}" v2="${t[k + 1]}" v3="${t[k + 2]}"/>`);
-    objects += `<object id="${i + 1}" name="Bryla ${b.body}" type="model"><mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh></object>`;
-    items += `<item objectid="${i + 1}"/>`;
+    objects += `<object id="${i + 1}" name="${esc(names.get(b.body) ?? `Bryla ${b.body}`)}" type="model"><mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh></object>`;
+    items += `<item objectid="${i + 1}" transform="${tr}"/>`;
   });
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="pl-PL" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">

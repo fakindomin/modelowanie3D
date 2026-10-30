@@ -5,7 +5,8 @@ import { MeasurePanel } from './ui/MeasurePanel';
 import { WizardDialog } from './ui/WizardDialog';
 import { Manual } from './ui/Manual';
 import { isLocked, useStore } from './store';
-import { buildBodies } from './geom/parts';
+import { buildBodies, built } from './geom/parts';
+import * as THREE from 'three';
 import { export3MF, exportSTL, saveJSON } from './export';
 import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
@@ -26,13 +27,32 @@ export function useProjectActions() {
   const exportAs = (fmt: 'stl' | '3mf') => {
     const bodies = buildBodies(st.parts);
     if (!bodies.length) return st.notify('Brak brył do eksportu. Dodaj jakiś element.');
-    (fmt === 'stl' ? exportSTL : export3MF)(bodies, st.tab === 'fig' ? 'figurki' : 'model');
+    // Each body is named after its biggest solid part (the one the user knows it by).
+    const names = new Map<number, string>();
+    for (const b of bodies) {
+      const solids = st.parts.filter((p) => p.body === b.body && !p.hole);
+      const main = solids.reduce<(typeof solids)[number] | undefined>((a, p) => (!a || built(p).box.getSize(new THREE.Vector3()).length() > built(a).box.getSize(new THREE.Vector3()).length() ? p : a), undefined);
+      if (!main) continue;
+      names.set(b.body, main.name);
+      // Printed as designed: the part's own frame (pipes standing, fittings on an arm, clips flat), not as turned in the assembly.
+      if (main.rotation.some((r) => r)) {
+        const inv = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(main.rotation.map((r) => (r * Math.PI) / 180) as [number, number, number]))).invert();
+        const turned = b.manifold.transform(inv.elements as unknown as Parameters<typeof b.manifold.transform>[0]);
+        b.manifold.delete();
+        b.manifold = turned;
+      }
+    }
+    (fmt === 'stl' ? exportSTL : export3MF)(bodies, st.tab === 'fig' ? 'figurki' : 'model', names);
     bodies.forEach((b) => {
       b.geometry.dispose();
       b.manifold.delete();
     });
     const hidden = st.parts.filter((p) => p.hidden).length;
-    st.notify(`Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`);
+    st.notify(
+      fmt === 'stl' && bodies.length > 1
+        ? `Wyeksportowano ${bodies.length} części: każda w osobnym pliku STL, razem w archiwum .zip. Każda stoi na stole na środku, slicer sam je rozłoży.${hidden ? ' Ukryte elementy też są w plikach.' : ''}`
+        : `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`,
+    );
   };
   const fresh = () => {
     st.reset();
