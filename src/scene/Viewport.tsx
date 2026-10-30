@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
-import { Edges, GizmoHelper, GizmoViewport, Grid, OrbitControls, TransformControls } from '@react-three/drei';
+import { Edges, GizmoHelper, GizmoViewport, Grid, Html, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { assembly, bodyBox, groupBody, groupId, isLocked, useStore } from '../store';
-import { built, buildBodies, worldBox, type BodyResult } from '../geom/parts';
+import { built, buildBodies, partMatrix, worldBox, type BodyResult } from '../geom/parts';
 import { finishing, warped } from '../geom/modify';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, TextureFace, Vec3 } from '../types';
@@ -534,6 +534,26 @@ function FaceSelMark() {
   return <FeatureMark f={f} color="#e8873a" />;
 }
 
+/** Letters A and B on the two ends of the selected pipe, matching "Koniec A / Koniec B" in the panel. */
+function PipeEndMarks() {
+  const part = useStore((s) => s.parts.find((p) => p.id === s.selectedId && (p.type === 'pipeEnd' || p.type === 'tube')));
+  if (!part) return null;
+  const g = built(part).geometry;
+  if (!g.boundingBox) g.computeBoundingBox();
+  const bb = g.boundingBox!;
+  const m = partMatrix(part.position, part.rotation);
+  const at = (z: number) => new THREE.Vector3(0, 0, z).applyMatrix4(m).toArray() as Vec3;
+  return (
+    <>
+      {(['A', 'B'] as const).map((l, i) => (
+        <Html key={l} position={at(i ? bb.max.z : bb.min.z)} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+          <span className="end-mark">{l}</span>
+        </Html>
+      ))}
+    </>
+  );
+}
+
 const FACE_DIR: Record<string, [number, number, number]> = { top: [0, 0, 1], bottom: [0, 0, -1], front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0] };
 
 /** The face a row of the texture list points at, lit up on the part (outermost triangles facing that way). */
@@ -732,6 +752,7 @@ export function Viewport() {
       <MeasureMarks />
       <FaceSelMark />
       <FaceHoverMark />
+      {!preview && <PipeEndMarks />}
       <CutPlane />
       <OrbitControls makeDefault enableDamping={false} />
       <CameraFit />

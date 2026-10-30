@@ -683,3 +683,4 @@ body.resizing { cursor: col-resize; user-select: none; }
 .wiz-sel select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; min-width: 150px; }
 .wiz-head-label { margin-bottom: -4px; }
 .app.mobile .wiz-sel select { padding: 9px 6px; font-size: 16px; }
+.end-mark { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 12.5px; box-shadow: 0 2px 6px #0008; }
