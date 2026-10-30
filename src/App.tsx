@@ -4,7 +4,7 @@ import { Library, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
 import { WizardDialog } from './ui/WizardDialog';
 import { Manual } from './ui/Manual';
-import { isLocked, useStore } from './store';
+import { isLocked, loadBed, useStore } from './store';
 import { buildBodies, built } from './geom/parts';
 import * as THREE from 'three';
 import { export3MF, exportSTL, saveJSON } from './export';
@@ -45,16 +45,23 @@ export function useProjectActions() {
     }
     // STL: one file per kind of print (as in the manual: number, name, how many to print), not one per copy.
     let out = bodies;
-    if (fmt === 'stl') {
-      const items = makeManual(st.parts).items;
+    let plateN = 0;
+    const items = makeManual(st.parts).items;
+    if (fmt === '3mf') {
+      // Each material on its own plates (PETG clips, TPU seals, PLA the rest).
+      const groups = new Map<number, string>();
+      for (const it of items) for (const b of it.bodies) groups.set(b, it.material);
+      const bed = loadBed();
+      plateN = export3MF(bodies, st.tab === 'fig' ? 'figurki' : 'model', names, false, [bed[0], bed[1]], new Set(groups.values()).size > 1 ? groups : new Map());
+    } else {
       out = items.flatMap((it) => {
         const b = bodies.find((x) => x.body === it.bodies[0]);
         if (!b) return [];
         names.set(b.body, `${/^\d+$/.test(it.no) ? it.no.padStart(2, '0') : it.no} ${it.name}${it.qty > 1 ? ` x${it.qty}` : ''}`);
         return [b];
       });
+      exportSTL(out, st.tab === 'fig' ? 'figurki' : 'model', names, true);
     }
-    (fmt === 'stl' ? exportSTL : export3MF)(out, st.tab === 'fig' ? 'figurki' : 'model', names, fmt === 'stl');
     bodies.forEach((b) => {
       b.geometry.dispose();
       b.manifold.delete();
@@ -63,7 +70,9 @@ export function useProjectActions() {
     st.notify(
       fmt === 'stl' && bodies.length > 1
         ? `Wyeksportowano ${out.length} ${out.length === 1 ? 'rodzaj części' : 'rodzajów części'} (${bodies.length} wydruków): każdy rodzaj raz, w osobnym pliku STL, w nazwie numer z Instrukcji i ile sztuk wydrukować („x4”).${hidden ? ' Ukryte elementy też są w plikach.' : ''}`
-        : `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`,
+        : fmt === '3mf'
+          ? `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'część' : 'części'} do 3MF na ${plateN} ${plateN === 1 ? 'stole' : 'stołach'} (stół ${loadBed()[0]} × ${loadBed()[1]} mm z ustawień, każdy materiał osobno). Bambu Studio i Orca otworzą je jako osobne płyty.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`
+          : `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`,
     );
   };
   const fresh = () => {
