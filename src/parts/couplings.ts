@@ -392,6 +392,20 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
         const arc = M().Manifold.revolve(poly([[r1, zp - w / 2], [r2, zp - w / 2], [r2, zp + w / 2], [r1, zp + w / 2]]), 96, 30 + (w / (2 * Math.PI * r1)) * 360).rotate([0, 0, s + turn - (w / (2 * Math.PI * r1)) * 180]);
         cuts.push(arc);
       }
+      // Narrowing just before the rest position: the pin snaps past two small bumps and stays there.
+      const lock = num(p, 'bayLock');
+      if (lock > 0) {
+        const rIn = D / 2 + g - 0.01, rMid = (D / 2 + g + Ro) / 2;
+        const at = (((w / 2 + 1.1) / rMid) * 180) / Math.PI;
+        const bumps: Manifold[] = [];
+        for (const s of [0, 180])
+          for (const [z0, dir] of [[zp - w / 2, 1], [zp + w / 2, -1]] as const) {
+            const base = box(rIn, -0.9, Math.min(z0, z0 - dir * 0.3), Ro + 0.01, 0.9, Math.max(z0, z0 - dir * 0.3));
+            const tip = box(rIn, -0.05, Math.min(z0 + dir * lock, z0 + dir * (lock - 0.01)), Ro + 0.01, 0.05, Math.max(z0 + dir * lock, z0 + dir * (lock - 0.01)));
+            bumps.push(M().Manifold.hull([base, tip]).rotate([0, 0, s - at]));
+          }
+        post = union(bumps);
+      }
     } else if (end === 'click') {
       // Four fingers with an inward hook near the mouth; the pipe end has a matching groove.
       const zh = L - 3;
@@ -564,7 +578,10 @@ export function buildSpringClip(p: Params): Manifold {
   legs.push(box(-half, -w / 2, -Lc, half, w / 2, -Lc + t));
   const pinLen = D / 2 - half + outer + 0.6;
   for (const s of String(p.pins) === '1' ? [1] : [-1, 1]) {
-    const pin = cyl(pinLen - pinD / 2 + 0.01, pinD / 2).add(cyl(pinD / 2, pinD / 2, 0.4).translate([0, 0, pinLen - pinD / 2]));
+    // A plain cylinder with a small chamfer: it stays in its hole under load (a cone would push the leg back in).
+    // A little thinner than nominal so it drops into the hole easily.
+    const rp = pinD / 2 - 0.1, ch = Math.min(0.5, rp * 0.2);
+    const pin = cyl(pinLen - ch + 0.01, rp).add(cyl(ch, rp, rp - ch).translate([0, 0, pinLen - ch]));
     legs.push(pin.rotate([0, 90, 0]).translate([half - 0.01, 0, 0]).rotate([0, 0, s > 0 ? 0 : 180]));
   }
   return union(legs).rotate([90, 0, 0]).translate([0, 0, w / 2]);
@@ -642,6 +659,7 @@ const pipeUses = (p: Params, ...es: string[]) => es.includes(String(p.end)) || e
 const pinParams: ParamDef[] = [
   n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => uses(p, 'pin', 'bayonet') }),
   { ...select('pins', 'Bolce', '2', [['2', 'Dwa (U)'], ['1', 'Jeden (V)']]), show: (p) => uses(p, 'pin') },
+  n('bayLock', 'Przewężenie rowka bagnetu', 0.3, 0, 1, 0.05, { show: (p: Params) => uses(p, 'bayonet'), hint: 'Dwa małe garby w rowku tuż przed końcem: bolec przeskakuje przez nie z lekkim kliknięciem i nie odkręca się sam. 0 = bez przewężenia.' }),
 ];
 
 export const COUPLING_DEFS: PartDef[] = [
