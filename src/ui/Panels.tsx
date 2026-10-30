@@ -210,15 +210,14 @@ const norm = (t: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ł/g, 'l');
 
-/** A family of ready elements: click adds the first variant (size M), the arrow shows all variants with S/M/L. */
+/** A family of ready elements: a click anywhere on the tile opens its variants (with S/M/L); adding is done from the list. */
 function FamilyTile({ family, open, onToggle, only }: { family: Family; open: boolean; onToggle: () => void; only?: Family['variants'] }) {
   const addVariant = useStore((s) => s.addVariant);
   const recent = useStore((s) => s.recent);
-  const first = family.variants[0];
   return (
     <>
       <div className={open ? 'tile family open' : 'tile family'}>
-        <button className="fam-main" title={`${family.label}: kliknij, żeby dodać „${first.label}”${family.noSizes ? '' : ' (rozmiar M)'}`} onClick={() => addVariant(family, first, 'M')}>
+        <button className="fam-main" title={open ? 'Zwiń' : `${family.label}: pokaż ${family.variants.length} odmian${family.noSizes ? '' : ' i rozmiary'}`} onClick={onToggle} aria-expanded={open}>
           <Icon type={family.icon} hole={false} />
           <span>{family.label}</span>
         </button>
