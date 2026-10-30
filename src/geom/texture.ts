@@ -1,6 +1,7 @@
 import type { CrossSection, Manifold } from 'manifold-3d';
+import * as THREE from 'three';
 import { M } from './manifold';
-import type { Texture, TextureFace } from '../types';
+import type { PlainFace, Texture, TextureFace } from '../types';
 
 export const TEXTURE_LABELS: Record<Texture['pattern'], string> = {
   ribs: 'Żeberka',
@@ -10,7 +11,7 @@ export const TEXTURE_LABELS: Record<Texture['pattern'], string> = {
   honeycomb: 'Plaster miodu',
 };
 
-export const FACE_LABELS: Record<TextureFace, string> = {
+export const FACE_LABELS: Record<PlainFace, string> = {
   top: 'Góra',
   bottom: 'Spód',
   front: 'Przód',
@@ -20,10 +21,32 @@ export const FACE_LABELS: Record<TextureFace, string> = {
   around: 'Dookoła (walec, rura)',
 };
 
+/** Face key of a slanted flat face from its outward normal (part's own axes). */
+export function slopeFace(n: THREE.Vector3): TextureFace {
+  const v = n.clone().normalize();
+  return `n:${[v.x, v.y, v.z].map((c) => Math.round(c * 1000) / 1000).join(',')}`;
+}
+
+const slopeNormal = (face: TextureFace) => (face.startsWith('n:') ? new THREE.Vector3(...face.slice(2).split(',').map(Number)).normalize() : null);
+
+export const faceLabel = (face: TextureFace) => (face.startsWith('n:') ? 'Skośna' : FACE_LABELS[face as PlainFace]);
+
+/** Rotations (degrees, as Manifold.rotate takes them: about X, then Y, then Z) bringing a face up and back. */
+function faceTurn(face: TextureFace): { to: [number, number, number]; back: [number, number, number] } {
+  const n = slopeNormal(face);
+  if (!n) {
+    const r = TO_TOP[face as Exclude<PlainFace, 'around'>];
+    return { to: r, back: [-r[0], -r[1], -r[2]] };
+  }
+  const q = new THREE.Quaternion().setFromUnitVectors(n, new THREE.Vector3(0, 0, 1));
+  const deg = (e: THREE.Euler): [number, number, number] => [e.x, e.y, e.z].map((a) => (a * 180) / Math.PI) as [number, number, number];
+  return { to: deg(new THREE.Euler().setFromQuaternion(q, 'ZYX')), back: deg(new THREE.Euler().setFromQuaternion(q.clone().invert(), 'ZYX')) };
+}
+
 export const DEFAULT_TEXTURE: Texture = { pattern: 'ribs', face: 'top', mode: 'add', depth: 0.8, spacing: 3, angle: 0, margin: 2 };
 
 // Rotation that brings each face's outward normal to +Z (and back again).
-const TO_TOP: Record<Exclude<TextureFace, 'around'>, [number, number, number]> = {
+const TO_TOP: Record<Exclude<PlainFace, 'around'>, [number, number, number]> = {
   top: [0, 0, 0],
   bottom: [180, 0, 0],
   front: [-90, 0, 0],
@@ -197,8 +220,8 @@ export function faceLevel(w: Manifold): number {
 /** Adds the texture as real geometry, so it prints exactly as shown. */
 export function applyTexture(m: Manifold, t: Texture): Manifold {
   if (t.face === 'around') return aroundTexture(m, t);
-  const rot = TO_TOP[t.face];
-  const w = m.rotate(rot);
+  const turn = faceTurn(t.face);
+  const w = m.rotate(turn.to);
   const top = faceLevel(w);
   // The face itself: material just under it, less anything standing on it (a knob, a peg).
   const under = w.slice(top - 0.05);
@@ -212,5 +235,5 @@ export function applyTexture(m: Manifold, t: Texture): Manifold {
   let out: Manifold;
   if (add) out = w.add(p.add.extrude(d + 0.05).translate([0, 0, top - 0.05]));
   else out = w.subtract(p.cut.extrude(d + 0.05).translate([0, 0, top - d]));
-  return out.rotate([-rot[0], -rot[1], -rot[2]]);
+  return out.rotate(turn.back);
 }

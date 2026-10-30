@@ -5,7 +5,7 @@ import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/mag
 import { bodyRisk, opOff, type Op } from './ops';
 import { BED_KEY, assembly, bodyBox, finishedBox, groupBody, groupId, isMerged, loadBed, useStore, type PatternKind } from '../store';
 import { WIZARDS } from '../wizards';
-import { DEFAULT_TEXTURE, FACE_LABELS, TEXTURE_LABELS } from '../geom/texture';
+import { DEFAULT_TEXTURE, FACE_LABELS, faceLabel, TEXTURE_LABELS } from '../geom/texture';
 import { DEFAULT_EDGES } from '../geom/edges';
 import { DEFAULT_BEND } from '../geom/bend';
 import { DEFAULT_INFILL, DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/modify';
@@ -606,7 +606,7 @@ function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) 
             <div className="row">
               {list.map((x) => (
                 <button key={x.face} className={x.face === face ? 'chip on' : 'chip'} onClick={() => setPick(x.face)}>
-                  {FACE_LABELS[x.face]}: {TEXTURE_LABELS[x.pattern]}
+                  {faceLabel(x.face)}: {TEXTURE_LABELS[x.pattern]}
                 </button>
               ))}
             </div>
@@ -620,6 +620,13 @@ function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) 
                   {list.some((x) => x.face === k) ? ' ✓' : ''}
                 </option>
               ))}
+              {list
+                .filter((x) => x.face.startsWith('n:'))
+                .map((x, i) => (
+                  <option key={x.face} value={x.face}>
+                    Skośna {i + 1} ✓
+                  </option>
+                ))}
             </select>
           </label>
         </>
@@ -687,7 +694,7 @@ function FaceSection({ part }: { part: Part }) {
   const setFaceSel = useStore((s) => s.setFaceSel);
   if (!fs || fs.id !== part.id) return null;
   const off = opOff(part, 'texture');
-  const name = fs.face ? FACE_LABELS[fs.face].replace(' (walec, rura)', '') : 'skośna';
+  const name = fs.face ? faceLabel(fs.face).replace(' (walec, rura)', '') : 'zakrzywiona';
   return (
     <div className="facesel">
       <div className="facesel-head">
@@ -699,7 +706,7 @@ function FaceSection({ part }: { part: Part }) {
         </button>
       </div>
       <h5>Faktura</h5>
-      {off ? <p className="desc">{off.why}</p> : fs.face ? <TextureTool part={part} face={fs.face} /> : <p className="desc">Fakturę kładę na płaskich ściankach i bokach walców, a ta ścianka jest skośna.</p>}
+      {off ? <p className="desc">{off.why}</p> : fs.face ? <TextureTool part={part} face={fs.face} /> : <p className="desc">Fakturę kładę na płaskich ściankach (także skośnych) i bokach walców, a ta ścianka jest zakrzywiona.</p>}
       {fs.side && !part.hole && (
         <>
           <h5>Napis</h5>
@@ -1014,7 +1021,7 @@ function PartProperties({ part }: { part: Part }) {
       <textarea
         className="note"
         rows={part.note ? 2 : 1}
-        placeholder="Notatka do instrukcji (np. „wkręć śrubę M3 × 10”)"
+        placeholder="Notatka do instrukcji"
         value={part.note ?? ''}
         onChange={(e) => st.updateLive(part.id, { note: e.target.value })}
         onKeyDown={(e) => e.stopPropagation()}

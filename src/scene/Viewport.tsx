@@ -9,6 +9,7 @@ import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, TextureFace, Vec3 } from '../types';
 import type { WallSide } from '../parts/connectors';
 import { distance, featureAt, type Feature } from './measure';
+import { slopeFace } from '../geom/texture';
 import { SketchHandles } from './SketchHandles';
 import { DimHandles } from './DimHandles';
 
@@ -333,7 +334,7 @@ function Scene() {
     // Far from the cursor, so the face is taken, never an edge.
     const f = featureAt({ geometry: mesh.geometry, matrix: mesh.matrixWorld, faceIndex: it.faceIndex!, point: it.point, pick, toScreen, cursor: new THREE.Vector2(-1e6, -1e6) });
     st.select(part.id);
-    st.setFaceSel({ id: part.id, face: faceOf(nLocal), side: sideOfNormal(nWorld), tris: f?.tris ?? [] });
+    st.setFaceSel({ id: part.id, face: faceOf(nLocal, isFlat(f?.tris ?? [])), side: sideOfNormal(nWorld), tris: f?.tris ?? [] });
   };
 
   const onMove = (e: ThreeEvent<PointerEvent>) => {
@@ -462,12 +463,27 @@ function Gizmo() {
 }
 
 /** Texture face (in the part's own axes) for a normal; round sides give "around", slopes nothing. */
-function faceOf(n: THREE.Vector3): TextureFace | null {
+function faceOf(n: THREE.Vector3, flat: boolean): TextureFace | null {
   const a = [Math.abs(n.x), Math.abs(n.y), Math.abs(n.z)];
   if (a[2] > 0.9) return n.z > 0 ? 'top' : 'bottom';
   if (a[0] > 0.9) return n.x > 0 ? 'right' : 'left';
   if (a[1] > 0.9) return n.y > 0 ? 'back' : 'front';
+  // A flat slanted face gets its own texture; a curved side (cylinder, pipe) is textured all around.
+  if (flat) return slopeFace(n);
   return a[2] < 0.3 ? 'around' : null;
+}
+
+/** All triangles of the picked face (flat list of world vertex coordinates) point the same way: a flat face. */
+function isFlat(tris: number[]) {
+  let first: THREE.Vector3 | null = null;
+  const v = (k: number) => new THREE.Vector3(tris[k], tris[k + 1], tris[k + 2]);
+  for (let k = 0; k + 8 < tris.length && k < 9 * 400; k += 9) {
+    const n = new THREE.Triangle(v(k), v(k + 3), v(k + 6)).getNormal(new THREE.Vector3());
+    if (n.lengthSq() < 0.5) continue;
+    if (!first) first = n;
+    else if (n.dot(first) < 0.9995) return false;
+  }
+  return !!first;
 }
 
 /** World wall side a normal points to (labels and magnets go there), or nothing for a slope. */

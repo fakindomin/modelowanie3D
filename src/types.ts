@@ -3,7 +3,9 @@ import type { Params } from './catalog';
 export type Vec3 = [number, number, number];
 
 export type TexturePattern = 'ribs' | 'grooves' | 'knurl' | 'dots' | 'honeycomb';
-export type TextureFace = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'around';
+export type PlainFace = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'around';
+/** A face along the part's axes, or a slanted flat face given by its outward normal ("n:x,y,z", part's own axes). */
+export type TextureFace = PlainFace | `n:${string}`;
 
 /** Real surface geometry added to (or cut into) one face of a solid. */
 export interface Texture {
