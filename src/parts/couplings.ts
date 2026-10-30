@@ -375,15 +375,13 @@ function rawFitting(p: Params, square: boolean): Manifold {
 // ------------------------------------------------------------------------------------- pipe end
 
 /** A pipe (or a piece glued onto one) whose end at z = 0 matches a fitting's arm. */
-export function buildPipeEnd(p: Params): Manifold {
-  const D = num(p, 'D'), T = num(p, 'T'), L = num(p, 'L'), g = num(p, 'luz'), depth = num(p, 'depth');
-  const end = String(p.end) as EndKind;
-  const ri = Math.max(0.5, D / 2 - T);
-  let m = cyl(L, D / 2);
+/** One fitting end (thread, bayonet pins or click groove) on the bottom of a pipe standing along +Z. */
+function pipeTip(m: Manifold, p: Params, end: string): Manifold {
+  const D = num(p, 'D'), depth = num(p, 'depth');
   if (end === 'male') {
     const t = G_THREAD[String(p.std)];
     const spec: ThreadSpec = t && THREADS[t] ? THREADS[t] : { d: D, p: num(p, 'P') || 1.5, angle: 60, af: 0, label: 'rura' };
-    m = cyl(L - depth, D / 2).translate([0, 0, depth - 0.01]).add(externalThread(spec, depth, threadGap(p, 'out'), false, true));
+    m = m.subtract(cyl(depth, D / 2 + 2).translate([0, 0, -0.01])).add(externalThread(spec, depth, threadGap(p, 'out'), false, true));
   }
   if (end === 'bayonet') {
     const pinD = num(p, 'pinD') || 5, wall = num(p, 'wall');
@@ -394,6 +392,16 @@ export function buildPipeEnd(p: Params): Manifold {
     const zh = depth - 3;
     m = m.subtract(M().Manifold.revolve(poly([[D / 2 - 1, zh - 0.2], [D / 2 + 1, zh - 0.2], [D / 2 + 1, zh + 1.8], [D / 2 - 1, zh + 1.8]]), 96));
   }
+  return m;
+}
+
+export function buildPipeEnd(p: Params): Manifold {
+  const D = num(p, 'D'), T = num(p, 'T'), L = num(p, 'L'), g = num(p, 'luz');
+  const ri = Math.max(0.5, D / 2 - T);
+  let m = pipeTip(cyl(L, D / 2), p, String(p.end));
+  // The same kinds of end on top: built at the bottom of the pipe turned over (a turn keeps the thread right-handed).
+  const top = String(p.bell ?? 'none');
+  if (top !== 'none' && top !== 'yes') m = pipeTip(m.rotate([180, 0, 0]).translate([0, 0, L]), p, top).translate([0, 0, -L]).rotate([180, 0, 0]);
   m = m.subtract(cyl(L + 2, ri).translate([0, 0, -1]));
   if (p.bell === 'yes') {
     // Socket on the top end: the next pipe's plain end slides in down to the ledge (45° outside, prints standing).
@@ -551,7 +559,7 @@ export const COUPLING_DEFS: PartDef[] = [
     label: 'Rura z końcówką',
     category: 'couplings',
     hole: false,
-    description: 'Odcinek rury do druku z końcówką do łącznika (gwint męski, bolce bagnetu, rowek zatrzasku), kielichem na górze do łączenia odcinków i otworami na zatrzask U. Stoi pionowo, końcówka na dole.',
+    description: 'Odcinek rury do druku z końcówkami do łączników na obu końcach (gwint męski, bolce bagnetu, rowek zatrzasku) albo kielichem na górze do łączenia odcinków, z otworami na zatrzask U. Stoi pionowo.',
     params: [
       select('end', 'Końcówka', 'male', [['socket', 'Gładka'], ['male', 'Gwint zewnętrzny'], ['bayonet', 'Bolce bagnetu'], ['click', 'Rowek na klik']]),
       pipeStd(),
@@ -559,16 +567,19 @@ export const COUPLING_DEFS: PartDef[] = [
       n('T', 'Ścianka', 1.9, 0.5, 30, 0.1),
       n('L', 'Długość', 60, 5, 1000, 1),
       n('depth', 'Długość końcówki', 20, 6, 200, 1),
-      n('P', 'Skok gwintu', 1.5, 0.75, 4, 0.25, { show: (p: Params) => p.end === 'male' && !String(p.std).startsWith('g') }),
-      { ...fitSel, show: (p) => p.end === 'male' },
-      { ...select('bell', 'Kielich na górze', 'none', [['none', 'Bez kielicha'], ['yes', 'Kielich (następna rura wchodzi do środka)']]), hint: 'Odcinki rury łączone bez osobnych złączek: gładki koniec następnego odcinka wchodzi w kielich do oporu.' },
+      n('P', 'Skok gwintu', 1.5, 0.75, 4, 0.25, { show: (p: Params) => (p.end === 'male' || p.bell === 'male') && !String(p.std).startsWith('g') }),
+      { ...fitSel, show: (p) => p.end === 'male' || p.bell === 'male' },
+      {
+        ...select('bell', 'Górny koniec', 'none', [['none', 'Gładki'], ['yes', 'Kielich (następna rura wchodzi do środka)'], ['male', 'Gwint zewnętrzny'], ['bayonet', 'Bolce bagnetu'], ['click', 'Rowek na klik']]),
+        hint: 'Kielich łączy odcinki rury bez osobnych złączek. Gwint, bagnet i klik pasują do drugiego łącznika, tak jak dolna końcówka.',
+      },
       n('bellD', 'Głębokość kielicha', 30, 8, 100, 1, { show: (p: Params) => p.bell === 'yes' }),
       n('bellW', 'Ścianka kielicha', 2.4, 1.2, 8, 0.2, { show: (p: Params) => p.bell === 'yes' }),
       n('bellL', 'Luz kielicha', 0.15, 0, 1, 0.05, { show: (p: Params) => p.bell === 'yes', hint: '0,1–0,15 mm: ciasno, trzyma bez kleju. 0,3: luźno, do klejenia.' }),
       { ...select('pinHoles', 'Otwory na zatrzask U', 'none', [['none', 'Bez otworów'], ['bottom', 'Na dole'], ['top', 'Na górze'], ['both', 'Na obu końcach']]) },
       n('pinAt', 'Odległość otworów od końca', 15, 4, 100, 0.5, { show: (p: Params) => p.pinHoles !== 'none' && p.pinHoles !== undefined }),
-      n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => p.end === 'bayonet' || (p.pinHoles !== 'none' && p.pinHoles !== undefined) }),
-      n('wall', 'Wysokość bolców', 2.3, 1, 10, 0.1, { show: (p: Params) => p.end === 'bayonet', hint: 'Tyle co ścianka łącznika.' }),
+      n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => p.end === 'bayonet' || p.bell === 'bayonet' || (p.pinHoles !== 'none' && p.pinHoles !== undefined) }),
+      n('wall', 'Wysokość bolców', 2.3, 1, 10, 0.1, { show: (p: Params) => p.end === 'bayonet' || p.bell === 'bayonet', hint: 'Tyle co ścianka łącznika.' }),
       n('luz', 'Luz', 0.25, 0, 1.5, 0.05, { show: () => false }),
     ],
     normalize: stdNormalize({ std: 'std', D: 'D', T: 'T' }, 'pipe'),
