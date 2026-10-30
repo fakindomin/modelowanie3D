@@ -625,7 +625,7 @@ function TextureSettings({ t, onChange }: { t: Texture; onChange: (patch: Partia
       )}
       {n('depth', t.mode === 'add' && t.pattern !== 'grooves' ? 'Wysokość' : 'Głębokość', 0.2, 10, 0.1, 'mm')}
       {n('spacing', 'Odstęp', 0.8, 50, 0.2, 'mm')}
-      {n('angle', 'Kierunek', -180, 180, 15, '°')}
+      {n('angle', 'Kierunek (0° = pionowo)', -180, 180, 15, '°')}
       {n('margin', 'Margines od krawędzi', 0, 50, 0.5, 'mm')}
     </div>
   );

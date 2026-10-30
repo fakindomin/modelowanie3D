@@ -218,8 +218,10 @@ export function faceLevel(w: Manifold): number {
 }
 
 /** Adds the texture as real geometry, so it prints exactly as shown. */
-export function applyTexture(m: Manifold, t: Texture): Manifold {
-  if (t.face === 'around') return aroundTexture(m, t);
+export function applyTexture(m: Manifold, t0: Texture): Manifold {
+  if (t0.face === 'around') return aroundTexture(m, t0);
+  // Turned up, the side walls lie a quarter turn off the front and back: direction 0 is vertical on every wall.
+  const t = t0.face === 'left' || t0.face === 'right' ? { ...t0, angle: t0.angle + 90 } : t0;
   const turn = faceTurn(t.face);
   const w = m.rotate(turn.to);
   const top = faceLevel(w);
