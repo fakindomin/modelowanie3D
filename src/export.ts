@@ -185,11 +185,12 @@ function make3MF(objs: { mesh: ReturnType<BodyResult['manifold']['getMesh']>; na
   objs.forEach((o, i) => {
     const v = o.mesh.vertProperties, np = o.mesh.numProp, t = o.mesh.triVerts;
     const verts: string[] = [];
-    for (let k = 0; k < v.length; k += np) verts.push(`<vertex x="${fmt(v[k])}" y="${fmt(v[k + 1])}" z="${fmt(v[k + 2])}"/>`);
+    // Positions baked into the mesh: slicers judge "several heights = one multi-part object" from the raw mesh, not the item transform.
+    for (let k = 0; k < v.length; k += np) verts.push(`<vertex x="${fmt(v[k] + o.dx)}" y="${fmt(v[k + 1] + o.dy)}" z="${fmt(v[k + 2] + o.dz)}"/>`);
     const tris: string[] = [];
     for (let k = 0; k < t.length; k += 3) tris.push(`<triangle v1="${t[k]}" v2="${t[k + 1]}" v3="${t[k + 2]}"/>`);
     objects += `<object id="${i + 1}" name="${esc(o.name)}" type="model"><mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh></object>`;
-    items += `<item objectid="${i + 1}" transform="1 0 0 0 1 0 0 0 1 ${fmt(o.dx)} ${fmt(o.dy)} ${fmt(o.dz)}"/>`;
+    items += `<item objectid="${i + 1}"/>`;
   });
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="pl-PL" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
