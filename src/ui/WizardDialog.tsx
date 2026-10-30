@@ -195,7 +195,7 @@ function Steps({ wz, initial, run }: { wz: Wizard; initial: WizValues; run?: str
         </footer>
       </aside>
       <section className="wiz-view">
-        {plan && <PreviewCanvas plan={plan} focus={s.focus} />}
+        {plan && <PreviewCanvas plan={plan} focus={s.focus} ghost={s.ghost} />}
         <div className="wiz-focus">
           Teraz: <b>{s.focusLabel}</b>
           {busy && <span className="wiz-busy"> · przeliczam…</span>}
@@ -321,7 +321,7 @@ function BedInset({ plan, pipe }: { plan: Plan; pipe: number }) {
   );
 }
 
-function PreviewCanvas({ plan, focus }: { plan: Plan; focus: string[] }) {
+function PreviewCanvas({ plan, focus, ghost }: { plan: Plan; focus: string[]; ghost?: string[] }) {
   return (
     <Canvas dpr={[1, 2]} camera={{ position: [1500, -2000, 1500], fov: 35, near: 5, far: 50000, up: [0, 0, 1] }}>
       <color attach="background" args={['#161718']} />
@@ -329,13 +329,13 @@ function PreviewCanvas({ plan, focus }: { plan: Plan; focus: string[] }) {
       <directionalLight position={[2000, -3000, 4000]} intensity={1.4} />
       <directionalLight position={[-2000, 2000, 1500]} intensity={0.4} />
       <gridHelper args={[6000, 60, '#3a3d42', '#26282b']} rotation-x={Math.PI / 2} />
-      <Frame plan={plan} focus={focus} />
+      <Frame plan={plan} focus={focus} ghost={ghost} />
       <OrbitControls makeDefault enableDamping={false} />
     </Canvas>
   );
 }
 
-function Frame({ plan, focus }: { plan: Plan; focus: string[] }) {
+function Frame({ plan, focus, ghost }: { plan: Plan; focus: string[]; ghost?: string[] }) {
   const mats = useMemo(() => new Map<string, THREE.MeshStandardMaterial>(), []);
   const mat = (color: string, dim: boolean) => {
     const k = color + (dim ? 'd' : '');
@@ -363,6 +363,8 @@ function Frame({ plan, focus }: { plan: Plan; focus: string[] }) {
     // Only when the size changes noticeably, so orbiting survives small edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, controls]);
+  // Bodies drawn see-through on this step (the lid while choosing dividers).
+  const see = useMemo(() => new Set((plan.parts ?? []).filter((p) => ghost?.some((g) => (p.wiz?.role ?? '').startsWith(g))).map((p) => p.body)), [plan, ghost]);
   // Ready parts (boxes, lids): shown as printed, holes cut.
   const bodies = useMemo(() => (plan.parts ? buildBodies(plan.parts) : []), [plan]);
   useEffect(
@@ -376,7 +378,7 @@ function Frame({ plan, focus }: { plan: Plan; focus: string[] }) {
   return (
     <group position={[-W / 2, -D / 2, 0]}>
       {bodies.map((b) => (
-        <mesh key={'r' + b.body} geometry={b.geometry} material={mat(b.color, false)} />
+        <mesh key={'r' + b.body} geometry={b.geometry} material={mat(b.color, !!ghost && see.has(b.body))} />
       ))}
       {plan.placements.map((pl, i) => {
         const it = byRole.get(pl.role)!;

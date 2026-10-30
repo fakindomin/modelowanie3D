@@ -340,6 +340,7 @@ export const BOX_WIZARD: Wizard = {
       desc: 'Przegródki dzielą pudełko na komory. Pokrywka dostaje na nie wycięcia sama.',
       focus: [],
       focusLabel: 'przegródki',
+      ghost: ['K', 'G', 'U'],
       fields: (v) =>
         v.shape === 'rect'
           ? [

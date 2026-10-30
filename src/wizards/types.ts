@@ -22,6 +22,8 @@ export interface Step {
   /** Item groups shown in full colour on this step (the rest dims); empty = everything. */
   focus: string[];
   focusLabel: string;
+  /** Roles drawn see-through on this step, e.g. the lid while choosing what is inside. */
+  ghost?: string[];
   fields: (v: WizValues, plan: Plan | null) => Field[];
 }
 
