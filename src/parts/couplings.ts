@@ -246,6 +246,25 @@ function radialCyl(r0: number, r1: number, rad: number, z: number, a: number) {
   return cyl(r1 - r0, rad).rotate([0, 90, 0]).translate([r0, 0, z]).rotate([0, 0, (a * 180) / Math.PI]);
 }
 
+/**
+ * Plain socket or plug with nothing else holding it (no screw, no o-ring): crush ribs make it a press fit.
+ * Returns how far the ribs reach past the pipe's surface (0 = none, a loose fit for glue).
+ */
+function pressOf(geo: FitGeo, p: Params, i: number) {
+  const e = geo.ends[i];
+  if ((e !== 'socket' && e !== 'plug') || p.press === 'loose' || geo.screwOf(i).s || oringFor(geo, p, i)) return 0;
+  return num(p, 'rib') || 0.15;
+}
+/**
+ * One rib along +Z on the +X side, from r0 (the tip touching the pipe) to r1 (inside the wall), 1.2 mm wide,
+ * tapering to `flush` near the mouth so the pipe finds its way in. Negative radii put it on −X (a plug's outside).
+ */
+function crushRib(r0: number, r1: number, flush: number, z0: number, L: number) {
+  const [a, b] = r0 < r1 ? [r0, r1] : [r1, r0];
+  const [fa, fb] = r0 < r1 ? [flush, r1] : [r1, flush];
+  return M().Manifold.hull([box(a, -0.6, z0, b, 0.6, L - 4), box(fa, -0.6, L - 1.2, fb, 0.6, L - 1.19)]);
+}
+
 const sq = (w: number, h: number, z0: number, z1: number) => box(-w / 2, -h / 2, z0, w / 2, h / 2, z1);
 
 /** The outer shell of an arm and what is cut out of it (in the arm frame, arm along +Z from the centre). */
@@ -271,11 +290,21 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
       const pw = inW - 2 * g, ph = inH - 2 * g;
       adds.push(sq(pw, ph, stop - 0.01, L - 0.95).add(M().Manifold.hull([sq(pw, ph, L - 1, L - 0.99), sq(pw - 1.6, ph - 1.6, L - 0.01, L)])));
       // Ribs that bite into the profile a little: holds without glue.
-      for (const s of [-1, 1]) adds.push(box(-0.6, s * (ph / 2) - 0.01 + (s < 0 ? -0.25 : 0), stop + 2, 0.6, s * (ph / 2) + 0.01 + (s > 0 ? 0.25 : 0), L - 3));
+      if (pressOf(geo, p, i)) for (const s of [-1, 1]) adds.push(box(-0.6, s * (ph / 2) - 0.01 + (s < 0 ? -0.25 : 0), stop + 2, 0.6, s * (ph / 2) + 0.01 + (s > 0 ? 0.25 : 0), L - 3));
     } else {
       const ow = D + 2 * (g + wall), oh = H + 2 * (g + wall);
       adds.push(sq(ow, oh, 0, L));
       cuts.push(sq(D + 2 * g, H + 2 * g, stop, L + 1));
+      const rib = pressOf(geo, p, i);
+      if (rib) {
+        // Crush ribs in the middle of each wall: the profile goes in tight and stays without glue.
+        const ribs: Manifold[] = [];
+        for (const [half, other, turn] of [[D / 2, H, 0], [H / 2, D, 90], [D / 2, H, 180], [H / 2, D, 270]] as const) {
+          if (other < 6) continue;
+          ribs.push(crushRib(half - rib, half + g + 0.3, half + g, stop + 0.5, L).rotate([0, 0, turn]));
+        }
+        post = union(ribs);
+      }
       if (end === 'pin') {
         const ps = pinSpots(geo, p);
         for (const a of ps.angles) cuts.push(radialCyl(halfAt(geo, i, a) + g - 0.1, halfAt(geo, i, a) + g + wall + 1, geo.pinD / 2 + g, ps.z, a));
@@ -306,6 +335,8 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
     if (rin > 1.5) cuts.push(cyl(L + 2, rin).translate([0, 0, -1]));
     // Room for the pipe pushed over the plug: other arms' collars must not reach into it.
     cuts.push(cyl(depth + 2, D / 2 + 2).subtract(cyl(depth + 4, idR - 0.01).translate([0, 0, -1])).translate([0, 0, stop]));
+    const rib = pressOf(geo, p, i);
+    if (rib) post = union([0, 60, 120, 180, 240, 300].map((a) => crushRib(-(idR + rib), -(rp - 0.3), -rp, stop + 1, L).rotate([0, 0, a + 30])));
   } else if (end === 'male') {
     const spec = geo.thread(i);
     adds.push(cyl(stop, spec.d / 2 + 1));
@@ -318,6 +349,8 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
     adds.push(cyl(L, Ro));
     if (end === 'female') cuts.push(internalThreadCut(spec, depth, threadGap(p, 'in'), true).translate([0, 0, stop]));
     else cuts.push(cyl(depth + 1, D / 2 + g).translate([0, 0, stop]), cyl(0.81, D / 2 + g, D / 2 + g + 0.8).translate([0, 0, L - 0.8]));
+    const rib = end === 'socket' ? pressOf(geo, p, i) : 0;
+    if (rib) post = union([0, 60, 120, 180, 240, 300].map((a) => crushRib(D / 2 - rib, D / 2 + g + 0.3, D / 2 + g, stop + 0.5, L).rotate([0, 0, a + 30])));
     cuts.push(cyl(stop + 0.02, idR).translate([0, 0, -0.01]));
     const r1 = D / 2 + g - geo.pinD, r2 = Ro + 1;
     if (end === 'bayonet') {
@@ -519,6 +552,15 @@ const endsOf = (p: Params) => [String(p.end), ...Array.from({ length: 6 }, (_, i
 const uses = (p: Params, ...es: string[]) => endsOf(p).some((e) => es.includes(e));
 const notOnly = (p: Params, _e: string) => endsOf(p).some((x) => x !== 'pin' && x !== 'closed' && x !== 'bolt');
 
+/** Plain sockets and plugs (no screw, clip or o-ring): press fit on ribs, or loose for glue. */
+const pressParams: ParamDef[] = [
+  {
+    ...select('press', 'Gładkie połączenie', 'ribs', [['ribs', 'Na wcisk (żeberka, trzyma bez kleju)'], ['loose', 'Luźne (do klejenia)']]),
+    show: (p) => uses(p, 'socket', 'plug'),
+    hint: 'Żeberka wewnątrz kielicha (albo na czopie) lekko się zgniatają, gdy wciskasz rurę. Tylko w gładkich końcach bez śruby i o-ringu.',
+  },
+  n('rib', 'Wcisk żeberek', 0.15, 0.05, 0.5, 0.05, { show: (p: Params) => p.press !== 'loose' && uses(p, 'socket', 'plug'), hint: 'Za ciasno: 0,1. Za luźno: 0,2–0,25.' }),
+];
 const fitSel = { ...select('fit', 'Dopasowanie gwintu', 'normal', Object.entries(FITS).map(([k, v]) => [k, v.label] as [string, string])) };
 const threaded = (p: Params) => uses(p, 'male', 'female');
 
@@ -592,6 +634,7 @@ export const COUPLING_DEFS: PartDef[] = [
       n('depth', 'Głębokość wsunięcia', 20, 6, 200, 1),
       n('wall', 'Ścianka łącznika', 2.5, 1.2, 10, 0.2),
       n('luz', 'Luz na promieniu', 0.25, 0, 1.5, 0.05, { hint: 'Dla kupnych rur 0,2–0,3 mm. Do klejenia może być więcej.' }),
+      ...pressParams,
       n('P', 'Skok gwintu', 1.5, 0.75, 4, 0.25, { show: (p: Params) => threaded(p) && !String(p.std).startsWith('g'), hint: 'Rury G mają gwint rurowy z normy, bez wyboru skoku.' }),
       { ...fitSel, show: threaded },
       ...pinParams,
@@ -624,6 +667,7 @@ export const COUPLING_DEFS: PartDef[] = [
       n('depth', 'Głębokość wsunięcia', 20, 6, 200, 1),
       n('wall', 'Ścianka nasuwki', 2.5, 1.2, 10, 0.2),
       n('luz', 'Luz na stronę', 0.2, 0, 1.5, 0.05),
+      ...pressParams,
       ...pinParams,
       ...screwParams(false),
     ],

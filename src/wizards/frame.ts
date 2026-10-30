@@ -105,6 +105,7 @@ function plan(v: WizValues): Plan {
     depth,
     wall,
     luz,
+    press: joint === 'glue' ? 'loose' : 'ribs',
     pinD,
     pins: '2',
     oring: 'none',
