@@ -1,7 +1,7 @@
 import { MAGNETS, type Params } from '../catalog';
 import { worldBox } from '../geom/parts';
-import type { Part, TextureFace, Vec3, WizValues } from '../types';
-import { addLabel, bedOf, lidFace, mm, pl, printerField, r1, texField, texSideField, texture, tiles } from './common';
+import type { Part, Vec3, WizValues } from '../types';
+import { addLabel, bedOf, lidFace, mm, pl, printerField, r1, texField, texSideField, texSides, texture, tiles, wallTextures } from './common';
 import { host, type WizTools } from './host';
 import { rawPlan } from './raw';
 import type { Field, Plan, Wizard } from './types';
@@ -53,7 +53,7 @@ function organizer(v: WizValues): Plan {
           params: { ...base, W: r1(W - GAP), D: r1(D - GAP), nx: cx, ny: cy, div: '' },
           position: [r1(x + W / 2), r1(y + D / 2), 0],
           color: '#c9b48a',
-          ...(v.tex !== 'none' ? { texture: texture(String(v.tex), String(v.texOn) as TextureFace) } : {}),
+          textures: wallTextures(v, false),
         });
         const box = t.parts().find((p) => p.id === id)!;
         if (bins && v.notch) addNotch(t, box);
@@ -85,7 +85,7 @@ function organizer(v: WizValues): Plan {
   const tooBig = items.some((i) => Number(i.params.W) > bed[0] || Number(i.params.D) > bed[1]);
   if (tooBig) notes.push({ warn: true, text: 'Komora jest większa niż stół drukarki. Dodaj przegródek albo wybierz większą drukarkę.' });
   if (Math.min(cw, ch) < 15) notes.push({ warn: true, text: 'Komory węższe niż 15 mm trudno opróżnić palcami. Zmniejsz liczbę przegródek.' });
-  if (String(v.text ?? '').trim() && v.tex !== 'none' && v.texOn === 'front') notes.push({ warn: true, text: 'Napis i faktura są na przedniej ściance, napis będzie słabo widać. Przenieś fakturę na bok.' });
+  if (String(v.text ?? '').trim() && v.tex !== 'none' && texSides(v).includes('front')) notes.push({ warn: true, text: 'Napis i faktura są na przedniej ściance, napis będzie słabo widać. Przenieś fakturę na bok.' });
   if (H < 15) notes.push({ warn: true, text: 'Bardzo niski wkład: sprawdź wysokość szuflady.' });
 
   return {
@@ -226,7 +226,10 @@ function boxPlan(v: WizValues): Plan {
     }
     const box = t.parts().find((p) => p.id === id)!;
     const lid = t.parts().find((p) => (p.type === 'lid' || p.type === 'slab') && !p.hole);
-    if (v.tex !== 'none') t.update(id, { texture: texture(String(v.tex), shape === 'round' ? 'around' : (String(v.texOn) as TextureFace)) });
+    if (v.tex !== 'none') {
+      t.update(id, { textures: wallTextures(v, shape === 'round') });
+      if (lid && texSides(v).includes('lid')) t.update(lid.id, { textures: [texture(String(v.tex), lidFace(lid))] });
+    }
     if (knob === 'notch') addNotch(t, t.parts().find((p) => p.id === id)!);
     if (lid && (knob === 'knob' || knob === 'tab')) {
       const b = worldBox(lid);
@@ -282,7 +285,9 @@ function boxPlan(v: WizValues): Plan {
   if (W > bed[0] || D > bed[1] || H > bed[2]) notes.push({ warn: true, text: `Pudełko nie mieści się na stole (${bed.join(' × ')} mm). Zmniejsz je albo wybierz większą drukarkę.` });
   if (close === 'slide' && Number(v.wall) < 2) notes.push({ text: 'Wsuwana pokrywka potrzebuje ścianki 2 mm na rowki: pogrubiłem ją.' });
   if (close === 'magnet' && !magnets.size) notes.push({ warn: true, text: 'Ścianki są za cienkie na te magnesy. Wybierz mniejsze albo grubszą ściankę.' });
-  if (label && v.textOn !== 'lid' && v.tex !== 'none' && (shape === 'round' || v.texOn === 'front')) notes.push({ warn: true, text: 'Napis i faktura są na tej samej ściance, napis będzie słabo widać. Przenieś fakturę na bok albo napis na pokrywkę.' });
+  const texOn = v.tex === 'none' ? [] : texSides(v);
+  if (label && v.textOn !== 'lid' && (shape === 'round' ? texOn.some((f) => f !== 'lid') : texOn.includes('front'))) notes.push({ warn: true, text: 'Napis i faktura są na tej samej ściance, napis będzie słabo widać. Odznacz fakturę z przodu albo przenieś napis na pokrywkę.' });
+  if (label && v.textOn === 'lid' && texOn.includes('lid')) notes.push({ warn: true, text: 'Napis i faktura są na pokrywce, napis będzie słabo widać. Odznacz „Góra pokrywki” albo przenieś napis na przód.' });
   if (close === 'screw') notes.push({ text: 'Gwint ma skok 3 mm: zakręca się w niecały obrót i dobrze się drukuje.' });
   if (params.ends === 'open') notes.push({ text: 'Bez dna: to rura z gwintem u góry, np. osłona albo łącznik.' });
   if (params.ends === 'both') notes.push({ text: 'Rura z gwintem z obu stron: na każdym końcu zakręcana pokrywka z uszczelką.' });
@@ -299,6 +304,11 @@ export const BOX_WIZARD: Wizard = {
     const next = { ...v, [key]: value };
     // A closing the new shape cannot have falls back to a plain lid.
     if (key === 'shape' && !CLOSES[String(next.close)].shapes.includes(String(value))) next.close = 'press';
+    // Texture faces carry over: any wall ↔ all around a round box; the lid stays as it was.
+    if (key === 'shape') {
+      const on = texSides(v), lid = on.includes('lid') ? ['lid'] : [], walls = on.some((f) => f !== 'lid');
+      next.texOn = [...(walls ? (value === 'round' ? ['around'] : on.filter((f) => f !== 'lid' && f !== 'around').length ? on.filter((f) => f !== 'lid' && f !== 'around') : ['front', 'back', 'left', 'right']) : []), ...lid].join(',');
+    }
     return next;
   },
   plan: boxPlan,
@@ -357,7 +367,7 @@ export const BOX_WIZARD: Wizard = {
       focusLabel: 'wygląd',
       fields: (v) => [
         ...texField(v.shape === 'round'),
-        ...texSideField(v, v.shape === 'round'),
+        ...texSideField(v, v.shape === 'round', true),
         ...(v.close !== 'screw' ? [tiles('knob', Object.entries(KNOBS).filter(([, k]) => k.closes.includes(String(v.close))).map(([k, o]) => ({ value: k, label: o.label, desc: o.desc })), 'Do otwierania')] : []),
         { kind: 'text', key: 'text', label: 'Napis', placeholder: 'np. ŚRUBKI M3', max: 24 },
         ...(String(v.text ?? '').trim()

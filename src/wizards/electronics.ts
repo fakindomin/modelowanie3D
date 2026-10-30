@@ -4,13 +4,12 @@ import { connectorParams, CONNECTORS, type WallSide } from '../parts/connectors'
 import { BOARDS, EDGE_SIDE } from '../parts/raspberry';
 import { glandSize } from '../parts/fittings';
 import { THREADS } from '../parts/threads';
-import type { Part, TextureFace, Vec3, WizValues } from '../types';
-import { addLabel, bedOf, lidFace, mm, pl, printerField, r1, SIDES, texField, texture, tiles } from './common';
+import type { Part, Vec3, WizValues } from '../types';
+import { addLabel, bedOf, lidFace, mm, pl, printerField, r1, SIDES, texField, texSideField, texSides, texture, tiles, wallTextures } from './common';
 import { host, type WizTools } from './host';
 import { rawPlan } from './raw';
 import type { Field, Plan, Wizard } from './types';
 
-const SIDE_TO: Record<string, WallSide> = { front: 'front', back: 'back', left: 'left', right: 'right' };
 const portOn = (v: WizValues, i: number) => v[`port${i}`] !== false;
 
 /** Vertical slots through one wall, spread over its upper half. */
@@ -67,7 +66,10 @@ function casePlan(v: WizValues): Plan {
     if (vent === 'hex' || vent === 'slot')
       t.update(lid.id, { infill: { on: true, pattern: vent === 'hex' ? 'hex' : 'slot', axis: 'z', cell: vent === 'hex' ? 8 : 7, rib: 2, margin: 6, mode: 'through', depth: 1 } });
     if (vent === 'back') addSlots(t, box, 'back');
-    if (v.tex !== 'none') t.update(id, { texture: texture(String(v.tex), String(v.texOn) as TextureFace) });
+    if (v.tex !== 'none') {
+      t.update(id, { textures: wallTextures(v, false) });
+      if (texSides(v).includes('lid')) t.update(lid.id, { textures: [texture(String(v.tex), lidFace(lid))] });
+    }
     if (mount === 'ears') {
       addEars(t, box);
       t.update(lid.id, { position: [r1(lid.position[0] + 20), lid.position[1], lid.position[2]] });
@@ -119,8 +121,8 @@ function casePlan(v: WizValues): Plan {
   if (key === 'pi5' && vent === 'none') notes.push({ warn: true, text: 'Pi 5 grzeje się mocno: dodaj wentylację w pokrywce albo z tyłu.' });
   if (label && (vent === 'hex' || vent === 'slot')) notes.push({ warn: true, text: 'Napis i ażur są na pokrywce: napis może wypaść na otwory. Wybierz szczeliny z tyłu.' });
   const portSides = new Set(board.ports.filter((_, i) => portOn(v, i)).map((p) => EDGE_SIDE[p.edge] as string));
-  if (v.tex !== 'none' && portSides.has(String(v.texOn))) notes.push({ warn: true, text: 'Na tej ściance są gniazda: faktura będzie wokół otworów. Lepiej wybierz tył.' });
-  if (v.tex !== 'none' && vent === 'back' && v.texOn === 'back') notes.push({ warn: true, text: 'Faktura i szczeliny są na tylnej ściance. Przenieś fakturę na inną.' });
+  if (v.tex !== 'none' && texSides(v).some((f) => portSides.has(f))) notes.push({ warn: true, text: 'Na tej ściance są gniazda: faktura będzie wokół otworów. Lepiej wybierz tył.' });
+  if (v.tex !== 'none' && vent === 'back' && texSides(v).includes('back')) notes.push({ warn: true, text: 'Faktura i szczeliny są na tylnej ściance. Przenieś fakturę na inną.' });
   const W = Number(caseBox.params.W) + (mount === 'ears' ? 32 : 0);
   if (W > bed[0] || Number(caseBox.params.D) > bed[1]) notes.push({ warn: true, text: 'Obudowa nie mieści się na stole drukarki.' });
   return { items, placements: [], parts, buy, steps, notes, bed, longest: Number(caseBox.params.H), size: size as Vec3 };
@@ -189,7 +191,7 @@ export const CASE_WIZARD: Wizard = {
       focusLabel: 'wygląd',
       fields: (v) => [
         ...texField(false),
-        ...(v.tex !== 'none' ? [tiles('texOn', Object.entries(SIDES).map(([k, l]) => ({ value: SIDE_TO[k], label: l })), 'Na której ściance', 4)] : []),
+        ...texSideField(v, false, true),
         { kind: 'text', key: 'text', label: 'Napis na pokrywce', placeholder: 'np. SERWER', max: 20 },
       ],
     },

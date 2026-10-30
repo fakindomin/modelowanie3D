@@ -281,12 +281,20 @@ function FieldView({ f, values, set }: { f: Field; values: WizValues; set: (k: s
         <input type="range" min={f.min} max={f.max} step={f.step} value={Number(values[f.key])} onChange={(e) => set(f.key, Number(e.target.value))} />
       </label>
     );
+  const picked = f.multi ? String(values[f.key] ?? '').split(',').filter(Boolean) : [];
+  const on = (value: unknown) => (f.multi ? picked.includes(String(value)) : values[f.key] === value);
+  const pick = (value: string | number) => {
+    if (!f.multi) return set(f.key, value);
+    const k = String(value);
+    set(f.key, (on(k) ? picked.filter((x) => x !== k) : [...picked, k]).join(','));
+  };
   return (
     <div className="wiz-field">
       {f.label && <span className="wiz-label">{f.label}</span>}
       <div className={`wiz-tiles c${f.cols ?? 2}`}>
         {f.options.map((o) => (
-          <button key={String(o.value)} className={values[f.key] === o.value ? 'wiz-tile on' : 'wiz-tile'} onClick={() => set(f.key, o.value)}>
+          <button key={String(o.value)} className={on(o.value) ? 'wiz-tile on' : 'wiz-tile'} onClick={() => pick(o.value)}>
+            {f.multi && <span className="wiz-check">{on(o.value) ? '☑' : '☐'}</span>}
             {o.icon && (
               <svg viewBox="0 0 100 48" aria-hidden="true">
                 <path d={o.icon} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />

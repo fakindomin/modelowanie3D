@@ -10,7 +10,7 @@ export interface TileOption {
 }
 
 export type Field =
-  | { kind: 'tiles'; key: string; label?: string; options: TileOption[]; cols?: 2 | 3 | 4 }
+  | { kind: 'tiles'; key: string; label?: string; options: TileOption[]; cols?: 2 | 3 | 4; /** Several at once, kept as 'a,b,c'. */ multi?: boolean }
   | { kind: 'slider'; key: string; label: string; min: number; max: number; step: number; unit: string }
   | { kind: 'toggle'; key: string; label: string; desc: string }
   | { kind: 'text'; key: string; label: string; placeholder?: string; max?: number }

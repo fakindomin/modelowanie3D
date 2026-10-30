@@ -10,7 +10,7 @@ import { DEFAULT_EDGES } from '../geom/edges';
 import { DEFAULT_BEND } from '../geom/bend';
 import { DEFAULT_INFILL, DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/modify';
 import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
-import type { Bend, Edges, Infill, Part, Shell, Texture, TextureFace, Vec3, Xform } from '../types';
+import type { Bend, Edges, Infill, Part, PlainFace, Shell, Texture, TextureFace, Vec3, Xform } from '../types';
 import { LATTICE_LABELS } from '../geom/lattice';
 import { buildBodies, texturesOf } from '../geom/parts';
 import { Icon } from './Icon';
@@ -663,6 +663,19 @@ function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) 
           {n('spacing', 'Odstęp', 0.8, 50, 0.2, 'mm')}
           {n('angle', 'Kierunek', -180, 180, 15, '°')}
           {n('margin', 'Margines od krawędzi', 0, 50, 0.5, 'mm')}
+          <h5>Ta sama faktura także na</h5>
+          <div className="row">
+            {(Object.keys(FACE_LABELS) as PlainFace[])
+              .filter((k) => k !== face && k !== 'around')
+              .map((k) => {
+                const has = list.some((x) => x.face === k);
+                return (
+                  <button key={k} className={has ? 'chip on' : 'chip'} title={has ? 'Kliknij, żeby zdjąć fakturę z tej ścianki' : 'Kliknij, żeby dać tu tę samą fakturę'} onClick={() => setFaceTexture(part.id, k, has ? undefined : { ...t, face: k })}>
+                    {has ? '☑' : '☐'} {FACE_LABELS[k]}
+                  </button>
+                );
+              })}
+          </div>
         </>
       )}
     </div>
