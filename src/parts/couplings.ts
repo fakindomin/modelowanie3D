@@ -256,6 +256,27 @@ function pressOf(geo: FitGeo, p: Params, i: number) {
   return num(p, 'rib') || 0.15;
 }
 /**
+ * Where the ribs of arm i go (degrees about the arm, arm frame), as the fitting is printed (as built, Z up).
+ * A lying arm keeps ribs off the part of the surface that faces the bed's opposite way: inside a socket
+ * nothing in the upper half (a rib there hangs from the ceiling), on a plug nothing in the lower half.
+ * A standing arm has its ribs upright, all round.
+ */
+function ribAngles(geo: FitGeo, i: number, inside: boolean, square: boolean): number[] {
+  const up = Z.clone().applyQuaternion(armQuat(geo.dirs[i]).invert());
+  const all = square ? [0, 90, 180, 270] : [30, 90, 150, 210, 270, 330];
+  if (Math.hypot(up.x, up.y) < 0.5) return all;
+  const top = (Math.atan2(up.y, up.x) * 180) / Math.PI;
+  if (square) {
+    // A wall facing straight up (socket) or down (plug) loses its rib.
+    const bad = inside ? top : top + 180;
+    return all.filter((a) => Math.abs(((a - bad + 540) % 360) - 180) > 45);
+  }
+  // Ribs only from the side walls round the bottom (socket) or the top (plug).
+  const mid = inside ? top + 180 : top;
+  return (inside ? [-90, -45, 0, 45, 90] : [-60, -30, 0, 30, 60]).map((k) => mid + k);
+}
+
+/**
  * One rib along +Z on the +X side, from r0 (the tip touching the pipe) to r1 (inside the wall).
  * Prints without supports in any position: a pointed section (flanks steeper than 45°) and both ends
  * sloping back at 45° to `flush` (the surface it stands on). Negative radii put it on −X (a plug's outside).
@@ -295,7 +316,8 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
       adds.push(sq(pw, ph, stop - 0.01, L - 0.95).add(M().Manifold.hull([sq(pw, ph, L - 1, L - 0.99), sq(pw - 1.6, ph - 1.6, L - 0.01, L)])));
       // Ribs that bite into the profile a little: holds without glue.
       const prib = pressOf(geo, p, i) && 0.25;
-      if (prib) for (const s of [-1, 1]) adds.push(crushRib(ph / 2 + prib, ph / 2 - 0.3, ph / 2, stop + 1, L).rotate([0, 0, s * 90]));
+      const keep = ribAngles(geo, i, false, true);
+      if (prib) for (const s of [-1, 1]) if (keep.includes(s > 0 ? 90 : 270)) adds.push(crushRib(ph / 2 + prib, ph / 2 - 0.3, ph / 2, stop + 1, L).rotate([0, 0, s * 90]));
     } else {
       const ow = D + 2 * (g + wall), oh = H + 2 * (g + wall);
       adds.push(sq(ow, oh, 0, L));
@@ -304,8 +326,9 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
       if (rib) {
         // Crush ribs in the middle of each wall: the profile goes in tight and stays without glue.
         const ribs: Manifold[] = [];
+        const keep = ribAngles(geo, i, true, true);
         for (const [half, other, turn] of [[D / 2, H, 0], [H / 2, D, 90], [D / 2, H, 180], [H / 2, D, 270]] as const) {
-          if (other < 6) continue;
+          if (other < 6 || !keep.includes(turn)) continue;
           ribs.push(crushRib(half - rib, half + g + 0.3, half + g, stop + 0.5, L).rotate([0, 0, turn]));
         }
         post = union(ribs);
@@ -341,7 +364,8 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
     // Room for the pipe pushed over the plug: other arms' collars must not reach into it.
     cuts.push(cyl(depth + 2, D / 2 + 2).subtract(cyl(depth + 4, idR - 0.01).translate([0, 0, -1])).translate([0, 0, stop]));
     const rib = pressOf(geo, p, i);
-    if (rib) post = union([0, 60, 120, 180, 240, 300].map((a) => crushRib(-(idR + rib), -(rp - 0.3), -rp, stop + 1, L).rotate([0, 0, a + 30])));
+    // Built on −X, so turned by a further 180°.
+    if (rib) post = union(ribAngles(geo, i, false, false).map((a) => crushRib(-(idR + rib), -(rp - 0.3), -rp, stop + 1, L).rotate([0, 0, a + 180])));
   } else if (end === 'male') {
     const spec = geo.thread(i);
     adds.push(cyl(stop, spec.d / 2 + 1));
@@ -355,7 +379,7 @@ function arm(geo: FitGeo, p: Params, i: number): { add: Manifold; cut?: Manifold
     if (end === 'female') cuts.push(internalThreadCut(spec, depth, threadGap(p, 'in'), true).translate([0, 0, stop]));
     else cuts.push(cyl(depth + 1, D / 2 + g).translate([0, 0, stop]), cyl(0.81, D / 2 + g, D / 2 + g + 0.8).translate([0, 0, L - 0.8]));
     const rib = end === 'socket' ? pressOf(geo, p, i) : 0;
-    if (rib) post = union([0, 60, 120, 180, 240, 300].map((a) => crushRib(D / 2 - rib, D / 2 + g + 0.3, D / 2 + g, stop + 0.5, L).rotate([0, 0, a + 30])));
+    if (rib) post = union(ribAngles(geo, i, true, false).map((a) => crushRib(D / 2 - rib, D / 2 + g + 0.3, D / 2 + g, stop + 0.5, L).rotate([0, 0, a])));
     cuts.push(cyl(stop + 0.02, idR).translate([0, 0, -0.01]));
     const r1 = D / 2 + g - geo.pinD, r2 = Ro + 1;
     if (end === 'bayonet') {
