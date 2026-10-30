@@ -8,7 +8,7 @@ import { MAGNET_COVER, MAGNET_LUZ, MAGNET_WALL, type FaceMagnetOptions, boxForLi
 import { figurine, figurineParams, fitHeight, FIG_MODELS } from './parts/figurine';
 import { magnetIssues, runCheck, type CheckResult, type Fix } from './geom/check';
 import { placeMates } from './geom/gearMates';
-import { isFitting, pipeFor, placeArmMates } from './geom/armMates';
+import { isFitting, pipeFor, pipeHoles, placeArmMates } from './geom/armMates';
 import { END_LETTERS, fittingGeo, oringFor, pinSpots, screwSpots, type FitGeo } from './parts/couplings';
 import type { Bend, Edges, Infill, Part, PatternRule, Project, ProjectV1, Shell, Tab, Texture, TextureFace, Vec3, WizValues, Xform } from './types';
 import { WIZARDS } from './wizards';
@@ -443,11 +443,12 @@ export const useStore = create<State>((set, get) => {
       next.push(makePart('hole', next, { name: `${role === 'pin' ? 'Otwór na bolec' : 'Otwór na śrubę'} ${END_LETTERS[i]}.${k + 1}`, body, avoidBody: fit.body, armOf: { of: fit.id, i, role, k } }));
       holes++;
     };
+    const own = pipeHoles(geo, fit.params, i);
     if (end === 'pin') {
-      pinSpots(geo, fit.params).angles.forEach((_, k) => add('pin', k));
+      if (!own) pinSpots(geo, fit.params).angles.forEach((_, k) => add('pin', k));
       next.push(makePart('springClip', next, { name: `Zatrzask ${END_LETTERS[i]} do: ${fit.name}`, armOf: { of: fit.id, i, role: 'clip', k: 0 } }));
       clips++;
-    } else if (geo.screwOf(i).s) screwSpots(geo, fit.params, i).angles.forEach((_, k) => add('screw', k));
+    } else if (geo.screwOf(i).s && !own) screwSpots(geo, fit.params, i).angles.forEach((_, k) => add('screw', k));
     return { holes, clips };
   };
 

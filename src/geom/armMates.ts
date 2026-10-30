@@ -18,6 +18,27 @@ const inward = (r: number, a: number, z: number) => pose(r * Math.cos(a), r * Ma
 /** Ends whose pipe sits in the arm (not screwed on): only these get holes drilled in the pipe. */
 const seated = (end: string) => end !== 'male' && end !== 'female' && end !== 'closed';
 
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * Holes a round pipe in arm i needs, made by the pipe's own end A (clip pins, or the screw of a socket, plug or bolt arm):
+ * distance from the pipe's end, diameter and the turn of the pipe about its axis (its holes go along its X).
+ */
+export function pipeHoles(geo: FitGeo, p: Params, i: number): { end: 'pin' | 'screw'; at: number; d: number; turn: number } | null {
+  if (geo.square) return null;
+  const end = geo.ends[i];
+  if (end === 'pin') {
+    const ps = pinSpots(geo, p);
+    return { end: 'pin', at: r2(ps.z - geo.stop), d: geo.pinD, turn: ps.angles[0] };
+  }
+  const so = geo.screwOf(i);
+  if (!so.s || !(end === 'socket' || end === 'plug' || end === 'bolt')) return null;
+  const sp = screwSpots(geo, p, i);
+  // Socket: pilot hole for a plastic screw (or a through hole for a bolt); plug: the pipe gets the clearance hole.
+  const d = end === 'plug' || so.through ? so.s + 0.4 : so.s * 0.8;
+  return { end: 'screw', at: r2(sp.z - geo.stop), d: r2(d), turn: sp.angles[0] };
+}
+
 /**
  * The pipe that fits fitting arm i: its type and the parameters that must match, its end A paired with the arm
  * (female thread → male thread, bayonet → pins, click → groove or windows, the rest → plain). Null for a closed arm.
@@ -33,6 +54,9 @@ export function pipeFor(fit: Part, geo: FitGeo, i = 0): { type: string; params: 
   if (end === 'male')
     return { type: 'pipeFitting', params: { kind: 'straight', end: 'female', std: p.std, D: p.D, T: p.T, depth: p.depth, wall: p.wall, luz: p.luz, P: p.P, fit: p.fit, screw: 'none' } };
   if (end === 'female' || end === 'bayonet' || end === 'click') return { type: 'pipeEnd', params: { end: end === 'female' ? 'male' : end, depth: p.depth, P: p.P, fit: p.fit, pinD: p.pinD, wall: p.wall, luz: p.luz } };
+  const h = pipeHoles(geo, p, i);
+  if (h?.end === 'pin') return { type: 'pipeEnd', params: { end: 'pin', pinAt: h.at, pinD: h.d, luz: p.luz } };
+  if (h?.end === 'screw') return { type: 'pipeEnd', params: { end: 'screw', pinAt: h.at, screwD: h.d } };
   return { type: 'pipeEnd', params: { end: 'socket' } };
 }
 
@@ -63,9 +87,13 @@ function armLocal(fit: Part, mate: Part, geo: FitGeo): { m: THREE.Matrix4; param
       return { m: arm.multiply(pose(0, 0, z, rotY(-Math.PI / 2))), params: { ...want.params, std: pipeStd, D, T } };
     }
     const z = mate.type === 'pipeEnd' && end === 'female' ? geo.stop + geo.depth + 5 : geo.stop;
-    return { m: arm.multiply(pose(0, 0, z)), params: { ...want.params, std: pipeStd, D, T } };
+    // A pipe with holes turns so they face the fitting's.
+    const turn = pipeHoles(geo, p, a.i)?.turn ?? 0;
+    return { m: arm.multiply(pose(0, 0, z, rotZ(turn))), params: { ...want.params, std: pipeStd, D, T } };
   }
   if (!seated(end)) return null;
+  // Round pipes make these holes themselves (end A): separate holes are gone.
+  if ((a.role === 'pin' || a.role === 'screw') && pipeHoles(geo, p, a.i)) return null;
   if (a.role === 'screw') {
     const so = geo.screwOf(a.i);
     if (!so.s) return null;
