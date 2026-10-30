@@ -1,0 +1,87 @@
+// Small schematic pictograms for the part library (cross-sections / silhouettes).
+const PATHS: Record<string, string> = {
+  gear: 'M22.3 12.3 L24.9 12.7 L24.9 15.3 L22.3 15.7 L21.1 18.7 L22.6 20.8 L20.8 22.6 L18.7 21.1 L15.7 22.3 L15.3 24.9 L12.7 24.9 L12.3 22.3 L9.3 21.1 L7.2 22.6 L5.4 20.8 L6.9 18.7 L5.7 15.7 L3.1 15.3 L3.1 12.7 L5.7 12.3 L6.9 9.3 L5.4 7.2 L7.2 5.4 L9.3 6.9 L12.3 5.7 L12.7 3.1 L15.3 3.1 L15.7 5.7 L18.7 6.9 L20.8 5.4 L22.6 7.2 L21.1 9.3 Z M17 14 A3 3 0 1 0 17 14.01',
+  wormWheel: 'M22.3 12.3 L24.9 12.7 L24.9 15.3 L22.3 15.7 L21.1 18.7 L22.6 20.8 L20.8 22.6 L18.7 21.1 L15.7 22.3 L15.3 24.9 L12.7 24.9 L12.3 22.3 L9.3 21.1 L7.2 22.6 L5.4 20.8 L6.9 18.7 L5.7 15.7 L3.1 15.3 L3.1 12.7 L5.7 12.3 L6.9 9.3 L5.4 7.2 L7.2 5.4 L9.3 6.9 L12.3 5.7 L12.7 3.1 L15.3 3.1 L15.7 5.7 L18.7 6.9 L20.8 5.4 L22.6 7.2 L21.1 9.3 Z M17 14 A3 3 0 1 0 17 14.01 M8 4 L20 24',
+  bevelGear: 'M4 22 L8 10 H20 L24 22 Z M8 10 L10 6 H18 L20 10 M11 22 L12 10 M17 22 L16 10',
+  ringGear: 'M14 2 A12 12 0 1 0 14.01 2 M20.9 12.9 L23.0 13.2 L23.0 14.8 L20.9 15.1 L20.2 17.2 L21.7 18.6 L20.8 20.0 L18.9 18.9 L17.2 20.2 L17.6 22.3 L16.0 22.8 L15.1 20.9 L12.9 20.9 L12.0 22.8 L10.4 22.3 L10.8 20.2 L9.1 18.9 L7.2 20.0 L6.3 18.6 L7.8 17.2 L7.1 15.1 L5.0 14.8 L5.0 13.2 L7.1 12.9 L7.8 10.8 L6.3 9.4 L7.2 8.0 L9.1 9.1 L10.8 7.8 L10.4 5.7 L12.0 5.2 L12.9 7.1 L15.1 7.1 L16.0 5.2 L17.6 5.7 L17.2 7.8 L18.9 9.1 L20.8 8.0 L21.7 9.4 L20.2 10.8 Z',
+  rack: 'M3 20 H25 V24 H3 Z M3 20 L5 14 H8 L10 20 M10 20 L12 14 H15 L17 20 M17 20 L19 14 H22 L24 20',
+  worm: 'M9 3 H19 V25 H9 Z M9 7 L19 10 M9 12 L19 15 M9 17 L19 20 M9 22 L19 25',
+  planetary: 'M14 2 A12 12 0 1 0 14.01 2 M14 10 A4 4 0 1 0 14.01 10 M14 3 A3.5 3.5 0 1 0 14.01 3 M5 17 A3.5 3.5 0 1 0 5.01 17 M23 17 A3.5 3.5 0 1 0 23.01 17',
+  gt2Pulley: 'M4 6 H24 M4 22 H24 M7 6 V22 M21 6 V22 M7 9 H9 M7 13 H9 M7 17 H9 M21 9 H19 M21 13 H19 M21 17 H19',
+  threadTest: 'M3 5 H11 V9 H3 Z M5 9 V22 H9 V9 M15 8 H25 L25 14 H15 Z M15 18 H25 V24 H15 Z',
+  text: 'M5 7 H23 M14 7 V23 M10 23 H18',
+  textCut: 'M4 5 H24 V23 H4 Z M8 9 H20 M14 9 V19',
+  pipeSaddle: 'M3 22 H9 V16 A5 5 0 0 1 19 16 V22 H25 M9 16 A5 5 0 0 1 19 16',
+  pipeClip: 'M10 6 A7 7 0 1 0 18 6 M6 24 H22',
+  pipeClamp: 'M3 14 H8 A6 6 0 0 1 20 14 H25 M3 16 H8 A6 6 0 0 0 20 16 H25',
+  sketch: 'M5 21 L5 11 L14 5 L23 11 L23 21 Z M5 11 h0.1 M14 5 h0.1 M23 11 h0.1',
+  sketchRev: 'M14 3 V25 M14 4 H18 L17 9 L21 18 L20 24 H14',
+  mesh: 'M14 4 L24 10 L24 20 L14 25 L4 20 L4 10 Z M4 10 L14 15 L24 10 M14 15 V25 M9 7.5 L19 12.5',
+  box: 'M4 9 L4 24 L24 24 L24 9 M7 9 L7 21 L21 21 L21 9 M14 12 L14 21',
+  lid: 'M3 10 H25 V14 H3 Z M7 14 V19 H21 V14',
+  drawer: 'M4 7 H24 V23 H4 Z M10 12 Q14 17 18 12',
+  cabinet: 'M4 4 H24 V24 H4 Z M6 6 H13 V13 H6 Z M15 6 H22 V13 H15 Z M6 15 H13 V22 H6 Z M15 15 H22 V22 H15 Z',
+  plate: 'M3 11 H25 V17 H3 Z M7 14 h0.1 M21 14 h0.1',
+  flat: 'M3 12 H25 V16 H3 Z',
+  angle: 'M6 5 V23 H24 V19 H10 V5 Z',
+  tee: 'M4 19 H24 V23 H4 Z M12 5 H16 V19 H12 Z',
+  channel: 'M4 6 V23 H24 V6 H20 V19 H8 V6 Z',
+  rhs: 'M5 5 H23 V23 H5 Z M9 9 H19 V19 H9 Z',
+  tube: 'M14 4 A10 10 0 1 0 14.01 4 M14 8 A6 6 0 1 0 14.01 8',
+  rod: 'M14 5 A9 9 0 1 0 14.01 5',
+  cube: 'M5 10 L14 5 L23 10 L23 20 L14 25 L5 20 Z M5 10 L14 15 L23 10 M14 15 V25',
+  cylinder: 'M5 8 A9 3.5 0 0 0 23 8 A9 3.5 0 0 0 5 8 V21 A9 3.5 0 0 0 23 21 V8',
+  cone: 'M14 4 L4 22 A10 3.5 0 0 0 24 22 Z',
+  wedge: 'M4 23 H24 L4 7 Z',
+  sphere: 'M14 4 A10 10 0 1 0 14.01 4 M4 14 A10 3.5 0 0 0 24 14',
+  hole: 'M14 6 A8 8 0 1 0 14.01 6',
+  holeBox: 'M6 6 H22 V22 H6 Z',
+  peg: 'M9 24 V9 L11 6 H17 L19 9 V24',
+  pegSquare: 'M8 24 V6 H20 V24',
+  magnet: 'M5 11 A9 3.5 0 0 0 23 11 A9 3.5 0 0 0 5 11 V17 A9 3.5 0 0 0 23 17 V11 M14 8 V11',
+  insert: 'M9 6 H19 V23 H9 Z M9 10 L19 12 M9 14 L19 16 M9 18 L19 20',
+  screw: 'M6 5 H22 V10 H17 V24 H11 V10 H6 Z',
+  nut: 'M9 5 H19 L24 14 L19 23 H9 L4 14 Z M14 10 A4 4 0 1 0 14.01 10',
+  perfPlate: 'M3 11 H25 V17 H3 Z M7 14 h0.1 M11 14 h0.1 M15 14 h0.1 M19 14 h0.1 M23 14 h0.1',
+  slab: 'M3 12 L11 8 H25 L17 12 Z M3 12 V16 H17 V12 M17 16 L25 12 V8',
+  threadHole: 'M14 5 A9 9 0 1 0 14.01 5 M8 10 L20 12 M7 14 L21 16 M8 18 L20 20',
+  bolt: 'M7 4 H21 V9 H7 Z M10 9 V24 H18 V9 M10 12 L18 14 M10 16 L18 18 M10 20 L18 22',
+  threadNut: 'M9 5 H19 L24 14 L19 23 H9 L4 14 Z M14 9 A5 5 0 1 0 14.01 9 M11 12 L17 14 M11 15 L17 17',
+  pilot: 'M14 9 A5 5 0 1 0 14.01 9 M14 4 V24',
+  hinge: 'M4 4 H11 V24 H4 Z M17 4 H24 V24 H17 Z M11 6 H17 V10 H11 Z M11 13 H17 V17 H11 Z M11 20 H17 V24 H11 Z',
+  hingePip: 'M4 4 H11 V24 H4 Z M17 4 H24 V24 H17 Z M11 6 H17 V10 H11 Z M11 13 H17 V17 H11 Z M11 20 H17 V24 H11 Z M14 8 h0.1',
+  snapFit: 'M8 24 V6 H12 V4 L16 8 L12 12 V24 Z',
+  dovetail: 'M4 24 H24 V20 H18 L22 6 H6 L10 20 H4 Z',
+  gland: 'M8 4 H20 V9 H8 Z M5 9 H23 V13 H5 Z M9 13 V24 H19 V13 M12 4 V24 M16 4 V24',
+  cableSlot: 'M10 8 A6 6 0 1 0 10.01 8 M14 11 H22 A3 3 0 0 1 22 17 H14',
+  cableClamp: 'M3 22 H25 V18 H20 A6 6 0 0 0 8 18 H3 Z M14 18 A3 3 0 1 0 14.01 18',
+  hoseBarb: 'M10 24 V18 H6 V14 H22 V18 H18 V24 M11 14 L9 10 H19 L17 14 M11 10 L9 6 H19 L17 10 M12 6 V3 H16 V6',
+  oring: 'M14 4 A10 10 0 1 0 14.01 4 M14 8 A6 6 0 1 0 14.01 8',
+  pipeFitting: 'M3 11 H25 V17 H3 Z M11 17 V25 H17 V17 M3 9 V19 M25 9 V19 M9 25 H19',
+  profileFitting: 'M4 4 H12 V16 H24 V24 H4 Z M8 4 V20 H24',
+  pipeEnd: 'M9 3 H19 V18 H9 Z M8 18 L20 20 M8 21 L20 23 M8 24 L20 26',
+  springClip: 'M8 25 V8 M20 25 V8 M8 25 H20 M3 9 H8 M20 9 H25',
+  oringPart: 'M14 4 A10 10 0 1 0 14.01 4 M14 7 A7 7 0 1 0 14.01 7',
+  gasket: 'M14 5 A9 9 0 1 0 14.01 5 M14 10 A4 4 0 1 0 14.01 10',
+  connector: 'M3 5 H25 V23 H3 Z M8 11 H20 A3 3 0 0 1 20 17 H8 A3 3 0 0 1 8 11 Z',
+  piCase: 'M3 9 V24 H25 V9 M6 18 H22 V21 H6 Z M8 15 V18 M20 15 V18 M25 12 H22 V16 H25',
+  figurine: 'M14 3 C10 3 9 7 11 10 C6 11 6 18 8 22 H20 C22 18 22 11 17 10 C19 7 18 3 14 3 Z M11 14 V21 M14 13 V22 M17 14 V21',
+};
+
+export function Icon({ type, hole }: { type: string; hole: boolean }) {
+  return (
+    <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden>
+      <path
+        d={PATHS[type] ?? PATHS.cube}
+        fill={hole ? 'none' : 'currentColor'}
+        fillOpacity={hole ? 0 : 0.18}
+        stroke="currentColor"
+        strokeWidth="1.6"
+        fillRule="evenodd"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        strokeDasharray={hole ? '2.5 2' : undefined}
+      />
+    </svg>
+  );
+}
