@@ -6,6 +6,8 @@ import { THREAD_DEFS } from './parts/threads';
 import { JOINT_DEFS } from './parts/joints';
 import { FITTING_DEFS } from './parts/fittings';
 import { GEAR_DEFS } from './parts/gears';
+import { SPRING_DEFS } from './parts/springs';
+import { SPRING_MECH_DEFS } from './parts/springMechs';
 import { CONNECTOR_DEFS } from './parts/connectors';
 import { FIGURINE_DEF } from './parts/figurine';
 import { TEXT_DEFS } from './parts/text';
@@ -34,6 +36,7 @@ export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'threads', label: 'Gwinty i śruby' },
   { id: 'hinges', label: 'Zawiasy i łączniki' },
   { id: 'gears', label: 'Zębatki' },
+  { id: 'springs', label: 'Sprężyny' },
   { id: 'fittings', label: 'Przepusty i złączki' },
   { id: 'connectors', label: 'Otwory pod złącza' },
 ];
@@ -803,7 +806,7 @@ const BASE: PartDef[] = [
   },
 ];
 
-export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...COUPLING_DEFS, ...CONNECTOR_DEFS, FIGURINE_DEF];
+export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...SPRING_DEFS, ...SPRING_MECH_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...COUPLING_DEFS, ...CONNECTOR_DEFS, FIGURINE_DEF];
 
 export const DEFS: Record<string, PartDef> = Object.fromEntries(CATALOG.map((d) => [d.type, d]));
 

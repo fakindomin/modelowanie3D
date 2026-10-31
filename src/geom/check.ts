@@ -7,6 +7,7 @@ import { buildBodies, failed, worldBox, worldManifold } from './parts';
 import { surfaceAbove, surfaceBelow } from './snap';
 import { findLid, ringOk } from './magnets';
 import { planetLayout } from '../parts/gears';
+import { coilPitch } from '../parts/springs';
 
 /** A correction "Popraw wszystkie" may apply. */
 export type Fix = { kind: 'move'; id: string; position: Vec3 } | { kind: 'mirror'; body: number; lid: string; resting: boolean };
@@ -88,6 +89,7 @@ export function runCheck(parts: Part[], minWall: number): CheckResult {
     if (failed(p)) issues.push({ level: 'error', text: `„${p.name}” ma wymiary, z których nie da się zbudować bryły (pokazany jako mały sześcian).`, select: p.id });
 
   issues.push(...gearIssues(parts));
+  issues.push(...springIssues(parts));
 
   // Threads and magnet pockets in a bend come out warped.
   for (const body of new Set(parts.map((p) => p.body))) {
@@ -288,6 +290,28 @@ function gearIssues(parts: Part[]): Issue[] {
     } catch {
       /* geometry not ready */
     }
+  }
+  return out;
+}
+
+/** Printed springs: material that keeps its spring, wires and gaps that print. */
+const SPRINGY = new Set(['springFlat', 'springCoil', 'springTorsion', 'springSpiral', 'pushButton', 'clicker', 'pushPush', 'detentKnob', 'springLatch', 'clampClip', 'springHinge']);
+
+function springIssues(parts: Part[]): Issue[] {
+  const out: Issue[] = [];
+  const n = (p: Part, k: string) => Number(p.params[k]);
+  const springs = parts.filter((p) => SPRINGY.has(p.type) && !p.hole && (p.params.piece === undefined || p.params.piece === 'spring' || p.params.piece === 'knob' || p.params.piece === 'base'));
+  if (springs.length)
+    out.push({ level: 'info', text: `Sprężyny drukuj z PETG albo TPU. Z PLA z czasem „siadają” i tracą siłę (dotyczy: ${springs.slice(0, 3).map((p) => `„${p.name}”`).join(', ')}${springs.length > 3 ? ' i inne' : ''}).`, select: springs[0].id });
+  for (const p of parts) {
+    if (p.type === 'springCoil') {
+      const { gap } = coilPitch(p.params);
+      if (gap < 0.5) out.push({ level: 'warn', text: `Zwoje „${p.name}” mają tylko ${fmt(gap, 2)} mm przerwy: mogą się zlać w druku. Wydłuż sprężynę albo zmniejsz liczbę zwojów.`, select: p.id });
+    }
+    const wire = p.type === 'springCoil' || p.type === 'springTorsion' ? Math.min(n(p, 'w'), n(p, 'hw')) : p.type === 'springFlat' || p.type === 'springSpiral' ? n(p, 't') : Infinity;
+    if (wire < 0.8) out.push({ level: 'warn', text: `„${p.name}” ma drut ${fmt(wire, 2)} mm: to mniej niż 2 ścieżki dyszy 0,4 mm, łatwo pęknie.`, select: p.id });
+    if (p.type === 'clicker' && n(p, 'sag') < 2.4 * n(p, 't'))
+      out.push({ level: 'warn', text: `Blaszka „${p.name}” jest za płaska na swoją grubość: nie przeskoczy z kliknięciem. Daj ugięcie co najmniej ${fmt(2.5 * n(p, 't'))} mm.`, select: p.id });
   }
   return out;
 }

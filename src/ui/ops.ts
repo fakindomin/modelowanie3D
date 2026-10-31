@@ -22,6 +22,8 @@ const GROUPS: Record<string, Group> = {
   bolt: 'thread', threadNut: 'thread', nut: 'thread', screw: 'thread', insert: 'thread', threadTest: 'thread',
   gear: 'gear', ringGear: 'gear', bevelGear: 'gear', worm: 'gear', wormWheel: 'gear', planetary: 'gear', gt2Pulley: 'gear',
   rack: 'rack',
+  springFlat: 'joint', springCoil: 'joint', springTorsion: 'joint', springSpiral: 'joint', springPocket: 'joint',
+  pushButton: 'joint', clicker: 'joint', pushPush: 'joint', detentKnob: 'joint', springLatch: 'joint', clampClip: 'joint', springHinge: 'joint',
   hinge: 'joint', hingePip: 'joint', boxHinge: 'joint', snapFit: 'joint', dovetail: 'joint', peg: 'joint', pegSquare: 'joint',
   gland: 'fitting', hoseBarb: 'fitting', cableClamp: 'fitting', oring: 'fitting', gasket: 'fitting', oringPart: 'fitting',
   pipeFitting: 'coupling', profileFitting: 'coupling', springClip: 'coupling', pipeEnd: 'tubeProfile',

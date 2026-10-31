@@ -110,6 +110,23 @@ export const FAMILIES: Family[] = [
     ],
   },
   {
+    id: 'springMech',
+    label: 'Mechanizmy ze sprężyną',
+    icon: 'pushButton',
+    category: 'ready',
+    noSizes: true,
+    variants: [
+      { label: 'Przycisk', type: 'pushButton' },
+      { label: 'Przycisk z otworem na mikrostyk', type: 'pushButton', params: { tact: true } },
+      { label: 'Clicker', type: 'clicker' },
+      { label: 'Mechanizm długopisowy', type: 'pushPush' },
+      { label: 'Pokrętło z zapadkami', type: 'detentKnob' },
+      { label: 'Zasuwka sprężynowa', type: 'springLatch' },
+      { label: 'Klamerka', type: 'clampClip' },
+      { label: 'Klapka samozamykająca', type: 'springHinge' },
+    ],
+  },
+  {
     id: 'square',
     label: 'Profile kanciaste',
     icon: 'angle',

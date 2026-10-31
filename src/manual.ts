@@ -51,9 +51,16 @@ function signature(members: Part[]) {
   return members.map(one).sort().join('|');
 }
 
+/** Printed springs and the springy pieces of spring mechanisms. */
+const SPRINGY = (p: Part) =>
+  ['springFlat', 'springCoil', 'springTorsion', 'springSpiral', 'clicker', 'clampClip'].includes(p.type) ||
+  (['pushButton', 'pushPush', 'springLatch', 'springHinge'].includes(p.type) && p.params.piece === 'spring') ||
+  (p.type === 'pushPush' && p.params.piece === 'base') ||
+  (p.type === 'detentKnob' && p.params.piece === 'knob');
+
 function materialOf(p: Part, wiz?: PlanItem) {
   if (wiz) return wiz.material;
-  if (p.type === 'springClip') return 'PETG';
+  if (p.type === 'springClip' || SPRINGY(p)) return 'PETG';
   if (p.type === 'oringPart' || p.type === 'gasket') return 'TPU';
   return 'PLA';
 }
@@ -61,6 +68,8 @@ function materialOf(p: Part, wiz?: PlanItem) {
 function howOf(p: Part, single: boolean, wiz?: PlanItem) {
   if (wiz) return wiz.how;
   if (p.type === 'springClip') return 'Leży płasko, bez podpór. PETG albo nylon.';
+  if (p.type === 'springCoil' || p.type === 'springTorsion' || (p.params.piece === 'spring' && (p.type === 'pushButton' || p.type === 'springHinge'))) return 'Stoi na końcu, bez podpór, PETG albo TPU, wolno (30 mm/s).';
+  if (SPRINGY(p)) return 'Leży płasko, bez podpór, PETG albo TPU. Z PLA sprężyna z czasem słabnie.';
   if (p.type === 'oringPart' || p.type === 'gasket') return 'Leży płasko, TPU 85A–95A, wolno (20–30 mm/s).';
   if (p.type === 'pipeEnd' || p.type === 'tube') return 'Stoi pionowo, brim 5 mm.';
   if (single && p.type === 'pipeFitting') return 'Stoi na jednym ramieniu, podpory drzewkowe pod resztą ramion.';
