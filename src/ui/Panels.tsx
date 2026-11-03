@@ -1353,6 +1353,22 @@ function PartProperties({ part }: { part: Part }) {
     </div>
   );
   const [noteFor, setNoteFor] = useState<string | null>(null);
+  // Extra sizes open by default; folding them is remembered for all parts.
+  const [moreOpen, setMoreOpenState] = useState(() => {
+    try {
+      return localStorage.getItem('modelowanie3d.moreDims') !== 'closed';
+    } catch {
+      return true;
+    }
+  });
+  const setMoreOpen = (v: boolean) => {
+    setMoreOpenState(v);
+    try {
+      localStorage.setItem('modelowanie3d.moreDims', v ? 'open' : 'closed');
+    } catch {
+      /* not stored */
+    }
+  };
   const showNote = !!part.note || noteFor === part.id;
   const wiz = part.wiz && WIZARDS[part.wiz.w];
   const status = [];
@@ -1420,12 +1436,12 @@ function PartProperties({ part }: { part: Part }) {
       </h4>
       {main.map(field)}
       {more.length > 0 && (
-        <div className="more-dims">
-          <h5>
+        <details className="more-dims" open={moreOpen} onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
+          <summary>
             Wymiary dodatkowe <Info text={INFO.moreDims} />
-          </h5>
+          </summary>
           {more.map(field)}
-        </div>
+        </details>
       )}
       {ends.length > 0 && <EndsSection part={part} fields={ends} />}
       {part.type === 'figurine' && (
