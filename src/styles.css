@@ -690,3 +690,13 @@ body.resizing { cursor: col-resize; user-select: none; }
 .end-letter { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; flex: none; }
 .end-row:hover .end-letter { background: var(--accent-2, #e8873a); }
 .ends > button.small { margin-top: 4px; }
+
+/* Library: Projekty / Części */
+.lib-mode { display: flex; gap: 2px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; margin: 2px 0 8px; }
+.lib-mode button { flex: 1; border: none; background: transparent; padding: 5px 8px; border-radius: 6px; color: var(--muted); font-weight: 600; }
+.lib-mode button.on { background: var(--sel); color: #fff; box-shadow: inset 0 -2px 0 var(--accent); }
+.lib-head { margin: 10px 0 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.cat-sub { grid-column: 1 / -1; margin: 6px 0 0; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.cat-sub:first-child { margin-top: 0; }
+.tile.project { position: relative; }
+.tile.project .badge { position: absolute; top: 2px; right: 4px; font-size: 10px; }

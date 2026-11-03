@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
@@ -20,8 +20,20 @@ import { FAMILIES, IN_FAMILY, type Family, type Size } from '../families';
 import { WALL_SIDES, sideOf, type WallSide } from '../parts/connectors';
 import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, segmentsOf, toggleSegment, type DivLayout } from '../geom/dividers';
 import { fittingGeo } from '../parts/couplings';
+import { PROJECT_ITEMS, USE_CATS, itemsIn, type ProjectItem } from '../projects';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
+/** The „Części” tab: the building blocks in a few groups, each holding one or more of the old categories. */
+const PART_GROUPS: { id: string; label: string; cats: Category[] }[] = [
+  { id: 'ready', label: 'Gotowe elementy', cats: ['ready'] },
+  { id: 'solids', label: 'Bryły i kształty', cats: ['basic'] },
+  { id: 'profiles', label: 'Profile i rury', cats: ['profile'] },
+  { id: 'joins', label: 'Łączenia', cats: ['joints', 'threads', 'hinges', 'couplings'] },
+  { id: 'mech', label: 'Mechanika', cats: ['gears', 'springs'] },
+  { id: 'elec', label: 'Elektronika i instalacje', cats: ['connectors', 'fittings'] },
+];
+type LibMode = 'projects' | 'parts';
+const LIB_MODE_KEY = 'modelowanie3d.libraryMode';
 
 export function Library() {
   const add = useStore((s) => s.add);
@@ -33,6 +45,24 @@ export function Library() {
   });
   const [open, setOpen] = useState<string | null>('box');
   const [q, setQ] = useState('');
+  const [mode, setModeState] = useState<LibMode>(() => {
+    try {
+      return localStorage.getItem(LIB_MODE_KEY) === 'parts' ? 'parts' : 'projects';
+    } catch {
+      return 'projects';
+    }
+  });
+  const setMode = (m: LibMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(LIB_MODE_KEY, m);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const openWizard = useStore((s) => s.openWizard);
+  const addVariant = useStore((s) => s.addVariant);
+  const setTab = useStore((s) => s.setTab);
   const [closed, setClosed] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '[]') as string[]);
@@ -54,7 +84,7 @@ export function Library() {
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = 0;
-  }, [tab]);
+  }, [tab, mode]);
   const query = norm(q.trim());
   const hit = (...texts: string[]) => !query || texts.some((t) => norm(t).includes(query));
   const cats = tab === 'fig' ? FIG_TOOLS.map((id) => CATEGORIES.find((c) => c.id === id)!) : CATEGORIES;
@@ -64,8 +94,48 @@ export function Library() {
     const tiles = CATALOG.filter((d) => d.category === c.id && !d.hidden && (tab !== 'tech' || !IN_FAMILY.has(d.type)) && hit(d.label));
     return { c, fams, tiles };
   });
-  const nothing = !figs.length && sections.every((x) => !x.fams.length && !x.tiles.length);
-  const shown = (id: string) => !!query || !closed.has(id);
+  // Projects: by use (only the technical tab); while searching, every match once.
+  const projectsOn = tab === 'tech' && (mode === 'projects' || !!query);
+  const partsOn = tab !== 'tech' || mode === 'parts' || !!query;
+  const projHits = projectsOn && query ? PROJECT_ITEMS.filter((i) => hit(i.label, i.desc, ...i.tags.map((t) => USE_CATS.find((c) => c.id === t)!.label))) : [];
+  const nothing = !!query && !figs.length && !projHits.length && (!partsOn || sections.every((x) => !x.fams.length && !x.tiles.length));
+  // Main part groups start open; project categories start shut (the set lists the ones flipped).
+  const shown = (id: string) => !!query || (id.startsWith('proj:') ? closed.has(id) : !closed.has(id));
+  const runItem = (i: ProjectItem) => {
+    if (i.kind === 'wizard') openWizard({ id: i.wizard });
+    else if (i.kind === 'part') add(i.type);
+    else if (i.kind === 'figurines') setTab('fig');
+    else {
+      const f = FAMILIES.find((x) => x.id === i.family)!;
+      addVariant(f, f.variants.find((v) => v.label === i.variant)!, 'M');
+    }
+  };
+  const itemTile = (i: ProjectItem, key: string) => (
+    <button key={key} className={i.kind === 'wizard' ? 'tile project by-wizard' : 'tile project'} title={`${i.label}: ${i.desc}${i.kind === 'wizard' ? ' (kreator krok po kroku)' : i.kind === 'part' ? ' Wymiary zmienisz w panelu po prawej.' : ''}`} onClick={() => runItem(i)}>
+      <Icon type={i.icon} hole={false} />
+      <span>{i.label}</span>
+      {i.kind === 'wizard' && <span className="badge">✨</span>}
+    </button>
+  );
+  /** A part group: its old categories one after another, each with a small heading when there are several. */
+  const groups = PART_GROUPS.map((g) => {
+    const parts = sections.filter((x) => g.cats.includes(x.c.id) && (x.fams.length || x.tiles.length));
+    return { g, parts };
+  }).filter((x) => x.parts.length);
+  const sectionBody = ({ c, fams, tiles }: (typeof sections)[number], heading: boolean) => (
+    <Fragment key={c.id}>
+      {heading && <div className="cat-sub">{c.label}</div>}
+      {fams.map(({ f, only }) => (
+        <FamilyTile key={f.id} family={f} only={query ? only : undefined} open={!!query || open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />
+      ))}
+      {tiles.map((d) => (
+        <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={`${d.label}: ${d.description}`} onClick={() => add(d.type)}>
+          <Icon type={d.type} hole={d.hole} />
+          <span>{d.label}</span>
+        </button>
+      ))}
+    </Fragment>
+  );
   /** A main category: a tile with its icon, name and number of elements, opening smoothly. */
   const category = (id: string, label: string, icon: string, count: number, groups: number, body: React.ReactNode) => {
     const isOpen = shown(id);
@@ -90,7 +160,17 @@ export function Library() {
   };
   return (
     <aside className="library" ref={ref}>
-      <input className="lib-search" placeholder="Szukaj elementu…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} />
+      <input className="lib-search" placeholder={tab === 'tech' ? 'Szukaj projektu albo części…' : 'Szukaj elementu…'} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} />
+      {tab === 'tech' && (
+        <div className="lib-mode" role="tablist">
+          <button role="tab" aria-selected={mode === 'projects'} className={mode === 'projects' ? 'on' : ''} onClick={() => setMode('projects')} title="Gotowe rzeczy według miejsca: dom, kuchnia, ogród, warsztat…">
+            Projekty
+          </button>
+          <button role="tab" aria-selected={mode === 'parts'} className={mode === 'parts' ? 'on' : ''} onClick={() => setMode('parts')} title="Klocki do budowania: bryły, profile, łączenia, mechanika, elektronika">
+            Części
+          </button>
+        </div>
+      )}
       {selName && (
         <div className="hint">
           Nowy element pojawi się na górze: <b>{selName}</b>
@@ -110,28 +190,38 @@ export function Library() {
             </button>
           )),
         )}
-      {sections
-        .filter((x) => x.fams.length || x.tiles.length)
-        .map(({ c, fams, tiles }) =>
-          category(
-            `${tab}:${c.id}`,
-            tab === 'fig' && c.id === 'joints' ? 'Otwory, magnesy, czopy' : c.label,
-            fams[0]?.f.icon ?? tiles[0].type,
-            fams.reduce((n, x) => n + x.only.length, 0) + tiles.length,
-            fams.length + tiles.length,
-            <>
-              {fams.map(({ f, only }) => (
-                <FamilyTile key={f.id} family={f} only={query ? only : undefined} open={!!query || open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />
+      {projectsOn && query && projHits.length > 0 && category('proj:search', 'Projekty', projHits[0].icon, projHits.length, projHits.length, projHits.map((i) => itemTile(i, i.label)))}
+      {projectsOn &&
+        !query &&
+        USE_CATS.map((c) => {
+          const items = itemsIn(c.id);
+          return category(`proj:${c.id}`, c.label, c.icon, items.length, items.length, items.map((i) => itemTile(i, `${c.id}:${i.label}`)));
+        })}
+      {partsOn && tab === 'tech' && query && <div className="lib-head">Części</div>}
+      {partsOn &&
+        (tab === 'tech'
+          ? groups.map(({ g, parts }) =>
+              category(
+                `${tab}:g:${g.id}`,
+                g.label,
+                parts[0].fams[0]?.f.icon ?? parts[0].tiles[0].type,
+                parts.reduce((n, { fams, tiles }) => n + fams.reduce((k, x) => k + x.only.length, 0) + tiles.length, 0),
+                parts.reduce((n, { fams, tiles }) => n + fams.length + tiles.length, 0),
+                <>{parts.map((x) => sectionBody(x, parts.length > 1))}</>,
+              ),
+            )
+          : sections
+              .filter((x) => x.fams.length || x.tiles.length)
+              .map((x) =>
+                category(
+                  `${tab}:${x.c.id}`,
+                  x.c.id === 'joints' ? 'Otwory, magnesy, czopy' : x.c.label,
+                  x.fams[0]?.f.icon ?? x.tiles[0].type,
+                  x.fams.reduce((n, f) => n + f.only.length, 0) + x.tiles.length,
+                  x.fams.length + x.tiles.length,
+                  sectionBody(x, false),
+                ),
               ))}
-              {tiles.map((d) => (
-                <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={`${d.label}: ${d.description}`} onClick={() => add(d.type)}>
-                  <Icon type={d.type} hole={d.hole} />
-                  <span>{d.label}</span>
-                </button>
-              ))}
-            </>,
-          ),
-        )}
       {nothing && <p className="lib-empty">Nic nie pasuje do „{q}”.</p>}
       <LibraryResize />
     </aside>
