@@ -6,7 +6,7 @@ import { WIZARDS } from './wizards';
  * The „Projekty” tab: ready things grouped by where they are used. One thing may sit in several
  * places (tags); each opens a wizard, adds a part sized from what the user measures, or a family variant.
  */
-export type UseCat = 'home' | 'kitchen' | 'bath' | 'garden' | 'workshop' | 'desk' | 'electronics' | 'kids';
+export type UseCat = 'home' | 'kitchen' | 'bath' | 'garden' | 'workshop' | 'desk' | 'electronics' | 'kids' | 'printer' | 'pets' | 'vehicle';
 
 export const USE_CATS: { id: UseCat; label: string; icon: string }[] = [
   { id: 'home', label: 'Dom', icon: 'wallHook' },
@@ -17,6 +17,9 @@ export const USE_CATS: { id: UseCat; label: string; icon: string }[] = [
   { id: 'desk', label: 'Biurko', icon: 'penCup' },
   { id: 'electronics', label: 'Elektronika', icon: 'gland' },
   { id: 'kids', label: 'Dzieci i zabawki', icon: 'spinningTop' },
+  { id: 'printer', label: 'Drukarka 3D', icon: 'spoolHolder' },
+  { id: 'pets', label: 'Zwierzęta', icon: 'petBowl' },
+  { id: 'vehicle', label: 'Rower i auto', icon: 'barPhoneMount' },
 ];
 
 export type ProjectItem = { label: string; desc: string; tags: UseCat[]; icon: string } & (
@@ -108,10 +111,53 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   part('funnel', ['kitchen', 'workshop', 'garden']),
   part('measureCup', ['kitchen', 'garden']),
   part('clampSquare', ['workshop']),
+  // 3D printer.
+  part('spoolHolder', ['printer']),
+  part('filamentGuide', ['printer']),
+  part('spoolClip', ['printer']),
+  part('nozzleOrganizer', ['printer', 'workshop']),
+  part('clearanceTest', ['printer']),
+  // Pets.
+  part('petBowl', ['pets']),
+  part('leashHook', ['pets', 'home']),
+  part('treatBall', ['pets']),
+  part('bagDispenser', ['pets']),
+  // Bike and car.
+  part('barPhoneMount', ['vehicle']),
+  part('lightMount', ['vehicle']),
+  part('headrestHook', ['vehicle']),
+  part('ventCupHolder', ['vehicle']),
+  // Kitchen and home.
+  part('paperTowelHolder', ['kitchen']),
+  part('trivet', ['kitchen']),
+  part('capsuleRack', ['kitchen']),
+  part('bagOrganizer', ['kitchen', 'home']),
+  part('keyShelf', ['home']),
+  part('remoteHolder', ['home']),
+  part('broomHolder', ['home', 'workshop']),
+  part('toiletPaperHolder', ['bath', 'home']),
+  // Garden.
+  part('bottleDripper', ['garden']),
+  part('birdFeeder', ['garden', 'pets']),
+  part('meshClip', ['garden']),
+  part('seeder', ['garden']),
+  // Workshop and electronics.
+  part('screwTray', ['workshop']),
+  part('tapeHolder', ['workshop']),
+  part('brushStand', ['workshop', 'desk']),
+  part('powerStripMount', ['desk', 'electronics']),
+  part('headphoneStand', ['desk', 'electronics']),
+  part('vesaMount', ['electronics', 'desk']),
+  // Kids.
+  part('flexiSnake', ['kids']),
+  part('marbleMaze', ['kids']),
+  part('stamp', ['kids']),
+  part('sandMolds', ['kids', 'garden']),
   // Ready elements that are useful on their own.
   fam('box', 'Okrągłe z zakręcaną pokrywką', 'Słoik z zakręcaną pokrywką', ['kitchen', 'workshop']),
   fam('box', 'Z pokrywką na zawiasie', 'Pudełko z pokrywką na zawiasie', ['home', 'desk']),
   fam('drawer', 'Obudowa z szufladami', 'Szafka z szufladami (szybka)', ['workshop', 'desk']),
+  fam('drawer', 'Obudowa z szufladami', 'Organizer na śruby z szufladkami', ['workshop', 'printer']),
   fam('springMech', 'Klamerka', 'Klamerka', ['home', 'kitchen']),
   fam('springMech', 'Zasuwka sprężynowa', 'Zasuwka sprężynowa', ['home']),
   fam('springMech', 'Clicker', 'Clicker (pstryczek)', ['kids']),
@@ -119,7 +165,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   part('pipeClip', ['workshop', 'garden']),
   part('hoseBarb', ['garden']),
   part('gland', ['electronics']),
-  part('threadTest', ['workshop']),
+  part('threadTest', ['workshop', 'printer']),
   { kind: 'figurines', label: 'Figurki (żebrowana kolekcja)', desc: 'Zwierzaki i postacie do druku: osobna zakładka Figurki.', tags: ['kids'], icon: 'figurine' },
 ];
 

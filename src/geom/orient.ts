@@ -80,7 +80,7 @@ export function turnManifold(m: Manifold, turn: [0 | 1, number]): Manifold {
  * Parts whose pose is part of the design: threads (they print true standing up), print-in-place
  * mechanisms and fittings whose arms are laid out for the bed. A body holding one of them is not turned.
  */
-const KEEP = /bolt|thread|nut|jar|lid|gland|hoseBarb|pipe|profileFitting|springClip|hinge|Hinge|pushPush|clicker|springLatch|detentKnob|pushButton|clampClip|spring|gear|worm|rack|planetary|linearSlide|zipTie/;
+const KEEP = /bolt|thread|nut|jar|lid|gland|hoseBarb|pipe|profileFitting|springClip|hinge|Hinge|pushPush|clicker|springLatch|detentKnob|pushButton|clampClip|spring|gear|worm|rack|planetary|linearSlide|zipTie|flexi|Dripper/;
 export function keepsPose(parts: { type: string; params?: Record<string, unknown> }[]): boolean {
   return parts.some((p) => KEEP.test(p.type) || Object.entries(p.params ?? {}).some(([k, v]) => /thread/i.test(k) && v && v !== 'none' && v !== 'off'));
 }
