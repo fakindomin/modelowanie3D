@@ -716,3 +716,15 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 .more-dims { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
 .more-dims > summary { margin: 2px 0 6px; color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; }
+
+/* Review mode: a bar at the bottom of the viewport. */
+.review-bar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(760px, calc(100% - 24px)); background: var(--panel, #24272b); border: 1px solid var(--line, #3a3f45); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 8px 28px rgba(0,0,0,.35); z-index: 20; }
+.review-bar .rv-row { display: flex; gap: 6px; align-items: center; }
+.review-bar select { flex: 1; min-width: 0; }
+.review-bar .rv-count { font-variant-numeric: tabular-nums; opacity: .8; font-size: 12px; }
+.review-bar .rv-prog { width: 70px; height: 6px; border-radius: 3px; background: rgba(127,127,127,.25); overflow: hidden; }
+.review-bar .rv-prog span { display: block; height: 100%; background: #6fbf73; }
+.review-bar .rv-group { font-size: 12px; opacity: .75; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.review-bar .rv-note { flex: 1; min-width: 0; }
+.review-bar .rv-ok.on { background: #3f7d44; color: #fff; }
+.review-bar .rv-fix.on { background: #b8692a; color: #fff; }

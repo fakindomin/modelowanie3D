@@ -13,6 +13,7 @@ import { makeManual } from './manual';
 import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
 import { MobileApp, useMobile } from './ui/Mobile';
+import { ReviewBar, useReview } from './ui/Review';
 
 function projectOf(): Project {
   const s = useStore.getState();
@@ -22,39 +23,45 @@ function projectOf(): Project {
   return { version: 2, tech, fig, ...(refs.size ? { meshes: encodeMeshes(refs) } : {}) };
 }
 
+/** Bodies of the parts ready to print: each in its own print frame and in the pose needing the least support. */
+export function printBodies(parts: Part[]) {
+  const bodies = buildBodies(parts);
+  // Each body is named after its biggest solid part (the one the user knows it by).
+  const names = new Map<number, string>();
+  for (const b of bodies) {
+    const solids = parts.filter((p) => p.body === b.body && !p.hole);
+    const main = solids.reduce<(typeof solids)[number] | undefined>((a, p) => (!a || built(p).box.getSize(new THREE.Vector3()).length() > built(a).box.getSize(new THREE.Vector3()).length() ? p : a), undefined);
+    if (!main) continue;
+    names.set(b.body, main.name);
+    // Printed as designed: the part's own frame (pipes standing, fittings on an arm, clips flat), not as turned in the assembly.
+    if (main.rotation.some((r) => r)) {
+      const inv = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(main.rotation.map((r) => (r * Math.PI) / 180) as [number, number, number]))).invert();
+      const turned = b.manifold.transform(inv.elements as unknown as Parameters<typeof b.manifold.transform>[0]);
+      b.manifold.delete();
+      b.manifold = turned;
+    }
+  }
+  // Each body in the pose that needs the least support (kept as designed unless another pose clearly saves supports).
+  let turnedN = 0;
+  for (const b of bodies) {
+    if (keepsPose(parts.filter((p) => p.body === b.body && !p.hole))) continue;
+    const pose = bestPose(b.manifold);
+    if (!pose) continue;
+    const t = turnManifold(b.manifold, pose.turn);
+    b.manifold.delete();
+    b.manifold = t;
+    turnedN++;
+  }
+  return { bodies, names, turnedN };
+}
+
 /** File, export and other project-wide actions shared by the desktop toolbar and the phone menu. */
 export function useProjectActions() {
   const st = useStore();
   const file = useRef<HTMLInputElement>(null);
-  const exportAs = (fmt: 'stl' | '3mf') => {
-    const bodies = buildBodies(st.parts);
+  const exportAs = (fmt: 'stl' | '3mf', fileName?: string) => {
+    const { bodies, names, turnedN } = printBodies(st.parts);
     if (!bodies.length) return st.notify('Brak brył do eksportu. Dodaj jakiś element.');
-    // Each body is named after its biggest solid part (the one the user knows it by).
-    const names = new Map<number, string>();
-    for (const b of bodies) {
-      const solids = st.parts.filter((p) => p.body === b.body && !p.hole);
-      const main = solids.reduce<(typeof solids)[number] | undefined>((a, p) => (!a || built(p).box.getSize(new THREE.Vector3()).length() > built(a).box.getSize(new THREE.Vector3()).length() ? p : a), undefined);
-      if (!main) continue;
-      names.set(b.body, main.name);
-      // Printed as designed: the part's own frame (pipes standing, fittings on an arm, clips flat), not as turned in the assembly.
-      if (main.rotation.some((r) => r)) {
-        const inv = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(main.rotation.map((r) => (r * Math.PI) / 180) as [number, number, number]))).invert();
-        const turned = b.manifold.transform(inv.elements as unknown as Parameters<typeof b.manifold.transform>[0]);
-        b.manifold.delete();
-        b.manifold = turned;
-      }
-    }
-    // Each body in the pose that needs the least support (kept as designed unless another pose clearly saves supports).
-    let turnedN = 0;
-    for (const b of bodies) {
-      if (keepsPose(st.parts.filter((p) => p.body === b.body && !p.hole))) continue;
-      const pose = bestPose(b.manifold);
-      if (!pose) continue;
-      const t = turnManifold(b.manifold, pose.turn);
-      b.manifold.delete();
-      b.manifold = t;
-      turnedN++;
-    }
     // STL: one file per kind of print (as in the manual: number, name, how many to print), not one per copy.
     let out = bodies;
     let plateN = 0;
@@ -64,7 +71,7 @@ export function useProjectActions() {
       const groups = new Map<number, string>();
       for (const it of items) for (const b of it.bodies) groups.set(b, it.material);
       const bed = loadBed();
-      plateN = export3MF(bodies, st.tab === 'fig' ? 'figurki' : 'model', names, false, [bed[0], bed[1]], new Set(groups.values()).size > 1 ? groups : new Map());
+      plateN = export3MF(bodies, fileName ?? (st.tab === 'fig' ? 'figurki' : 'model'), names, false, [bed[0], bed[1]], new Set(groups.values()).size > 1 ? groups : new Map());
     } else {
       out = items.flatMap((it) => {
         const b = bodies.find((x) => x.body === it.bodies[0]);
@@ -72,7 +79,7 @@ export function useProjectActions() {
         names.set(b.body, `${/^\d+$/.test(it.no) ? it.no.padStart(2, '0') : it.no} ${it.name}${it.qty > 1 ? ` x${it.qty}` : ''}`);
         return [b];
       });
-      exportSTL(out, st.tab === 'fig' ? 'figurki' : 'model', names, true);
+      exportSTL(out, fileName ?? (st.tab === 'fig' ? 'figurki' : 'model'), names, true);
     }
     bodies.forEach((b) => {
       b.geometry.dispose();
@@ -119,6 +126,7 @@ export function useProjectActions() {
 
 function Toolbar() {
   const st = useStore();
+  const review = useReview();
   const act = useProjectActions();
 
   return (
@@ -167,6 +175,9 @@ function Toolbar() {
       <div className="group right">
         <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Podgląd wydruku: wynik po wycięciu otworów i sklejeniu brył">
           {st.preview ? '✓ Podgląd' : 'Podgląd'}
+        </button>
+        <button className={review.open ? 'toggle on' : 'toggle'} onClick={() => review.setOpen(!review.open)} title="Przegląd: wszystkie elementy po kolei, każdy z 3MF do slicera i oceną OK / do zmiany z uwagą">
+          🔍 Przegląd
         </button>
         <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają">Sprawdź model</button>
         <button onClick={act.manual} title="Co wydrukować, co kupić, co do czego pasuje i jak złożyć. Do wydruku albo PDF">
@@ -357,6 +368,7 @@ export function App() {
         {toast && <div className="toast">{toast}</div>}
         <MeasurePanel />
         <CornerSuggest />
+        <ReviewBar />
       </main>
       <Properties />
       <WizardDialog />
