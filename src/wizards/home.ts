@@ -126,6 +126,7 @@ const DEVICES: Record<string, { label: string; W: number; t: number; L: number; 
   phone: { label: 'Telefon', W: 70, t: 12, L: 80, T: 5 },
   tablet: { label: 'Tablet', W: 160, t: 14, L: 130, T: 7 },
   book: { label: 'Książka / czytnik', W: 140, t: 25, L: 110, T: 6 },
+  pad: { label: 'Kontroler (pad)', W: 150, t: 45, L: 55, T: 5 },
 };
 
 function standPlan(v: WizValues): Plan {

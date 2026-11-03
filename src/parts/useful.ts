@@ -10,38 +10,38 @@ import { FONT, textOutline } from './text';
  * in the position they are built in.
  */
 
-const n = (key: string, label: string, def: number, min: number, max: number, step = 1, hint?: string, show?: (p: Params) => boolean): ParamDef => ({ key, label, type: 'number', def, min, max, step, unit: 'mm', hint, show });
-const count = (key: string, label: string, def: number, min: number, max: number, hint?: string): ParamDef => ({ key, label, type: 'number', def, min, max, step: 1, hint });
+export const n = (key: string, label: string, def: number, min: number, max: number, step = 1, hint?: string, show?: (p: Params) => boolean): ParamDef => ({ key, label, type: 'number', def, min, max, step, unit: 'mm', hint, show });
+export const count = (key: string, label: string, def: number, min: number, max: number, hint?: string): ParamDef => ({ key, label, type: 'number', def, min, max, step: 1, hint });
 
-type P2 = [number, number];
+export type P2 = [number, number];
 /** A thick line through the points (round ends and joints), as a 2D section. */
-function stroke(pts: P2[], t: number): CrossSection {
+export function stroke(pts: P2[], t: number): CrossSection {
   const C = M().CrossSection;
   const dot = (p: P2) => C.circle(t / 2, 24).translate(p);
   const segs = pts.slice(1).map((p, i) => C.hull([dot(pts[i]), dot(p)]));
   return C.union(segs);
 }
 /** Points on an arc (degrees, counter-clockwise from +X). */
-function arc(cx: number, cy: number, r: number, a0: number, a1: number, steps = 16): P2[] {
+export function arc(cx: number, cy: number, r: number, a0: number, a1: number, steps = 16): P2[] {
   return Array.from({ length: steps + 1 }, (_, i) => {
     const a = ((a0 + ((a1 - a0) * i) / steps) * Math.PI) / 180;
     return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
   });
 }
 /** A side profile drawn in X/Y, stood up as `w` thick (printed lying on that side). */
-const onSide = (cs: CrossSection, w: number) => cs.extrude(w);
+export const onSide = (cs: CrossSection, w: number) => cs.extrude(w);
 
 /** Countersunk screw hole going down through a plate whose top is at z = top. */
-function csHole(x: number, y: number, top: number, d: number): Manifold {
+export function csHole(x: number, y: number, top: number, d: number): Manifold {
   const head = d * 2;
   return cyl(top + 2, d / 2 + 0.2).translate([x, y, -1]).add(cyl(head / 2 - d / 2 + 0.01, d / 2 + 0.2, head / 2 + 0.01).translate([x, y, top - (head / 2 - d / 2)]));
 }
 /** Countersunk hole along X through a wall t thick centred on x = 0 (head on the +X side). */
-function csHoleX(y: number, z: number, t: number, d: number): Manifold {
+export function csHoleX(y: number, z: number, t: number, d: number): Manifold {
   return csHole(0, 0, t, d).rotate([0, 90, 0]).translate([-t / 2, y, z]);
 }
 /** Polygon with its points turned counter-clockwise (a clockwise one would come out empty). */
-function ccw(pts: P2[]): CrossSection {
+export function ccw(pts: P2[]): CrossSection {
   let a = 0;
   for (let i = 0; i < pts.length; i++) {
     const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length];
@@ -54,7 +54,7 @@ function ccw(pts: P2[]): CrossSection {
  * Wall plate lying on the bed (its wall side down) with hooks rising from it. A hook goes out from the wall,
  * then its tip turns up along the wall: the tip is a 45° wedge, so nothing hangs in the air.
  */
-function hookPlate(p: Params, hooks: number[]): Manifold {
+export function hookPlate(p: Params, hooks: number[]): Manifold {
   const L = num(p, 'L'), H = num(p, 'H'), T = num(p, 'T'), D = num(p, 'D'), w = num(p, 'hookW'), tip = num(p, 'tip');
   const t = Math.max(T, 4);
   let m = box(0, 0, 0, L, H, T);
@@ -76,9 +76,9 @@ function hookPlate(p: Params, hooks: number[]): Manifold {
   }
   return m;
 }
-const screwSel: ParamDef = { ...select('screwS', 'Mocowanie', 'screw', [['screw', 'Na wkręty'], ['tape', 'Na taśmę dwustronną (bez otworów)']]) };
-const screwOf = (p: Params) => (p.screwS === 'tape' ? 0 : num(p, 'screwD') || 4);
-const screwParams: ParamDef[] = [screwSel, n('screwD', 'Średnica wkrętu', 4, 2.5, 6, 0.5, undefined, (p) => p.screwS !== 'tape')];
+export const screwSel: ParamDef = { ...select('screwS', 'Mocowanie', 'screw', [['screw', 'Na wkręty'], ['tape', 'Na taśmę dwustronną (bez otworów)']]) };
+export const screwOf = (p: Params) => (p.screwS === 'tape' ? 0 : num(p, 'screwD') || 4);
+export const screwParams: ParamDef[] = [screwSel, n('screwD', 'Średnica wkrętu', 4, 2.5, 6, 0.5, undefined, (p) => p.screwS !== 'tape')];
 
 // ------------------------------------------------------------------ hooks
 function wallHook(p: Params) {
@@ -260,6 +260,12 @@ function toolRail(p: Params) {
   for (const x of [0, L - t]) m = m.add(M().Manifold.hull([box(x, D - t, 0, x + t, D, back - 1), box(x, 0, 0, x + t, 1, t)]));
   for (let i = 0; i < k; i++) {
     const x = gap + d / 2 + i * pitch;
+    if (p.kind === 'slots') {
+      // Pliers or spanners hang in a slot open to the front, rounded at its end.
+      const e = (D - t) * 0.7;
+      m = m.subtract(box(x - d / 2, -1, -1, x + d / 2, e, t + 1)).subtract(cyl(t + 2, d / 2).translate([x, e, -1]));
+      continue;
+    }
     m = m.subtract(cyl(t + 2, d / 2).translate([x, (D - t) / 2, -1]));
     // A slot to the front edge so the blade drops in from the side as well.
     if (p.slot === true) m = m.subtract(box(x - d * 0.35, -1, -1, x + d * 0.35, (D - t) / 2, t + 1));
@@ -272,6 +278,14 @@ function toolRail(p: Params) {
 /** Bit or drill holder: a block with hex 1/4" pockets or a row of drill holes from small to large. */
 function bitHolder(p: Params) {
   const H = num(p, 'H');
+  if (p.mode === 'router') {
+    const rows = Math.max(1, Math.round(num(p, 'rows'))), cols = Math.max(1, Math.round(num(p, 'cols'))), d = Number(p.shank) || 8;
+    const pitch = d + 14;
+    let m = box(0, 0, 0, cols * pitch, rows * pitch, Math.max(H, d * 2.5));
+    const h = Math.max(H, d * 2.5);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) m = m.subtract(cyl(h, (d + 0.3) / 2).translate([pitch / 2 + c * pitch, pitch / 2 + r * pitch, 3]));
+    return settle(m);
+  }
   if (p.mode === 'drill') {
     const d0 = num(p, 'dMin'), d1 = Math.max(d0, num(p, 'dMax')), st = Math.max(0.5, num(p, 'dStep'));
     const ds: number[] = [];
@@ -331,7 +345,7 @@ function cableClip(p: Params) {
   }
   let m = onSide(cs, w);
   const sd = screwOf(p);
-  if (sd) for (const x of [3.5, L - 3.5]) m = m.subtract(cyl(4, sd / 2 + 0.2).rotate([-90, 0, 0]).translate([x, -0.5, w / 2]));
+  if (sd) for (const x of p.holes === '1' ? [3.5] : [3.5, L - 3.5]) m = m.subtract(cyl(4, sd / 2 + 0.2).rotate([-90, 0, 0]).translate([x, -0.5, w / 2]));
   return settle(m);
 }
 function penCup(p: Params) {
@@ -500,11 +514,12 @@ export const USEFUL_DEFS: PartDef[] = [
   },
   {
     type: 'toolRail',
-    label: 'Uchwyt na śrubokręty',
+    label: 'Uchwyt na narzędzia (wkrętaki, szczypce, klucze)',
     category: 'useful',
     hole: false,
-    description: 'Półka z otworami na trzonki i płyta do ściany. Średnica otworu = trzonek + zapas, rączka opiera się na półce.',
-    params: [count('N', 'Liczba otworów', 8, 1, 20), n('d', 'Średnica otworu', 9, 3, 30, 0.5), n('gap', 'Odstęp', 14, 5, 50), n('D', 'Głębokość półki', 35, 20, 80), { key: 'slot', label: 'Szczelina do przodu (wkładanie z boku)', type: 'bool', def: false }, ...screwParams],
+    description: 'Półka do ściany: okrągłe otwory na wkrętaki albo szczeliny od przodu na szczypce i klucze płaskie. Szerokość szczeliny = grubość narzędzia + zapas.',
+    params: [{ ...select('kind', 'Na co', 'holes', [['holes', 'Wkrętaki (otwory)'], ['slots', 'Szczypce, klucze (szczeliny)']]) }, count('N', 'Liczba miejsc', 8, 1, 20), n('d', 'Średnica otworu / szerokość szczeliny', 9, 3, 30, 0.5), n('gap', 'Odstęp', 14, 5, 50), n('D', 'Głębokość półki', 35, 20, 80), { key: 'slot', label: 'Szczelina do przodu (wkładanie z boku)', type: 'bool', def: false, show: (p: Params) => p.kind !== 'slots' }, ...screwParams],
+    normalize: (prev, next) => (prev.kind !== next.kind ? { ...next, ...(next.kind === 'slots' ? { d: 12, gap: 18, D: 45 } : { d: 9, gap: 14, D: 35 }) } : next),
     build: toolRail,
   },
   {
@@ -512,9 +527,10 @@ export const USEFUL_DEFS: PartDef[] = [
     label: 'Uchwyt na bity i wiertła',
     category: 'useful',
     hole: false,
-    description: 'Bity 1/4 cala w sześciokątnych gniazdach albo rząd wierteł od najmniejszego do największego.',
+    description: 'Bity 1/4 cala w sześciokątnych gniazdach, rząd wierteł od najmniejszego do największego albo frezy w okrągłych gniazdach na trzpień.',
     params: [
-      { ...select('mode', 'Na co', 'bits', [['bits', 'Bity 1/4" (sześciokąt)'], ['drill', 'Wiertła (rząd średnic)']]) },
+      { ...select('mode', 'Na co', 'bits', [['bits', 'Bity 1/4" (sześciokąt)'], ['drill', 'Wiertła (rząd średnic)'], ['router', 'Frezy (trzpień)']]) },
+      { ...select('shank', 'Trzpień frezu', '8', [['6', '6 mm'], ['6.35', '1/4 cala (6,35 mm)'], ['8', '8 mm'], ['12', '12 mm'], ['12.7', '1/2 cala (12,7 mm)']]), show: (p: Params) => p.mode === 'router' },
       count('rows', 'Rzędy', 2, 1, 10),
       count('cols', 'Kolumny', 6, 1, 20),
       n('dMin', 'Najmniejsze wiertło', 2, 1, 20, 0.5, undefined, (p) => p.mode === 'drill'),
@@ -540,7 +556,7 @@ export const USEFUL_DEFS: PartDef[] = [
     category: 'useful',
     hole: false,
     description: 'Klips z zatrzaskowymi kółkami na kable: pod blat, na ścianę albo listwę. Kabel wciska się od góry.',
-    params: [count('N', 'Liczba kabli', 3, 1, 10), n('d', 'Średnica kabla', 6, 2, 20, 0.5), n('W', 'Szerokość klipsa', 10, 5, 30), ...screwParams],
+    params: [count('N', 'Liczba kabli', 3, 1, 10), n('d', 'Średnica kabla', 6, 2, 20, 0.5), n('W', 'Szerokość klipsa', 10, 5, 30), ...screwParams, { ...select('holes', 'Otwory na wkręt', '2', [['1', 'Jeden (z jednego końca)'], ['2', 'Dwa (oba końce)']]), show: (p: Params) => p.screwS !== 'tape' }],
     build: cableClip,
   },
   {

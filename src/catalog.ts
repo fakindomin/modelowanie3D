@@ -1,4 +1,5 @@
 import { USEFUL_DEFS } from './parts/useful';
+import { USEFUL2_DEFS } from './parts/useful2';
 import type { Manifold } from 'manifold-3d';
 import { M, settle } from './geom/manifold';
 import type { Category, ParamDef, Params, PartDef } from './parts/def';
@@ -23,6 +24,25 @@ import { dividerSolid, segmentsOf } from './geom/dividers';
 export type { Category, ParamDef, ParamValue, Params, PartDef } from './parts/def';
 
 /** A cross-section (drawn in Y, Z) run along X from 0 to L, with its ends A and B, then centred like bar(). */
+/** Optional row of holes along a bar lying on X from 0 to L: perfD 0 = none. */
+const perfParams: ParamDef[] = [
+  { key: 'perfD', label: 'Otwory: średnica', type: 'number', def: 0, min: 0, max: 30, step: 0.5, unit: 'mm', hint: '0 = bez otworów. Np. 4,5 pod M4, 5,5 pod M5.' },
+  { key: 'perfP', label: 'Otwory: rozstaw', type: 'number', def: 15, min: 3, max: 200, step: 0.5, unit: 'mm', show: (p) => Number(p.perfD) > 0 },
+];
+function perforate(m: Manifold, p: Params, L: number, rows: { y: number; z: number; axis: 'y' | 'z'; len: number }[]): Manifold {
+  const d = Number(p.perfD) || 0, pitch = Math.max(d + 1.5, Number(p.perfP) || 15);
+  if (d <= 0) return m;
+  const k = Math.max(1, Math.floor((L - 2 * d) / pitch) + 1);
+  const x0 = (L - (k - 1) * pitch) / 2;
+  const holes: Manifold[] = [];
+  for (const r of rows)
+    for (let i = 0; i < k; i++) {
+      const c = cyl(r.len + 2, d / 2, d / 2, 32);
+      holes.push(r.axis === 'z' ? c.translate([x0 + i * pitch, r.y, r.z - 1]) : c.rotate([-90, 0, 0]).translate([x0 + i * pitch, r.y - 1, r.z]));
+    }
+  return m.subtract(M().Manifold.union(holes));
+}
+
 function stock(cs: ReturnType<typeof poly>, L: number, kind: StockKind, p: Params, s: Omit<StockShape, 'L'> = {}) {
   const m = stockEnds(cs.extrude(L).rotate([90, 0, 90]), kind, p, { L, ...s });
   return settle(m);
@@ -489,9 +509,10 @@ const BASE: PartDef[] = [
       L(100),
       { key: 'W', label: 'Szerokość', type: 'number', def: 20, min: 1, max: 500, unit: 'mm' },
       { key: 'T', label: 'Grubość', type: 'number', def: 3, min: 0.4, max: 100, step: 0.2, unit: 'mm' },
+      ...perfParams,
       ...stockEndParams('bar'),
     ],
-    build: (p) => settle(stockEnds(cube(num(p, 'L'), num(p, 'W'), num(p, 'T')), 'bar', p, { L: num(p, 'L') })),
+    build: (p) => settle(stockEnds(perforate(cube(num(p, 'L'), num(p, 'W'), num(p, 'T')), p, num(p, 'L'), [{ axis: 'z', y: num(p, 'W') / 2, z: 0, len: num(p, 'T') }]), 'bar', p, { L: num(p, 'L') })),
     endMarks: stockMarks,
   },
   {
@@ -505,11 +526,14 @@ const BASE: PartDef[] = [
       { key: 'A', label: 'Ramię poziome', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       { key: 'B', label: 'Ramię pionowe', type: 'number', def: 20, min: 1, max: 300, unit: 'mm' },
       T(2),
+      ...perfParams,
       ...stockEndParams('bar'),
     ],
     build: (p) => {
-      const a = num(p, 'A'), b = num(p, 'B'), t = num(p, 'T');
-      return stock(poly([[0, 0], [a, 0], [a, t], [t, t], [t, b], [0, b]]), num(p, 'L'), 'bar', p, { holeY: (t + a) / 2 });
+      const a = num(p, 'A'), b = num(p, 'B'), t = num(p, 'T'), L = num(p, 'L');
+      const raw = poly([[0, 0], [a, 0], [a, t], [t, t], [t, b], [0, b]]).extrude(L).rotate([90, 0, 90]);
+      const holed = perforate(raw, p, L, [{ axis: 'z', y: (t + a) / 2, z: 0, len: t }, { axis: 'y', y: 0, z: (t + b) / 2, len: t }]);
+      return settle(stockEnds(holed, 'bar', p, { L, holeY: (t + a) / 2 }));
     },
     endMarks: stockMarks,
   },
@@ -807,7 +831,7 @@ const BASE: PartDef[] = [
   },
 ];
 
-export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...SPRING_DEFS, ...SPRING_MECH_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...COUPLING_DEFS, ...CONNECTOR_DEFS, ...USEFUL_DEFS, FIGURINE_DEF];
+export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...SPRING_DEFS, ...SPRING_MECH_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...COUPLING_DEFS, ...CONNECTOR_DEFS, ...USEFUL_DEFS, ...USEFUL2_DEFS, FIGURINE_DEF];
 
 export const DEFS: Record<string, PartDef> = Object.fromEntries(CATALOG.map((d) => [d.type, d]));
 
