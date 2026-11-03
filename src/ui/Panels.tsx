@@ -1010,7 +1010,7 @@ function EdgesTool({ part }: { part: Part }) {
 
 /** Rarely changed fields (gaps, thread fit, per-arm ends…) go under "Więcej wymiarów". */
 const MORE_KEYS = new Set(['luz', 'fit', 'fw', 'chamfer']);
-const isMore = (p: ParamDef) => MORE_KEYS.has(p.key) || /^e\d$/.test(p.key);
+const isMore = (p: ParamDef) => !!p.more || MORE_KEYS.has(p.key) || /^e\d$/.test(p.key);
 
 const PATTERN_LABEL = { linear: 'w rzędzie', circle: 'po okręgu', sym: 'symetryczny' } as const;
 

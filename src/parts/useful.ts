@@ -11,6 +11,13 @@ import { FONT, textOutline } from './text';
  */
 
 export const n = (key: string, label: string, def: number, min: number, max: number, step = 1, hint?: string, show?: (p: Params) => boolean): ParamDef => ({ key, label, type: 'number', def, min, max, step, unit: 'mm', hint, show });
+/** A number that may be missing in a part saved before the field existed. */
+export const nv = (p: Params, k: string, d: number) => {
+  const v = Number(p[k]);
+  return p[k] !== undefined && p[k] !== '' && Number.isFinite(v) ? v : d;
+};
+/** A rarely changed size, under „Więcej wymiarów”. */
+export const adv = (key: string, label: string, def: number, min: number, max: number, step = 0.1, hint?: string): ParamDef => ({ ...n(key, label, def, min, max, step, hint), more: true });
 export const count = (key: string, label: string, def: number, min: number, max: number, hint?: string): ParamDef => ({ key, label, type: 'number', def, min, max, step: 1, hint });
 
 export type P2 = [number, number];
@@ -112,7 +119,7 @@ function pegHook(p: Params) {
 // ------------------------------------------------------------------ kitchen
 /** Tiered spice rack: steps for jars, each with a front lip (side profile, extruded to the width). */
 function spiceRack(p: Params) {
-  const jar = num(p, 'jar'), k = Math.max(1, Math.round(num(p, 'steps'))), rise = num(p, 'rise'), per = Math.max(1, Math.round(num(p, 'per'))), t = 3;
+  const jar = num(p, 'jar'), k = Math.max(1, Math.round(num(p, 'steps'))), rise = num(p, 'rise'), per = Math.max(1, Math.round(num(p, 'per'))), t = nv(p, 'wall', 3);
   const dep = jar + 4, W = per * (jar + 3) + 2 * t;
   const pts: P2[] = [[0, 0]];
   for (let i = 0; i < k; i++) {
@@ -146,11 +153,11 @@ function slotRack(p: Params) {
       .rotate([90, 0, 90])
       .translate([x, 0, 0]);
   });
-  return settle(union([box(0, 0, 0, L, D, 3), ...fins]));
+  return settle(union([box(0, 0, 0, L, D, nv(p, 'base', 3)), ...fins]));
 }
 /** Bag clip: a C-shaped sleeve and a rod pressed into it over the folded bag. Two pieces side by side. */
 function bagClip(p: Params) {
-  const L = num(p, 'L'), d = num(p, 'd'), bag = num(p, 'bag'), t = 1.8;
+  const L = num(p, 'L'), d = num(p, 'd'), bag = num(p, 'bag'), t = nv(p, 'wall', 1.8);
   const C = M().CrossSection;
   // Flat bottom where the round would start to overhang more than 45°.
   const flat = (cs: CrossSection, r: number) => cs.subtract(C.square([4 * r, r], true).translate([0, -r * 1.2]));
@@ -166,14 +173,14 @@ function bagClip(p: Params) {
 
 // ------------------------------------------------------------------ bathroom
 function brushHolder(p: Params) {
-  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd'), H = num(p, 'H'), wall = 3;
+  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd'), H = num(p, 'H'), wall = nv(p, 'wall', 3);
   const pitch = d + wall, L = k * pitch + wall, Dd = d + 2 * wall;
   let m = M().Manifold.hull([box(0, 0, 0, L, Dd + 6, 3), box(0, 3, 0, L, Dd + 3, H)]);
   for (let i = 0; i < k; i++) m = m.subtract(cyl(H + 2, d / 2).translate([wall + d / 2 + i * pitch, (Dd + 6) / 2, -1]));
   return settle(m);
 }
 function soapDish(p: Params) {
-  const W = num(p, 'W'), D = num(p, 'D'), h = 10, t = 2.4, r = 6;
+  const W = num(p, 'W'), D = num(p, 'D'), h = nv(p, 'Hd', 10), t = nv(p, 'wall', 2.4), r = Math.max(t + 1, nv(p, 'r', 6));
   const C = M().CrossSection;
   const rr = (w: number, d: number, rad: number) => C.square([w - 2 * rad, d], true).add(C.square([w, d - 2 * rad], true)).add(C.union([-1, 1].flatMap((sx) => [-1, 1].map((sy) => C.circle(rad, 24).translate([sx * (w / 2 - rad), sy * (d / 2 - rad)])))));
   let m = rr(W, D, r).extrude(h).subtract(rr(W - 2 * t, D - 2 * t, r - t).extrude(h).translate([0, 0, 2]));
@@ -190,7 +197,7 @@ function soapDish(p: Params) {
 
 // ------------------------------------------------------------------ garden
 function plantLabel(p: Params) {
-  const stake = num(p, 'stake'), T = 2, font = String(p.font || 'sans-bold');
+  const stake = num(p, 'stake'), T = nv(p, 'T', 2), font = String(p.font || 'sans-bold');
   // Optional raised frame, as tall as the letters (so with one filament change it gets their colour).
   const frame = !!p.frame, fw = num(p, 'frameW') || 1.2, fin = num(p, 'frameIn') || 0;
   const margin = 3 + (frame ? fin + fw + 1 : 0);
@@ -225,7 +232,7 @@ function plantLabel(p: Params) {
 }
 /** Hose hanger: wall plate with a wide saddle the coiled hose hangs on (printed on its side). */
 function hoseHanger(p: Params) {
-  const hose = num(p, 'hose'), coils = Math.max(1, Math.round(num(p, 'coils'))), w = num(p, 'W'), t = 6;
+  const hose = num(p, 'hose'), coils = Math.max(1, Math.round(num(p, 'coils'))), w = num(p, 'W'), t = nv(p, 'T', 6);
   const reach = coils * (hose + 2) + 10;
   const C = M().CrossSection;
   const back = stroke([[0, -reach * 0.45], [0, 60]], t);
@@ -240,7 +247,7 @@ function hoseHanger(p: Params) {
 }
 /** Plant clip: a ring on the support stick and an open ring round the stem, flat. */
 function plantClip(p: Params) {
-  const d1 = num(p, 'stick') + 0.4, d2 = num(p, 'stem') + 2, t = 1.8, h = num(p, 'H');
+  const d1 = num(p, 'stick') + 0.4, d2 = num(p, 'stem') + 2, t = nv(p, 'wall', 1.8), h = num(p, 'H');
   const C = M().CrossSection;
   const ring = (d: number, open: number) =>
     C.circle(d / 2 + t, 48)
@@ -254,7 +261,7 @@ function plantClip(p: Params) {
 // ------------------------------------------------------------------ workshop
 /** Screwdriver rail: a shelf with holes (flat on the bed) and a back plate for the wall. */
 function toolRail(p: Params) {
-  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd'), gap = num(p, 'gap'), D = num(p, 'D'), t = 4, back = 35;
+  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd'), gap = num(p, 'gap'), D = num(p, 'D'), t = nv(p, 'T', 4), back = nv(p, 'back', 35);
   const pitch = d + gap, L = k * pitch + gap;
   let m = box(0, 0, 0, L, D, t).add(box(0, D - t, 0, L, D, back));
   for (const x of [0, L - t]) m = m.add(M().Manifold.hull([box(x, D - t, 0, x + t, D, back - 1), box(x, 0, 0, x + t, 1, t)]));
@@ -301,7 +308,7 @@ function bitHolder(p: Params) {
     ds.forEach((d, i) => (m = m.subtract(cyl(H, (d + 0.3) / 2).translate([xs[i], D / 2, 3]))));
     return settle(m);
   }
-  const rows = Math.max(1, Math.round(num(p, 'rows'))), cols = Math.max(1, Math.round(num(p, 'cols'))), pitch = 10.5;
+  const rows = Math.max(1, Math.round(num(p, 'rows'))), cols = Math.max(1, Math.round(num(p, 'cols'))), pitch = Math.max(8, nv(p, 'pitch', 10.5));
   let m = box(0, 0, 0, cols * pitch + 4, rows * pitch + 4, H);
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) m = m.subtract(hex(6.35 + 0.35, H).rotate([0, 0, 30]).translate([2 + pitch / 2 + c * pitch, 2 + pitch / 2 + r * pitch, Math.min(3, H / 3)]));
   return settle(m);
@@ -315,10 +322,10 @@ const CELLS: Record<string, { d: number; h: number; label: string }> = {
   '9V': { d: 0, h: 48.5, label: '9V' },
 };
 function batteryTray(p: Params) {
-  const cell = CELLS[String(p.cell)] ?? CELLS.AA, rows = Math.max(1, Math.round(num(p, 'rows'))), cols = Math.max(1, Math.round(num(p, 'cols'))), w = 2;
+  const cell = CELLS[String(p.cell)] ?? CELLS.AA, rows = Math.max(1, Math.round(num(p, 'rows'))), cols = Math.max(1, Math.round(num(p, 'cols'))), w = nv(p, 'wall', 2);
   const nine = String(p.cell) === '9V';
   const cw = nine ? 26.5 + 0.8 : cell.d + 0.8, cd = nine ? 17.5 + 0.8 : cell.d + 0.8;
-  const depth = Math.round(cell.h * 0.55), H = depth + 2;
+  const depth = Math.round((cell.h * nv(p, 'depthK', 55)) / 100), H = depth + 2;
   let m = box(0, 0, 0, cols * (cw + w) + w, rows * (cd + w) + w, H);
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
@@ -331,7 +338,7 @@ function batteryTray(p: Params) {
 // ------------------------------------------------------------------ desk and electronics
 /** Cable clip: a plate on the wall or desk and snap rings for the cables (side profile, printed on its side). */
 function cableClip(p: Params) {
-  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd') + 0.3, t = 1.6, w = num(p, 'W');
+  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd') + 0.3, t = nv(p, 'wall', 1.6), w = num(p, 'W');
   const C = M().CrossSection;
   const pitch = d + 2 * t + 1.5;
   const L = k * pitch + 14;
@@ -349,11 +356,11 @@ function cableClip(p: Params) {
   return settle(m);
 }
 function penCup(p: Params) {
-  const D = num(p, 'D'), H = num(p, 'H'), t = 2.2, k = Math.max(0, Math.round(num(p, 'parts')));
+  const D = num(p, 'D'), H = num(p, 'H'), t = nv(p, 'wall', 2.2), k = Math.max(0, Math.round(num(p, 'parts')));
   const round = p.shape !== 'hex';
   const outer = round ? cyl(H, D / 2, D / 2, 96) : hex(D, H);
   const inner = round ? cyl(H, D / 2 - t, D / 2 - t, 96) : hex(D - 2 * t, H);
-  let m = outer.subtract(inner.translate([0, 0, 2.4]));
+  let m = outer.subtract(inner.translate([0, 0, nv(p, 'floor', 2.4)]));
   for (let i = 0; i < k; i++) m = m.add(box(-t / 2, 0, 0, t / 2, D / 2 - t / 2, H * 0.75).rotate([0, 0, (360 / k) * i]));
   return settle(m);
 }
@@ -587,3 +594,21 @@ export const USEFUL_DEFS: PartDef[] = [
     build: spinningTop,
   },
 ];
+
+/** Fixed sizes chosen for printing, adjustable under „Więcej wymiarów”. */
+const ADV: Record<string, ParamDef[]> = {
+  spiceRack: [adv('wall', 'Grubość ścianki', 3, 2, 6, 0.2)],
+  slotRack: [adv('base', 'Grubość podstawy', 3, 2, 10, 0.5)],
+  bagClip: [adv('wall', 'Grubość tulejki', 1.8, 1.2, 3.5, 0.1, 'Cieńsza = łatwiej wcisnąć, grubsza = mocniej trzyma.')],
+  brushHolder: [adv('wall', 'Grubość ścianki', 3, 1.6, 8, 0.2)],
+  soapDish: [adv('Hd', 'Wysokość', 10, 5, 40, 1), adv('wall', 'Grubość ścianki', 2.4, 1.2, 5, 0.2), adv('r', 'Zaokrąglenie narożników', 6, 2, 30, 0.5)],
+  plantLabel: [adv('T', 'Grubość tabliczki', 2, 1, 5, 0.2)],
+  hoseHanger: [adv('T', 'Grubość ramion', 6, 4, 12, 0.5)],
+  plantClip: [adv('wall', 'Grubość kółek', 1.8, 1.2, 4, 0.1)],
+  toolRail: [adv('T', 'Grubość półki i płyty', 4, 2.5, 10, 0.5), adv('back', 'Wysokość płyty do ściany', 35, 20, 120, 1)],
+  bitHolder: [adv('pitch', 'Rozstaw gniazd na bity', 10.5, 8, 25, 0.5)],
+  batteryTray: [adv('wall', 'Grubość ścianki', 2, 1.2, 5, 0.2), adv('depthK', 'Głębokość gniazd (% baterii)', 55, 30, 90, 5)],
+  cableClip: [adv('wall', 'Grubość kółek', 1.6, 1, 3, 0.1)],
+  penCup: [adv('wall', 'Grubość ścianki', 2.2, 1.2, 5, 0.2), adv('floor', 'Grubość dna', 2.4, 1, 6, 0.2)],
+};
+for (const d of USEFUL_DEFS) if (ADV[d.type]) d.params.push(...ADV[d.type]);

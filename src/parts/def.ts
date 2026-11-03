@@ -13,6 +13,8 @@ interface ParamBase {
   show?: (p: Params) => boolean;
   /** Section heading shown above this field. */
   group?: string;
+  /** Rarely changed size (wall, plate thickness…): shown under „Więcej wymiarów”. */
+  more?: boolean;
   /** Letter of the element's end this field chooses (shown in the „Końce” section, with the letter on the model). */
   end?: string;
 }

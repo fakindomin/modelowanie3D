@@ -1,8 +1,8 @@
 import type { CrossSection, Manifold } from 'manifold-3d';
 import { M, settle } from '../geom/manifold';
-import type { Params, PartDef } from './def';
+import type { ParamDef, Params, PartDef } from './def';
 import { box, cyl, hex, knurled, num, select, union } from './util';
-import { type P2, arc, ccw, count, csHole, hookPlate, n, onSide, screwOf, screwParams, stroke } from './useful';
+import { type P2, adv, arc, ccw, count, csHole, hookPlate, n, nv, onSide, screwOf, screwParams, stroke } from './useful';
 
 /**
  * Second batch of everyday things: cables and desk, furniture and DIY, workshop.
@@ -36,7 +36,7 @@ const msel = (def = '4', keys = ['3', '4', '5', '6', '8']) => select('M', 'Śrub
 // ================================================================== cables and desk
 /** Comb holder: a row of slots for a wire bundle, each narrowed at the top so the wire snaps in. */
 function cableComb(p: Params) {
-  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd') + 0.3, W = num(p, 'W'), t = 2.2, base = 3;
+  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd') + 0.3, W = num(p, 'W'), t = nv(p, 'wall', 2.2), base = nv(p, 'base', 3);
   const pitch = d + t, L = k * pitch + t, flange = 9, H = base + d + d * 0.35 + 1.5;
   let prof = C().square([L, H]);
   const e = d * 0.72;
@@ -55,7 +55,7 @@ function cableComb(p: Params) {
 
 /** Adhesive clip with a latch: a flexible arm over the cable whose tip snaps behind a bead on a post. */
 function cableLatch(p: Params) {
-  const d = num(p, 'd') + 0.4, W = num(p, 'W'), t = 1.3, base = 2.4;
+  const d = num(p, 'd') + 0.4, W = num(p, 'W'), t = nv(p, 'arm', 1.3), base = nv(p, 'base', 2.4);
   const R = d / 2 + t / 2, cx = R + t / 2 + 3, cy = base + d / 2;
   const tipY = cy - d * 0.2;
   const arm = stroke([[cx - R, base - 0.2], [cx - R, cy], ...arc(cx, cy, R, 180, 0, 18).slice(1), [cx + R, tipY]], t);
@@ -72,8 +72,8 @@ function cableLatch(p: Params) {
 
 /** Desk-edge clip: a C on the desk top's edge and cable rings under it (printed on its side). */
 function deskEdgeClip(p: Params) {
-  const T = num(p, 'T') - 0.3, A = num(p, 'A'), t = 3, w = num(p, 'W'), k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd') + 0.3;
-  const drop = A * Math.tan((2 * Math.PI) / 180);
+  const T = num(p, 'T') - nv(p, 'press', 0.3), A = num(p, 'A'), t = nv(p, 't', 3), w = num(p, 'W'), k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd') + 0.3;
+  const drop = A * Math.tan((nv(p, 'grip', 2) * Math.PI) / 180);
   // The upper arm leans 2° down: it grips the desk top.
   const c = stroke([[A, T + t / 2 - drop], [0, T + t / 2], [0, -t / 2], [A, -t / 2]], t);
   const parts: CrossSection[] = [c];
@@ -87,7 +87,7 @@ function deskEdgeClip(p: Params) {
 
 /** 90° corner of a cable duct lying on the desk or wall, with a snap-on lid. */
 function cableCorner(p: Params) {
-  const Wi = num(p, 'W'), Hi = num(p, 'H'), A = num(p, 'A'), t = 1.6;
+  const Wi = num(p, 'W'), Hi = num(p, 'H'), A = num(p, 'A'), t = nv(p, 'wall', 1.6);
   const Wo = Wi + 2 * t;
   const L = (w: number, o: number) => C().union([C().square([A - o, w]).translate([o, o]), C().square([w, A - o]).translate([o, o])]);
   let body = L(Wo, 0).extrude(Hi + t).subtract(L(Wi, t).extrude(Hi + 1).translate([0, 0, t]));
@@ -113,8 +113,8 @@ function baseboardClip(p: Params) {
 
 /** Desk grommet: a sleeve with a flange and a lid with a cable notch, two pieces. */
 function deskGrommet(p: Params) {
-  const D = num(p, 'D'), T = num(p, 'T'), slot = num(p, 'slot'), wall = 2;
-  const Ro = D / 2 - 0.3, Ri = Ro - wall, Rf = D / 2 + 6, f = 2.4;
+  const D = num(p, 'D'), T = num(p, 'T'), slot = num(p, 'slot'), wall = nv(p, 'wall', 2);
+  const Ro = D / 2 - 0.3, Ri = Ro - wall, Rf = D / 2 + nv(p, 'rim', 6), f = nv(p, 'f', 2.4);
   const L = Math.min(T, 30);
   // Flange on the bed, sleeve up; a 2 mm seat inside the flange for the lid.
   let sleeve = cyl(f, Rf, Rf, 96).add(cyl(L, Ro, Ro, 96)).subtract(cyl(L + 2, Ri, Ri, 96).translate([0, 0, -1])).subtract(cyl(1.5, Ri + 1.5, Ri - 0.01, 96).translate([0, 0, -0.01]));
@@ -127,7 +127,7 @@ function deskGrommet(p: Params) {
 
 /** Print-in-place cable tie: a toothed strap and a head with a flexible pawl, flat on the bed. */
 function zipTie(p: Params) {
-  const w = num(p, 'W'), L = Math.max(60, Math.PI * num(p, 'D') + 40), th = 1.4, tp = 1.2, tH = 0.6;
+  const w = num(p, 'W'), L = Math.max(60, Math.PI * num(p, 'D') + 40), th = nv(p, 'T', 1.4), tp = 1.2, tH = 0.6;
   const hw = w + 3.2;
   let m = box(0, -w / 2, 0, L, w / 2, th);
   // Teeth: vertical face towards the head, slope away from it.
@@ -148,11 +148,11 @@ function zipTie(p: Params) {
 
 /** Modular cable sleeve: C-shaped segments that snap over cables and plug into each other. */
 function cableSleeve(p: Params) {
-  const d = num(p, 'd'), Ls = num(p, 'L'), k = Math.max(1, Math.round(num(p, 'N'))), t = 1.6;
+  const d = num(p, 'd'), Ls = num(p, 'L'), k = Math.max(1, Math.round(num(p, 'N'))), t = nv(p, 'wall', 1.6), spig = nv(p, 'spig', 6);
   const Ri = d / 2, Ro = Ri + t;
   // Segment upright: body, a 45° step inside, then a thinner spigot that goes into the next one.
   const sp = Ri - 0.15;
-  const prof = ccw([[Ri, 0], [Ro, 0], [Ro, Ls], [sp, Ls], [sp, Ls + 6], [sp - t, Ls + 6], [sp - t, Ls], [Ri, Ls - t - 0.15]]);
+  const prof = ccw([[Ri, 0], [Ro, 0], [Ro, Ls], [sp, Ls], [sp, Ls + spig], [sp - t, Ls + spig], [sp - t, Ls], [Ri, Ls - t - 0.15]]);
   const seg = M().Manifold.revolve(prof, 64).subtract(box(-d * 0.275, 0, -1, d * 0.275, Ro + 2, Ls + 8));
   const segs: Manifold[] = [];
   const cols = Math.ceil(Math.sqrt(k));
@@ -164,7 +164,7 @@ function cableSleeve(p: Params) {
 /** Furniture knob, built upside down (its top on the bed) with a nut pocket in the stem's end. */
 function furnitureKnob(p: Params) {
   const D = num(p, 'D'), H = num(p, 'H'), s = NUT[String(p.M)] ?? NUT['4'], shape = String(p.shape || 'mushroom');
-  const R = D / 2, rs = Math.max(s.af * 0.75 + 2, D * 0.28);
+  const R = D / 2, rs = nv(p, 'stem', 0) > 0 ? nv(p, 'stem', 0) / 2 : Math.max(s.af * 0.75 + 2, D * 0.28);
   let prof: P2[];
   if (shape === 'cylinder') prof = [[0, 0], [R - 1, 0], [R, 1], [R, H - 1], [R - 1, H], [0, H]];
   else if (shape === 'cone') prof = [[0, 0], [R - 1, 0], [R, 1], [R, H * 0.3], [rs, H], [0, H]];
@@ -258,9 +258,9 @@ function cornerGuard(p: Params) {
 
 /** Cap for a bought tube or profile: a plate and a hollow plug with crush ribs. */
 function profileCap(p: Params) {
-  const shape = String(p.shape || 'round'), s = num(p, 'wall'), P = num(p, 'P'), f = 2.4;
+  const shape = String(p.shape || 'round'), s = num(p, 'wall'), P = num(p, 'P'), f = nv(p, 'f', 2.4);
   const A = num(p, 'A'), B = shape === 'rect' ? num(p, 'B') : A;
-  const rib = 0.35, pw = 1.6;
+  const rib = nv(p, 'rib', 0.35), pw = nv(p, 'pw', 1.6);
   const outer = (w: number, h: number) => (shape === 'round' ? C().circle(w / 2, 96) : C().square([w, h], true));
   const iw = A - 2 * s - 0.3, ih = B - 2 * s - 0.3;
   // Plate with a small chamfer on its visible (bed) side.
@@ -291,7 +291,7 @@ function standoff(p: Params) {
 // ================================================================== workshop
 /** Drilling jig: a block with guide holes and a fence against the board's edge or face. */
 function drillGuide(p: Params) {
-  const mode = String(p.mode || 'dowel'), t = 10, fence = 12, fw = 4;
+  const mode = String(p.mode || 'dowel'), t = nv(p, 'plate', 10), fence = nv(p, 'fence', 12), fw = nv(p, 'fw4', 4);
   let holes: { x: number; y: number; d: number }[] = [];
   let L = 0, W = 0;
   if (mode === 'dowel') {
@@ -349,7 +349,7 @@ function toolStand(p: Params) {
     return settle(hookPlate({ L, H: 60, T: 5, D: num(p, 'reach'), hookW: hw, tip: 12, screw: screwOf(p) }, [12 + hw / 2, L - 12 - hw / 2]));
   }
   const d = num(p, 'd'), W = num(p, 'W'), Lb = num(p, 'Lb');
-  const base = 6;
+  const base = nv(p, 'base', 6), hF = nv(p, 'hF', 15), hB = nv(p, 'hB', 0);
   let m = box(0, 0, 0, Lb, W, base);
   // Two forks with a 90° V notch, the back one higher: the tool lies tilted.
   const fork = (x: number, h: number) => {
@@ -357,7 +357,7 @@ function toolStand(p: Params) {
     const cs = ccw([[0, 0], [fw, 0], [fw, h + d * 0.6], [fw / 2 + d * 0.45, h + d * 0.6], [fw / 2, h], [fw / 2 - d * 0.45, h + d * 0.6], [0, h + d * 0.6]]);
     return cs.extrude(6).rotate([90, 0, 90]).translate([x, W / 2 - fw / 2, 0]);
   };
-  m = m.add(fork(10, base + 15)).add(fork(Lb - 16, base + 15 + Lb * 0.35));
+  m = m.add(fork(10, base + hF)).add(fork(Lb - 16, hB > 0 ? base + hB : base + hF + Lb * 0.35));
   if (kind === 'iron') {
     // Tray for the cleaning sponge or brass wool.
     m = m.subtract(box(22, 6, 2.5, Math.min(Lb - 26, 80), W - 6, base + 1));
@@ -367,7 +367,7 @@ function toolStand(p: Params) {
 
 /** Funnel: walls at most 45° from vertical, a spout and a hanging tab. */
 function funnel(p: Params) {
-  const D1 = num(p, 'D1'), D2 = num(p, 'D2'), Ls = num(p, 'Ls'), t = 1.6;
+  const D1 = num(p, 'D1'), D2 = num(p, 'D2'), Ls = num(p, 'Ls'), t = nv(p, 'wall', 1.6);
   const h = Math.max(num(p, 'H'), (D1 - D2) / 2 + 2);
   // Built mouth up: spout on the bed, the cone opens upwards.
   const prof = ccw([[D2 / 2 - t, 0], [D2 / 2, 0], [D2 / 2, Ls], [D1 / 2, Ls + h], [D1 / 2, Ls + h + 3], [D1 / 2 - t, Ls + h + 3], [D1 / 2 - t, Ls + h], [D2 / 2 - t, Ls + t * 0.6]]);
@@ -379,7 +379,7 @@ function funnel(p: Params) {
 
 /** Measuring cup for a given volume (to the brim), with a tab handle. */
 function measureCup(p: Params) {
-  const V = num(p, 'V') * 1000, D = num(p, 'D'), t = 1.8, floor = 2;
+  const V = num(p, 'V') * 1000, D = num(p, 'D'), t = nv(p, 'wall', 1.8), floor = nv(p, 'floor', 2);
   const r = D / 2 - t, h = V / (Math.PI * r * r);
   const H = h + floor;
   let m = cyl(H, D / 2, D / 2, 96).subtract(cyl(h + 1, r, r, 96).translate([0, 0, floor]));
@@ -403,7 +403,7 @@ function clampSquare(p: Params) {
 /** Magnetic catch: two blocks with magnet pockets (open on top), screw or tape. */
 function magnetCatch(p: Params) {
   const d = num(p, 'd') + 0.2, h = num(p, 'h') + 0.2, sd = screwOf(p);
-  const H = h + 1.2, W = d + 6, L = sd ? d + 6 + 2 * (sd * 2 + 3) : d + 6;
+  const H = h + nv(p, 'floor', 1.2), W = d + 2 * nv(p, 'side', 3), L = sd ? d + 6 + 2 * (sd * 2 + 3) : d + 6;
   const one = () => {
     let m = box(-L / 2, -W / 2, 0, L / 2, W / 2, H).subtract(cyl(h + 1, d / 2, d / 2, 48).translate([0, 0, H - h]));
     if (sd) for (const x of [-L / 2 + sd + 2.5, L / 2 - sd - 2.5]) m = m.subtract(csHole(x, 0, H, sd));
@@ -414,10 +414,10 @@ function magnetCatch(p: Params) {
 
 /** Vent grille: round (with a spigot for the duct) or rectangular, slots or holes. */
 function ventGrille(p: Params) {
-  const round = p.shape !== 'rect', pat = String(p.pattern || 'slots'), t = 2;
+  const round = p.shape !== 'rect', pat = String(p.pattern || 'slots'), t = nv(p, 'T', 2), spig = nv(p, 'spig', 15), rim = nv(p, 'rim', 8);
   const D = num(p, 'D'), W = num(p, 'W'), H = num(p, 'H'), open = num(p, 'open');
-  const face = round ? C().circle(D / 2 + 8, 128) : C().square([W, H], true);
-  const area = round ? C().circle(D / 2 - 2.8, 128) : C().square([W - 16, H - 16], true);
+  const face = round ? C().circle(D / 2 + rim, 128) : C().square([W, H], true);
+  const area = round ? C().circle(D / 2 - 2.8, 128) : C().square([W - 2 * rim, H - 2 * rim], true);
   const b = area.bounds();
   const cuts: CrossSection[] = [];
   if (pat === 'holes' || pat === 'mesh') {
@@ -426,7 +426,7 @@ function ventGrille(p: Params) {
       for (let x = b.min[0] + ((Math.round((y - b.min[1]) / (pitch * 0.866)) % 2) * pitch) / 2; x <= b.max[0]; x += pitch) cuts.push(C().circle(hd / 2, pat === 'mesh' ? 6 : 16).translate([x, y]));
   } else for (let y = b.min[1] + open / 2 + 1; y <= b.max[1] - open / 2; y += open + 2.4) cuts.push(C().square([b.max[0] - b.min[0] + 2, open], true).translate([(b.min[0] + b.max[0]) / 2, y]));
   let plate = face.subtract(C().union(cuts).intersect(area)).extrude(t);
-  if (round) plate = plate.add(ring(D / 2 - 0.4, D / 2 - 2.2, 128).extrude(15).translate([0, 0, t - 0.01]));
+  if (round) plate = plate.add(ring(D / 2 - 0.4, D / 2 - 2.2, 128).extrude(spig).translate([0, 0, t - 0.01]));
   else for (const [x, y] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) plate = plate.subtract(csHole(x * (W / 2 - 4.5), y * (H / 2 - 4.5), t, 3.5));
   return settle(plate);
 }
@@ -466,7 +466,7 @@ function wedgeShim(p: Params) {
 
 /** Bin that links to its neighbours: vertical dovetail rails on two walls, slots on the other two. */
 function linkBin(p: Params) {
-  const W = num(p, 'W'), D = num(p, 'D'), H = num(p, 'H'), t = 1.8, r = 3;
+  const W = num(p, 'W'), D = num(p, 'D'), H = num(p, 'H'), t = nv(p, 'wall', 1.8), r = nv(p, 'r', 3);
   const tail = (g: number) => ccw([[-3 - g, 0], [3 + g, 0], [4.5 + g, 2.5 + g * 0.5], [-4.5 - g, 2.5 + g * 0.5]]);
   const rr = (w: number, d: number, rad: number) => C().square([w - 2 * rad, d - 2 * rad], true).offset(rad, 'Round', undefined, 16);
   // Walls thick enough to carry the slots; rails stand out on +X and +Y.
@@ -525,7 +525,7 @@ function hoseTee(p: Params) {
 
 /** Round wall bumper with a pocket for felt or rubber and a countersunk screw hole. */
 function wallBumper(p: Params) {
-  const D = num(p, 'D'), H = num(p, 'H'), sd = num(p, 'screwD'), pad = 2;
+  const D = num(p, 'D'), H = num(p, 'H'), sd = num(p, 'screwD'), pad = nv(p, 'pad', 2);
   let m = cyl(H - 1.5, D / 2, D / 2, 96).add(cyl(1.5, D / 2, D / 2 - 1.5, 96).translate([0, 0, H - 1.51]));
   m = m.subtract(cyl(pad + 1, D / 2 - 3, D / 2 - 3, 96).translate([0, 0, H - pad]));
   if (sd > 0) m = m.subtract(csHole(0, 0, H - pad, sd));
@@ -762,3 +762,25 @@ export const USEFUL2_DEFS: PartDef[] = [
     build: clampSquare,
   },
 ];
+
+/** Fixed sizes chosen for printing, adjustable under „Więcej wymiarów”. */
+const ADV: Record<string, ParamDef[]> = {
+  cableComb: [adv('wall', 'Grubość ząbków', 2.2, 1.2, 5, 0.1), adv('base', 'Grubość podstawy', 3, 1.6, 6, 0.2)],
+  cableLatch: [adv('arm', 'Grubość ramienia', 1.3, 0.8, 2.5, 0.1, 'Cieńsze = łatwiej zapiąć.'), adv('base', 'Grubość podkładki', 2.4, 1.2, 5, 0.2)],
+  deskEdgeClip: [adv('t', 'Grubość klipsa', 3, 2, 6, 0.2), adv('press', 'Wcisk na blat', 0.3, 0, 1, 0.05), adv('grip', 'Pochylenie górnego ramienia', 2, 0, 6, 0.5, 'Stopnie. Większe = mocniej ściska.')],
+  cableCorner: [adv('wall', 'Grubość ścianki', 1.6, 1, 4, 0.2)],
+  deskGrommet: [adv('wall', 'Ścianka tulei', 2, 1.2, 5, 0.2), adv('rim', 'Szerokość kołnierza', 6, 2, 20, 0.5), adv('f', 'Grubość kołnierza', 2.4, 1.2, 5, 0.2)],
+  zipTie: [adv('T', 'Grubość paska', 1.4, 1, 2.5, 0.1)],
+  cableSleeve: [adv('wall', 'Grubość ścianki', 1.6, 0.8, 4, 0.1), adv('spig', 'Długość wpustu', 6, 3, 20, 0.5)],
+  furnitureKnob: [adv('stem', 'Średnica trzonka', 0, 0, 40, 0.5, '0 = dobiera się sama.')],
+  profileCap: [adv('f', 'Grubość kołnierza', 2.4, 1, 6, 0.2), adv('pw', 'Ścianka korka', 1.6, 1, 4, 0.1), adv('rib', 'Wysokość żeberek', 0.35, 0, 1, 0.05, 'Wcisk korka w rurę.')],
+  drillGuide: [adv('plate', 'Grubość płyty z tulejami', 10, 5, 30, 0.5, 'Grubsza = wiertło prowadzi się prościej.'), adv('fence', 'Wysokość oporu', 12, 5, 40, 0.5), adv('fw4', 'Grubość oporu', 4, 2, 10, 0.5)],
+  toolStand: [adv('base', 'Grubość podstawy', 6, 3, 20, 0.5), adv('hF', 'Wysokość przednich widełek', 15, 5, 80, 1), adv('hB', 'Wysokość tylnych widełek', 0, 0, 150, 1, '0 = dobiera się z długości podstawy.')],
+  funnel: [adv('wall', 'Grubość ścianki', 1.6, 0.8, 4, 0.1)],
+  measureCup: [adv('wall', 'Grubość ścianki', 1.8, 1, 4, 0.1), adv('floor', 'Grubość dna', 2, 1, 5, 0.2)],
+  magnetCatch: [adv('floor', 'Grubość pod magnesem', 1.2, 0.4, 4, 0.2, 'Cieńsza = mocniej trzyma.'), adv('side', 'Ścianka wokół magnesu', 3, 1.2, 8, 0.2)],
+  ventGrille: [adv('T', 'Grubość kratki', 2, 1.2, 5, 0.2), adv('spig', 'Długość kołnierza na rurę', 15, 5, 40, 1), adv('rim', 'Szerokość ramki', 8, 3, 25, 0.5)],
+  linkBin: [adv('wall', 'Grubość ścianki', 1.8, 1.2, 4, 0.2), adv('r', 'Zaokrąglenie narożników', 3, 0.5, 15, 0.5)],
+  wallBumper: [adv('pad', 'Głębokość wnęki na filc', 2, 0, 5, 0.2)],
+};
+for (const d of USEFUL2_DEFS) if (ADV[d.type]) d.params.push(...ADV[d.type]);

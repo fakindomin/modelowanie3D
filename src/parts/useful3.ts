@@ -1,9 +1,9 @@
 import type { CrossSection, Manifold } from 'manifold-3d';
 import { M, settle } from '../geom/manifold';
-import type { Params, PartDef } from './def';
+import type { ParamDef, Params, PartDef } from './def';
 import { box, cyl, num, union } from './util';
 import { FONT, textOutline } from './text';
-import { type P2, arc, ccw, count, csHole, n, onSide, screwOf, screwParams, stroke } from './useful';
+import { type P2, adv, arc, ccw, count, csHole, n, nv, onSide, screwOf, screwParams, stroke } from './useful';
 
 /** Bathroom and kids: third batch of everyday things, same rules as useful.ts (no supports as built). */
 
@@ -20,7 +20,7 @@ function showerHook(p: Params) {
 
 /** Corner shelf: a quarter disc with a lip and drain slots, two upright backs for the walls. */
 function cornerShelf(p: Params) {
-  const R = num(p, 'R'), t = 4, Hb = num(p, 'Hb'), lip = num(p, 'lip');
+  const R = num(p, 'R'), t = nv(p, 'T', 4), Hb = num(p, 'Hb'), lip = num(p, 'lip'), bt = nv(p, 'bt', 3);
   const quarter = C().circle(R, 96).intersect(C().square([R, R]));
   let m = quarter.extrude(t);
   // Lip round the front with gaps for water.
@@ -29,35 +29,35 @@ function cornerShelf(p: Params) {
   for (const a of [22.5, 45, 67.5]) lipM = lipM.subtract(box(R - 4, -3, t - 1, R + 2, 3, t + lip + 1).rotate([0, 0, a]));
   m = m.add(lipM);
   // Backs standing on the two straight edges.
-  m = m.add(box(0, 0, 0, R, 3, Hb)).add(box(0, 0, 0, 3, R, Hb));
+  m = m.add(box(0, 0, 0, R, bt, Hb)).add(box(0, 0, 0, bt, R, Hb));
   // Drain holes.
   for (let r = R * 0.35; r < R - 8; r += 12) for (let a = 15; a < 90; a += 20 * (R / r) * 0.3) m = m.subtract(cyl(t + 2, 2.5, 2.5, 16).translate([r * Math.cos((a * Math.PI) / 180), r * Math.sin((a * Math.PI) / 180), -1]));
   const sd = screwOf(p);
   if (sd) {
     // Countersunk from the shelf side, through each back.
-    m = m.subtract(csHole(0, 0, 3, sd).rotate([-90, 0, 0]).translate([R * 0.6, 0, Hb * 0.7]));
-    m = m.subtract(csHole(0, 0, 3, sd).rotate([0, 90, 0]).translate([0, R * 0.6, Hb * 0.7]));
+    m = m.subtract(csHole(0, 0, bt, sd).rotate([-90, 0, 0]).translate([R * 0.6, 0, Hb * 0.7]));
+    m = m.subtract(csHole(0, 0, bt, sd).rotate([0, 90, 0]).translate([0, R * 0.6, Hb * 0.7]));
   }
   return settle(m);
 }
 
 /** Cosmetics organizer: round pockets for tubes and brushes at the back, a bin at the front. */
 function cosmeticOrganizer(p: Params) {
-  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd'), H = num(p, 'H'), binD = num(p, 'binD'), wall = 2;
+  const k = Math.max(1, Math.round(num(p, 'N'))), d = num(p, 'd'), H = num(p, 'H'), binD = num(p, 'binD'), wall = nv(p, 'wall', 2), fl = nv(p, 'floor', 2);
   const W = Math.max(k * (d + wall) + wall, 60);
   const D = d + 2 * wall + binD + wall;
   let m = box(0, 0, 0, W, D, H);
   const x0 = (W - k * (d + wall) + wall) / 2;
-  for (let i = 0; i < k; i++) m = m.subtract(cyl(H, d / 2, d / 2, 48).translate([x0 + d / 2 + i * (d + wall), D - wall - d / 2, 2]));
+  for (let i = 0; i < k; i++) m = m.subtract(cyl(H, d / 2, d / 2, 48).translate([x0 + d / 2 + i * (d + wall), D - wall - d / 2, fl]));
   // Front bin, lower than the back.
-  const bh = H * 0.55;
-  m = m.subtract(box(wall, wall, 2, W - wall, wall + binD, H + 1)).subtract(box(-1, -1, bh, W + 1, wall + binD + wall * 0.5, H + 1));
+  const bh = (H * nv(p, 'front', 55)) / 100;
+  m = m.subtract(box(wall, wall, fl, W - wall, wall + binD, H + 1)).subtract(box(-1, -1, bh, W + 1, wall + binD + wall * 0.5, H + 1));
   return settle(m);
 }
 
 /** Drain strainer: a perforated disc, a skirt that goes into the drain, a tab to lift it out. */
 function drainStrainer(p: Params) {
-  const D = num(p, 'D'), Ds = num(p, 'Ds'), hd = num(p, 'hole'), t = 1.8;
+  const D = num(p, 'D'), Ds = num(p, 'Ds'), hd = num(p, 'hole'), t = nv(p, 'T', 1.8);
   let disc = C().circle(D / 2, 96).add(C().circle(6, 32).translate([D / 2 + 3, 0]).add(C().square([8, 8], true).translate([D / 2, 0])));
   disc = disc.subtract(C().circle(3, 24).translate([D / 2 + 3, 0]));
   const holes: CrossSection[] = [];
@@ -73,7 +73,7 @@ function drainStrainer(p: Params) {
 // ================================================================== kids
 /** Bookmark with a name standing on it (change filament at the letters for two colours). */
 function bookmark(p: Params) {
-  const L = num(p, 'L'), W = num(p, 'W'), t = 1.2, font = String(p.font || 'sans-bold');
+  const L = num(p, 'L'), W = num(p, 'W'), t = nv(p, 'T', 1.2), font = String(p.font || 'sans-bold');
   const strip = C().square([W - 6, L - 6], true).offset(3, 'Round', undefined, 24);
   let m = strip.subtract(C().circle(2.5, 24).translate([0, L / 2 - 7])).extrude(t);
   const text = String(p.text ?? '').trim() || '?';
@@ -88,7 +88,7 @@ function bookmark(p: Params) {
 
 /** Name puzzle: a tray with letter-shaped holes and the letters to put in them, side by side. */
 function namePuzzle(p: Params) {
-  const text = (String(p.text ?? '').trim() || 'ALA').toUpperCase(), size = num(p, 'size'), g = 0.25, T = 6, base = 2, m0 = 8;
+  const text = (String(p.text ?? '').trim() || 'ALA').toUpperCase(), size = num(p, 'size'), g = nv(p, 'gap', 0.25), T = nv(p, 'T', 6), base = nv(p, 'base', 2), m0 = nv(p, 'm0', 8);
   const font = String(p.font || 'sans-bold');
   const letters: { cs: CrossSection; x: number }[] = [];
   let x = 0;
@@ -118,7 +118,7 @@ function namePuzzle(p: Params) {
 
 /** Whistle: a round chamber, a flat windway along its side and a sharp edge at the window. */
 function whistle(p: Params) {
-  const Rc = num(p, 'D') / 2, h = 10, wall = 1.6, L = 28;
+  const Rc = num(p, 'D') / 2, h = nv(p, 'H', 10), wall = nv(p, 'wall', 1.6), L = nv(p, 'L', 28);
   const R = Rc + wall;
   const wy0 = Rc - 1.2, wy1 = Rc;
   // Body: the chamber and a mouthpiece around the windway, a ring for a lanyard.
@@ -137,10 +137,10 @@ function whistle(p: Params) {
 
 /** Tic-tac-toe: a board with raised lines, five crosses and five rings. */
 function ticTacToe(p: Params) {
-  const S = num(p, 'S'), cell = S / 3, t = 3;
+  const S = num(p, 'S'), cell = S / 3, t = nv(p, 'T', 3);
   let board = box(0, 0, 0, S, S, t);
   for (const i of [1, 2]) board = board.add(box(i * cell - 1, 4, t - 0.01, i * cell + 1, S - 4, t + 2)).add(box(4, i * cell - 1, t - 0.01, S - 4, i * cell + 1, t + 2));
-  const pd = cell - 8, ph = 4;
+  const pd = cell - 8, ph = nv(p, 'ph', 4);
   const ring = C().circle(pd / 2, 48).subtract(C().circle(pd / 2 - 3.5, 48)).extrude(ph);
   const bar = C().square([pd, 3.5], true);
   const cross = C().union([bar.rotate(45), bar.rotate(-45)]).extrude(ph);
@@ -154,7 +154,7 @@ function ticTacToe(p: Params) {
 
 /** Die: rounded cube with spherical pips; one pip on the bed face. */
 function die(p: Params) {
-  const S = num(p, 'S'), r = S * 0.085, h = S / 2;
+  const S = num(p, 'S'), r = (S * nv(p, 'pip', 8.5)) / 100, h = S / 2;
   let m = box(-h, -h, -h, h, h, h).intersect(M().Manifold.sphere(h * 1.38, 96));
   const o = S * 0.25;
   const faces: [number[], [number, number][]][] = [
@@ -231,3 +231,16 @@ export const USEFUL3_DEFS: PartDef[] = [
     build: die,
   },
 ];
+
+/** Fixed sizes chosen for printing, adjustable under „Więcej wymiarów”. */
+const ADV: Record<string, ParamDef[]> = {
+  cornerShelf: [adv('T', 'Grubość półki', 4, 2, 10, 0.5), adv('bt', 'Grubość ścianek do muru', 3, 2, 8, 0.5)],
+  cosmeticOrganizer: [adv('wall', 'Grubość ścianki', 2, 1.2, 5, 0.2), adv('floor', 'Grubość dna', 2, 1, 5, 0.2), adv('front', 'Wysokość przodu (% całości)', 55, 20, 100, 5)],
+  drainStrainer: [adv('T', 'Grubość krążka', 1.8, 1, 4, 0.2)],
+  bookmark: [adv('T', 'Grubość zakładki', 1.2, 0.6, 3, 0.2)],
+  namePuzzle: [adv('T', 'Grubość liter', 6, 3, 15, 0.5), adv('base', 'Grubość dna tacki', 2, 1, 5, 0.5), adv('gap', 'Luz liter w tacce', 0.25, 0.1, 1, 0.05), adv('m0', 'Margines tacki', 8, 4, 25, 1)],
+  whistle: [adv('H', 'Wysokość', 10, 7, 20, 0.5), adv('wall', 'Grubość ścianki', 1.6, 1, 3, 0.1), adv('L', 'Długość ustnika', 28, 15, 60, 1)],
+  ticTacToe: [adv('T', 'Grubość planszy', 3, 2, 8, 0.5), adv('ph', 'Wysokość pionków', 4, 2, 10, 0.5)],
+  die: [adv('pip', 'Wielkość oczek (% boku)', 8.5, 5, 12, 0.5)],
+};
+for (const d of USEFUL3_DEFS) if (ADV[d.type]) d.params.push(...ADV[d.type]);
