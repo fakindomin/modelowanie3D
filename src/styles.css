@@ -713,3 +713,6 @@ body.resizing { cursor: col-resize; user-select: none; }
 .model-card .mc-note { font-size: 11px; opacity: .7; }
 .model-card .mc-wait { font-size: 22px; opacity: .6; }
 @media (max-width: 760px) { .model-card { display: none; } }
+
+.more-dims { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.more-dims > h5 { margin: 2px 0 6px; color: var(--muted); font-weight: 600; }

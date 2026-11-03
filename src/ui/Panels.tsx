@@ -1419,12 +1419,15 @@ function PartProperties({ part }: { part: Part }) {
         Wymiary <Info text={INFO.dims} />
       </h4>
       {main.map(field)}
-      {ends.length > 0 && <EndsSection part={part} fields={ends} />}
       {more.length > 0 && (
-        <Section title="Więcej wymiarów" info={INFO.moreDims} open={more.some((p) => part.params[p.key] !== undefined && part.params[p.key] !== p.def)}>
+        <div className="more-dims">
+          <h5>
+            Wymiary dodatkowe <Info text={INFO.moreDims} />
+          </h5>
           {more.map(field)}
-        </Section>
+        </div>
       )}
+      {ends.length > 0 && <EndsSection part={part} fields={ends} />}
       {part.type === 'figurine' && (
         <div className="row">
           <NumberInput value={height} min={30} max={300} unit="mm" onChange={setHeight} />
