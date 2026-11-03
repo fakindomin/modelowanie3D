@@ -306,8 +306,20 @@ function ventCupHolder(p: Params) {
 
 // ================================================================== kitchen
 /** One end of the paper-towel rod: bracket profile for the wall or under a cabinet. */
-function towelBracket(mode: string, A: number, rN: number, w: number, sd: number): Manifold {
+function towelBracket(mode: string, A: number, rN: number, w: number, sd: number, st = 18, Ud = 40): Manifold {
   const t = 5;
+  if (mode === 'shelf') {
+    // U slid onto the shelf's front edge (shelf at y 0..st, going in towards +x), the arm hangs below it.
+    const g = 0.3, tu = 4, xa = 5, xk = xa + rN + 3, top = st + g;
+    let cs = C().square([Ud + tu, tu]).translate([-tu, top]).add(C().square([tu, top + 2 * tu]).translate([-tu, -tu])).add(C().square([Ud + tu, tu]).translate([-tu, -tu]));
+    // Lead-in at the mouth and a bump that pinches the shelf.
+    cs = cs.subtract(ccw([[Ud - 3, top + 0.01], [Ud + 0.01, top + 0.01], [Ud + 0.01, top + 2]])).subtract(ccw([[Ud - 3, -0.01], [Ud + 0.01, -2], [Ud + 0.01, -0.01]]));
+    cs = cs.add(C().circle(0.7, 16).translate([Ud - 6, 0]));
+    cs = cs.add(C().square([10, A]).translate([xa - 5, -A]));
+    cs = cs.add(C().hull([C().square([10, 1]).translate([xa - 5, -A]), C().circle(rN + 4, 48).translate([xk, -A])]));
+    cs = cs.subtract(C().circle(rN, 48).translate([xk, -A])).subtract(C().square([2 * rN, 3 * rN]).translate([-rN, 0]).rotate(-45).translate([xk, -A]));
+    return cs.extrude(w);
+  }
   if (mode === 'under') {
     const hp = 50, xa = hp / 2;
     const xk = xa + rN + 3;
@@ -340,7 +352,7 @@ function rodPiece(len: number, r: number, rp: number, pinL: number, bottom: 'pin
 /** Paper towel holder: two brackets and a rod (split in two when the roll is wider than the bed). */
 function paperTowelHolder(p: Params) {
   const RW = num(p, 'RW'), rd = num(p, 'rd'), A = num(p, 'A'), w = 15, rN = 5.4, rp = 5, sd = screwOf(p);
-  const br = towelBracket(String(p.mode ?? 'wall'), A, rN, w, sd);
+  const br = towelBracket(String(p.mode ?? 'wall'), A, rN, w, sd, num(p, 'st') || 18, nv(p, 'Ud', 40));
   const len = RW + 6, pinL = w + 2;
   const pieces: Manifold[] = [br, br];
   if (len + 2 * pinL + 2 * (rd / 2 - rp) <= 245) pieces.push(rodPiece(len, rd / 2, rp, pinL, 'pin', 'pin'));
@@ -684,7 +696,11 @@ function marbleMaze(p: Params) {
   const c = (i: number) => wt + i * cell + (cell - wt) / 2;
   m = m.add(cyl(0.8, 2, 2, 24).translate([c(0), c(0), base - 0.01]));
   m = m.subtract(M().Manifold.sphere(bd / 2 + 0.3, 32).translate([c(N - 1), c(N - 1), base + bd / 2 - 1.2]));
-  return settle(m);
+  if (p.printBall !== true) return settle(m);
+  // Printed ball: two halves flat side down, glued together; a 45° cone inside each for lead shot or a nut.
+  const r = bd / 2, rc = r * 0.55;
+  const half = M().Manifold.sphere(r, 64).intersect(box(-r - 1, -r - 1, 0, r + 1, r + 1, r + 1)).subtract(cyl(rc, rc, 0.01, 32).translate([0, 0, -0.01]));
+  return row([m, half, half], 4);
 }
 
 /** Name stamp: mirrored raised letters on a plate, a handle that widens at 45° (printed handle down). */
@@ -828,8 +844,8 @@ export const USEFUL4_DEFS: PartDef[] = [
   // ---- kitchen
   {
     type: 'paperTowelHolder', label: 'Uchwyt na ręcznik papierowy', category: 'useful', hole: false,
-    description: 'Dwa wsporniki (na ścianę albo pod szafkę) i drążek z czopami. Szerszy drążek drukuje się z dwóch połówek wsuwanych jedna w drugą.',
-    params: [select('mode', 'Montaż', 'wall', [['wall', 'Na ścianę'], ['under', 'Pod szafkę']]), n('RW', 'Szerokość rolki', 230, 100, 300), n('rd', 'Średnica drążka', 30, 20, 38, 1, 'Mniejsza niż otwór tulejki (zwykle 40 mm).'), n('A', 'Odstęp od ściany', 70, 50, 120, 1, 'Połowa średnicy pełnej rolki i trochę zapasu.'), ...screwParams],
+    description: 'Dwa wsporniki (na ścianę, pod szafkę albo nasuwane na półkę jak litera U) i drążek z czopami. Szerszy drążek drukuje się z dwóch połówek wsuwanych jedna w drugą.',
+    params: [select('mode', 'Montaż', 'wall', [['wall', 'Na ścianę'], ['under', 'Pod szafkę (na wkręty)'], ['shelf', 'Nasuwany na półkę (U)']]), n('st', 'Grubość półki', 18, 5, 40, 0.5, 'Zmierz suwmiarką; uchwyt trzyma się na wcisk.', (p) => p.mode === 'shelf'), n('RW', 'Szerokość rolki', 230, 100, 300), n('rd', 'Średnica drążka', 30, 20, 38, 1, 'Mniejsza niż otwór tulejki (zwykle 40 mm).'), n('A', 'Odstęp drążka od ściany / półki', 70, 50, 120, 1, 'Połowa średnicy pełnej rolki i trochę zapasu.'), ...screwParams.map((q) => ({ ...q, show: (p: Params) => p.mode !== 'shelf' && (q.show ? q.show(p) : true) })), adv('Ud', 'Głębokość nasunięcia na półkę', 40, 20, 80, 1)],
     build: paperTowelHolder,
   },
   {
@@ -954,8 +970,8 @@ export const USEFUL4_DEFS: PartDef[] = [
   },
   {
     type: 'marbleMaze', label: 'Labirynt na kulkę', category: 'useful', hole: false,
-    description: 'Losowy labirynt ze ściankami na płytce; kulkę (stalową 6–8 mm) prowadzisz od znaczka startu do dołka na mecie. Inny numer = inny labirynt.',
-    params: [count('N', 'Liczba pól w rzędzie', 8, 4, 20), n('ball', 'Średnica kulki', 8, 5, 16, 0.5), count('seed', 'Numer labiryntu', 1, 1, 999)],
+    description: 'Losowy labirynt ze ściankami na płytce; kulkę (kupioną stalową 6–8 mm albo wydrukowaną z dwóch połówek) prowadzisz od znaczka startu do dołka na mecie. Inny numer = inny labirynt.',
+    params: [count('N', 'Liczba pól w rzędzie', 8, 4, 20), n('ball', 'Średnica kulki', 8, 5, 16, 0.5), count('seed', 'Numer labiryntu', 1, 1, 999), bool('printBall', 'Kulka do druku', false, 'Dwie połówki do sklejenia, w środku miejsce na śrut albo nakrętkę (ciężar). Stalowa toczy się lepiej.')],
     build: marbleMaze,
   },
   {
