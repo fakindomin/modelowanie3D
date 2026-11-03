@@ -529,9 +529,11 @@ export function buildPipeEnd(p: Params): Manifold {
   const top = B;
   if (top === 'male' || top === 'bayonet' || top === 'click') m = pipeTip(m.rotate([180, 0, 0]).translate([0, 0, L]), p, top).translate([0, 0, -L]).rotate([180, 0, 0]);
   m = m.subtract(cyl(L + 2, ri).translate([0, 0, -1]));
-  if (p.bell === 'yes') {
+  if (p.bell === 'yes' || p.bell === 'bayBell') {
     // Socket on the top end: the next pipe's plain end slides in down to the ledge (45° outside, prints standing).
-    const bD = num(p, 'bellD'), bl = num(p, 'bellL') || 0.15, Ri = D / 2 + bl, Ro = Ri + (num(p, 'bellW') || 2.4);
+    // With bayonet slots it takes the next pipe's bayonet pins: as deep as that pipe's bayonet end.
+    const bay = p.bell === 'bayBell';
+    const bD = bay ? num(p, 'depth') : num(p, 'bellD'), bl = num(p, 'bellL') || 0.15, Ri = D / 2 + bl, Ro = Ri + (num(p, 'bellW') || 2.4);
     const z0 = L - bD;
     m = m
       .add(cyl(bD, Ro).translate([0, 0, z0]))
@@ -539,6 +541,30 @@ export function buildPipeEnd(p: Params): Manifold {
       .subtract(cyl(bD + 1, Ri).translate([0, 0, z0]))
       .subtract(cyl(0.81, Ri, Ri + 0.8).translate([0, 0, L - 0.8]))
       .subtract(cyl(L + 2, ri).translate([0, 0, -1]));
+    if (bay) {
+      // The same L slots as a fitting's bayonet arm: in from the mouth at -50°, a turn to 0° where the pin rests.
+      const pinD = num(p, 'pinD') || 5, gg = Math.max(0.2, g), w = pinD + 2 * gg, TURN = 50;
+      const r1 = Ri - 1, r2 = Ro + 1, zp = L - Math.max(pinD, 4) - 2;
+      const cuts: Manifold[] = [];
+      for (const s of [0, 180]) {
+        cuts.push(box(r1, -w / 2, zp - w / 2, r2, w / 2, L + 1).rotate([0, 0, s - TURN]));
+        const half = (w / (2 * Math.PI * r1)) * 360;
+        cuts.push(M().Manifold.revolve(poly([[r1, zp - w / 2], [r2, zp - w / 2], [r2, zp + w / 2], [r1, zp + w / 2]]), 96, TURN + half).rotate([0, 0, s - TURN - half / 2]));
+      }
+      m = m.subtract(union(cuts));
+      const lock = num(p, 'bayLock');
+      if (lock > 0) {
+        const rIn = Ri - 0.01, at = (((pinD / 2 + 1.2) / rIn) * 180) / Math.PI;
+        const bumps: Manifold[] = [];
+        for (const s of [0, 180])
+          for (const [z0, dir] of [[zp - w / 2, 1], [zp + w / 2, -1]] as const) {
+            const base = box(rIn, -0.9, Math.min(z0, z0 - dir * 0.3), Ro + 0.01, 0.9, Math.max(z0, z0 - dir * 0.3));
+            const tip = box(rIn, -0.05, Math.min(z0 + dir * lock, z0 + dir * (lock - 0.01)), Ro + 0.01, 0.05, Math.max(z0 + dir * lock, z0 + dir * (lock - 0.01)));
+            bumps.push(M().Manifold.hull([base, tip]).rotate([0, 0, s - at]));
+          }
+        m = m.add(union(bumps));
+      }
+    }
   }
   // A closed end: a floor as thick as the wall.
   if (A === 'cap') m = m.add(cyl(Math.max(T, 1.2), ri + 0.01).translate([0, 0, 0]));
@@ -742,16 +768,17 @@ export const COUPLING_DEFS: PartDef[] = [
       n('T', 'Ścianka', 1.9, 0.5, 30, 0.1),
       n('L', 'Długość', 60, 5, 1000, 1),
       { ...select('end', 'Koniec A (dół)', 'socket', PIPE_ENDS), end: 'A' },
-      { ...select('bell', 'Koniec B (góra)', 'none', [['none', 'Gładki'], ['yes', 'Kielich (następna rura wchodzi do środka)'], ...PIPE_ENDS.slice(1)]), end: 'B', hint: 'Kielich łączy odcinki rury bez osobnych złączek. Gwint, bagnet i klik pasują do ramienia łącznika.' },
+      { ...select('bell', 'Koniec B (góra)', 'none', [['none', 'Gładki'], ['yes', 'Kielich (następna rura wchodzi do środka)'], ['bayBell', 'Kielich z gniazdem bagnetu'], ...PIPE_ENDS.slice(1)]), end: 'B', hint: 'Kielich łączy odcinki rury bez osobnych złączek. Kielich z gniazdem bagnetu przyjmuje rurę z „Bolcami bagnetu” na końcu A: wsuń i przekręć. Gwint, bagnet i klik pasują też do ramienia łącznika.' },
       n('bellD', 'Głębokość kielicha', 30, 8, 100, 1, { show: (p: Params) => p.bell === 'yes' }),
-      n('bellW', 'Ścianka kielicha', 2.4, 1.2, 8, 0.2, { show: (p: Params) => p.bell === 'yes' }),
-      n('bellL', 'Luz kielicha', 0.15, 0, 1, 0.05, { show: (p: Params) => p.bell === 'yes', hint: '0,1–0,15 mm: ciasno, trzyma bez kleju. 0,3: luźno, do klejenia.' }),
-      n('depth', 'Długość końcówki (gwint, bagnet, klik)', 20, 6, 200, 1, { show: (p: Params) => pipeUses(p, 'male', 'bayonet', 'click') }),
+      n('bellW', 'Ścianka kielicha', 2.4, 1.2, 8, 0.2, { show: (p: Params) => p.bell === 'yes' || p.bell === 'bayBell' }),
+      n('bellL', 'Luz kielicha', 0.15, 0, 1, 0.05, { show: (p: Params) => p.bell === 'yes' || p.bell === 'bayBell', hint: '0,1–0,15 mm: ciasno, trzyma bez kleju. 0,3: luźno, do klejenia.' }),
+      n('depth', 'Długość końcówki (gwint, bagnet, klik)', 20, 6, 200, 1, { show: (p: Params) => pipeUses(p, 'male', 'bayonet', 'click', 'bayBell'), hint: 'Przy kielichu z gniazdem bagnetu to też jego głębokość: rura z bolcami o tej samej długości końcówki pasuje.' }),
       n('P', 'Skok gwintu', 1.5, 0.75, 4, 0.25, { show: (p: Params) => pipeUses(p, 'male') && !String(p.std).startsWith('g') }),
       { ...fitSel, show: (p) => pipeUses(p, 'male') },
       { ...select('pinHoles', 'Otwory na zatrzask U', 'none', [['none', 'Bez otworów'], ['bottom', 'Przy końcu A'], ['top', 'Przy końcu B'], ['both', 'Przy obu końcach']]), show: (p: Params) => p.pinHoles !== undefined && p.pinHoles !== 'none', hint: 'Starsze ustawienie. Teraz otwory wybiera się w końcu A albo B.' },
       n('pinAt', 'Odległość otworów od końca', 15, 4, 100, 0.5, { show: (p: Params) => pipeUses(p, 'pin', 'screw') || (p.pinHoles !== 'none' && p.pinHoles !== undefined) }),
-      n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => pipeUses(p, 'pin', 'bayonet') || (p.pinHoles !== 'none' && p.pinHoles !== undefined) }),
+      n('pinD', 'Średnica bolców', 5, 3, 10, 0.5, { show: (p: Params) => pipeUses(p, 'pin', 'bayonet', 'bayBell') || (p.pinHoles !== 'none' && p.pinHoles !== undefined) }),
+      n('bayLock', 'Przewężenie rowka bagnetu', 0.3, 0, 1, 0.05, { show: (p: Params) => p.bell === 'bayBell', hint: 'Dwa małe garby w rowku kielicha tuż przed końcem: bolec przeskakuje przez nie z kliknięciem. 0 = bez przewężenia.' }),
       n('screwD', 'Otwór na wkręt', 3.2, 1.5, 10, 0.1, { show: (p: Params) => pipeUses(p, 'screw'), hint: 'Pod wkręt do tworzyw M4: 3,2 mm. Pod śrubę na wylot M4: 4,4 mm.' }),
       n('wall', 'Wysokość bolców', 2.3, 1, 10, 0.1, { show: (p: Params) => pipeUses(p, 'bayonet'), hint: 'Tyle co ścianka łącznika.' }),
       n('luz', 'Luz', 0.25, 0, 1.5, 0.05, { show: () => false }),

@@ -8,6 +8,7 @@ import { isLocked, loadBed, useStore } from './store';
 import { buildBodies, built } from './geom/parts';
 import * as THREE from 'three';
 import { export3MF, exportSTL, saveJSON } from './export';
+import { bestPose, keepsPose, turnManifold } from './geom/orient';
 import { makeManual } from './manual';
 import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
@@ -43,6 +44,17 @@ export function useProjectActions() {
         b.manifold = turned;
       }
     }
+    // Each body in the pose that needs the least support (kept as designed unless another pose clearly saves supports).
+    let turnedN = 0;
+    for (const b of bodies) {
+      if (keepsPose(st.parts.filter((p) => p.body === b.body && !p.hole))) continue;
+      const pose = bestPose(b.manifold);
+      if (!pose) continue;
+      const t = turnManifold(b.manifold, pose.turn);
+      b.manifold.delete();
+      b.manifold = t;
+      turnedN++;
+    }
     // STL: one file per kind of print (as in the manual: number, name, how many to print), not one per copy.
     let out = bodies;
     let plateN = 0;
@@ -68,11 +80,12 @@ export function useProjectActions() {
     });
     const hidden = st.parts.filter((p) => p.hidden).length;
     st.notify(
-      fmt === 'stl' && bodies.length > 1
+      (fmt === 'stl' && bodies.length > 1
         ? `Wyeksportowano ${out.length} ${out.length === 1 ? 'rodzaj części' : 'rodzajów części'} (${bodies.length} wydruków): każdy rodzaj raz, w osobnym pliku STL, w nazwie numer z Instrukcji i ile sztuk wydrukować („x4”).${hidden ? ' Ukryte elementy też są w plikach.' : ''}`
         : fmt === '3mf'
           ? `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'część' : 'części'} do 3MF na ${plateN} ${plateN === 1 ? 'stole' : 'stołach'} (stół ${loadBed()[0]} × ${loadBed()[1]} mm z ustawień, każdy materiał osobno). ${plateN > 1 ? 'Każdy stół to osobny plik 3MF w archiwum .zip: otwórz jeden plik na jedną płytę.' : ''}${hidden ? ' Ukryte elementy też są w pliku.' : ''}`
-          : `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`,
+          : `Wyeksportowano ${bodies.length} ${bodies.length === 1 ? 'bryłę' : 'bryły'} do ${fmt.toUpperCase()}.${hidden ? ' Ukryte elementy też są w pliku.' : ''}`) +
+        (turnedN ? ` ${turnedN === 1 ? 'Jedną część obrócono' : `Obrócono ${turnedN} części`} na stole tak, żeby potrzebowały jak najmniej podpór.` : ''),
     );
   };
   const fresh = () => {
@@ -143,7 +156,7 @@ function Toolbar() {
       <span className="sep" />
       <div className="group">
         <button onClick={st.fit} title="Pokaż cały model (F)">⤢ Całość</button>
-        <button onClick={st.layoutOnBed} title="Ułóż na stole: kładzie każdą bryłę na jej największej płaskiej ściance i rozkłada wszystkie obok siebie na stole drukarki">
+        <button onClick={st.layoutOnBed} title="Ułóż na stole: obraca każdą bryłę tak, żeby potrzebowała jak najmniej podpór (przy remisie największą ścianką w dół), i rozkłada wszystkie obok siebie na stole drukarki">
           ⊞ Ułóż
         </button>
         <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">

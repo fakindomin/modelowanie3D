@@ -91,6 +91,16 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   part('linearSlide', ['workshop']),
   part('hoseTee', ['garden', 'workshop']),
   part('filmClip', ['garden']),
+  // Bathroom and kids.
+  part('showerHook', ['bath']),
+  part('cornerShelf', ['bath']),
+  part('cosmeticOrganizer', ['bath', 'desk']),
+  part('drainStrainer', ['bath', 'kitchen']),
+  part('bookmark', ['kids']),
+  part('namePuzzle', ['kids']),
+  part('whistle', ['kids', 'garden']),
+  part('ticTacToe', ['kids']),
+  part('die', ['kids']),
   // Workshop.
   part('drillGuide', ['workshop']),
   part('wrench', ['workshop']),

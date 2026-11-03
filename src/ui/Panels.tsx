@@ -21,6 +21,7 @@ import { WALL_SIDES, sideOf, type WallSide } from '../parts/connectors';
 import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, segmentsOf, toggleSegment, type DivLayout } from '../geom/dividers';
 import { fittingGeo } from '../parts/couplings';
 import { PROJECT_ITEMS, USE_CATS, itemsIn, type ProjectItem } from '../projects';
+import { cardInfo, fmtMin, type CardInfo } from './modelCard';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 /** The „Części” tab: the building blocks in a few groups, each holding one or more of the old categories. */
@@ -35,6 +36,43 @@ const PART_GROUPS: { id: string; label: string; cats: Category[] }[] = [
 type LibMode = 'projects' | 'parts';
 const LIB_MODE_KEY = 'modelowanie3d.libraryMode';
 
+/** Floating card next to a project tile: picture, size, filament, time and whether it fits the bed. */
+function ModelCard({ item, top, left }: { item: ProjectItem; top: number; left: number }) {
+  const [info, setInfo] = useState<CardInfo | null | undefined>(undefined);
+  useEffect(() => {
+    setInfo(undefined);
+    if (item.kind === 'wizard' || item.kind === 'figurines') return setInfo(null);
+    // Built after the card is on screen (a heavy model takes a moment).
+    const t = window.setTimeout(() => setInfo(cardInfo(item)), 30);
+    return () => window.clearTimeout(t);
+  }, [item]);
+  const bed = loadBed();
+  const fits = info ? (() => {
+    const a = [...info.size].sort((x, y) => x - y), b = [...bed].sort((x, y) => x - y);
+    return a.every((v, i) => v <= b[i]);
+  })() : true;
+  return (
+    <div className="model-card" style={{ top, left }} role="tooltip">
+      <div className="mc-pic">{info ? <img src={info.thumb} alt="" /> : info === undefined ? <span className="mc-wait">…</span> : <Icon type={item.icon} hole={false} />}</div>
+      <b>{item.label}</b>
+      <p>{item.desc}</p>
+      {item.kind === 'wizard' && <p className="mc-meta">Kreator krok po kroku: wymiary podasz w kolejnych krokach, na końcu zobaczysz filament i czas.</p>}
+      {item.kind === 'figurines' && <p className="mc-meta">Osobna zakładka Figurki.</p>}
+      {info && (
+        <>
+          <p className="mc-meta">
+            {info.size.map((v) => Math.round(v)).join(' × ')} mm{info.parts > 1 ? ` · ${info.parts} części` : ''}
+            <br />
+            ok. {Math.max(1, Math.round(info.grams))} g PLA · ok. {fmtMin(info.minutes)}
+          </p>
+          <p className={fits ? 'mc-fit ok' : 'mc-fit no'}>{fits ? `✓ Mieści się na stole ${bed[0]} × ${bed[1]} mm` : `✗ Większe niż stół ${bed[0]} × ${bed[1]} × ${bed[2]} mm: zmniejsz albo podziel („Podziel na części”)`}</p>
+          <p className="mc-note">Dla wymiarów domyślnych; po wstawieniu zmienisz je w panelu po prawej.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Library() {
   const add = useStore((s) => s.add);
   const addFigurine = useStore((s) => s.addFigurine);
@@ -45,6 +83,18 @@ export function Library() {
   });
   const [open, setOpen] = useState<string | null>('box');
   const [q, setQ] = useState('');
+  const [card, setCard] = useState<{ item: ProjectItem; top: number; left: number } | null>(null);
+  const cardTimer = useRef<number | undefined>(undefined);
+  const showCard = (item: ProjectItem, el: HTMLElement) => {
+    window.clearTimeout(cardTimer.current);
+    const r = el.getBoundingClientRect(), lib = el.closest('.library')?.getBoundingClientRect();
+    // A short pause, so sweeping the mouse over the list does not build every model.
+    cardTimer.current = window.setTimeout(() => setCard({ item, top: Math.max(8, Math.min(r.top - 20, window.innerHeight - 410)), left: (lib?.right ?? r.right) + 8 }), 350);
+  };
+  const hideCard = () => {
+    window.clearTimeout(cardTimer.current);
+    setCard(null);
+  };
   const [mode, setModeState] = useState<LibMode>(() => {
     try {
       return localStorage.getItem(LIB_MODE_KEY) === 'parts' ? 'parts' : 'projects';
@@ -111,7 +161,7 @@ export function Library() {
     }
   };
   const itemTile = (i: ProjectItem, key: string) => (
-    <button key={key} className={i.kind === 'wizard' ? 'tile project by-wizard' : 'tile project'} title={`${i.label}: ${i.desc}${i.kind === 'wizard' ? ' (kreator krok po kroku)' : i.kind === 'part' ? ' Wymiary zmienisz w panelu po prawej.' : ''}`} onClick={() => runItem(i)}>
+    <button key={key} className={i.kind === 'wizard' ? 'tile project by-wizard' : 'tile project'} onMouseEnter={(e) => showCard(i, e.currentTarget)} onMouseLeave={hideCard} onFocus={(e) => showCard(i, e.currentTarget)} onBlur={hideCard} onClick={() => { hideCard(); runItem(i); }}>
       <Icon type={i.icon} hole={false} />
       <span>{i.label}</span>
       {i.kind === 'wizard' && <span className="badge">✨</span>}
@@ -222,6 +272,7 @@ export function Library() {
                   sectionBody(x, false),
                 ),
               ))}
+      {card && <ModelCard item={card.item} top={card.top} left={card.left} />}
       {nothing && <p className="lib-empty">Nic nie pasuje do „{q}”.</p>}
       <LibraryResize />
     </aside>

@@ -1,5 +1,6 @@
 import { USEFUL_DEFS } from './parts/useful';
 import { USEFUL2_DEFS } from './parts/useful2';
+import { USEFUL3_DEFS } from './parts/useful3';
 import type { Manifold } from 'manifold-3d';
 import { M, settle } from './geom/manifold';
 import type { Category, ParamDef, Params, PartDef } from './parts/def';
@@ -831,7 +832,7 @@ const BASE: PartDef[] = [
   },
 ];
 
-export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...SPRING_DEFS, ...SPRING_MECH_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...COUPLING_DEFS, ...CONNECTOR_DEFS, ...USEFUL_DEFS, ...USEFUL2_DEFS, FIGURINE_DEF];
+export const CATALOG: PartDef[] = [...BASE, ...TEXT_DEFS, ...SKETCH_DEFS, ...THREAD_DEFS, ...GEAR_DEFS, ...SPRING_DEFS, ...SPRING_MECH_DEFS, ...JOINT_DEFS, ...FITTING_DEFS, ...PIPE_DEFS, ...COUPLING_DEFS, ...CONNECTOR_DEFS, ...USEFUL_DEFS, ...USEFUL2_DEFS, ...USEFUL3_DEFS, FIGURINE_DEF];
 
 export const DEFS: Record<string, PartDef> = Object.fromEntries(CATALOG.map((d) => [d.type, d]));
 

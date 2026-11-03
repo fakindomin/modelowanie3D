@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
+import { bestPose, keepsPose } from './geom/orient';
 import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from './catalog';
 import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
 import { buildBodies, built, partMatrix, texturesOf, worldBox, worldManifold } from './geom/parts';
@@ -2413,40 +2414,19 @@ function turnBody(parts: Part[], body: number, axis: 0 | 1 | 2, degrees: number)
 }
 
 /**
- * The turn that puts the largest flat face of the finished body on the bed, or null when the way
- * it stands now is as good (ties keep the current pose, then the lower one wins).
+ * The turn that makes the finished body print with the least support (then the largest face down),
+ * or null when the way it stands now is as good.
  */
 function bestFaceDown(parts: Part[], body: number): [0 | 1 | 2, number] | null {
   if (parts.some((p) => p.body === body && (p.bend?.on || p.xform))) return null;
+  if (keepsPose(parts.filter((p) => p.body === body && !p.hole))) return null;
   const [res] = buildBodies(parts, [body]);
   if (!res) return null;
-  const mesh = res.manifold.getMesh();
+  // Least support first, then the largest face on the bed (see geom/orient).
+  const best = bestPose(res.manifold);
   res.geometry.dispose();
   res.manifold.delete();
-  const turns: [0 | 1 | 2, number][] = [[0, 0], [0, 90], [0, -90], [0, 180], [1, 90], [1, -90]];
-  const v = mesh.vertProperties, np = mesh.numProp, tri = mesh.triVerts;
-  let best: { t: [0 | 1 | 2, number]; area: number; h: number } | null = null;
-  for (const t of turns) {
-    const q = new THREE.Quaternion().setFromAxisAngle(AXES[t[0]], t[1] * DEG);
-    const pts: THREE.Vector3[] = [];
-    let lo = Infinity, hi = -Infinity;
-    for (let i = 0; i < v.length; i += np) {
-      const p = new THREE.Vector3(v[i], v[i + 1], v[i + 2]).applyQuaternion(q);
-      pts.push(p);
-      lo = Math.min(lo, p.z);
-      hi = Math.max(hi, p.z);
-    }
-    let area = 0;
-    const e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
-    for (let i = 0; i < tri.length; i += 3) {
-      const a = pts[tri[i]], b = pts[tri[i + 1]], c = pts[tri[i + 2]];
-      if (a.z - lo > 0.05 || b.z - lo > 0.05 || c.z - lo > 0.05) continue;
-      area += e1.subVectors(b, a).cross(e2.subVectors(c, a)).length() / 2;
-    }
-    const h = hi - lo;
-    if (!best || area > best.area * 1.02 || (area > best.area * 0.98 && h < best.h - 0.5)) best = { t, area, h };
-  }
-  return best && best.t[1] !== 0 ? best.t : null;
+  return best ? best.turn : null;
 }
 
 interface PickItem {

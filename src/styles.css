@@ -700,3 +700,16 @@ body.resizing { cursor: col-resize; user-select: none; }
 .cat-sub:first-child { margin-top: 0; }
 .tile.project { position: relative; }
 .tile.project .badge { position: absolute; top: 2px; right: 4px; font-size: 10px; }
+
+/* Model card next to a project tile */
+.model-card { position: fixed; z-index: 60; width: 230px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line, #3a3f45); box-shadow: 0 8px 24px rgba(0,0,0,.35); font-size: 12px; pointer-events: none; }
+.model-card b { display: block; font-size: 13px; margin: 6px 0 2px; }
+.model-card p { margin: 4px 0; color: var(--muted, #aab); line-height: 1.35; }
+.model-card .mc-pic { height: 150px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.04); border-radius: 8px; }
+.model-card .mc-pic img { width: 200px; height: 150px; object-fit: contain; }
+.model-card .mc-meta { color: var(--text, #e6e6e6); }
+.model-card .mc-fit.ok { color: var(--accent-2); }
+.model-card .mc-fit.no { color: #f0a050; }
+.model-card .mc-note { font-size: 11px; opacity: .7; }
+.model-card .mc-wait { font-size: 22px; opacity: .6; }
+@media (max-width: 760px) { .model-card { display: none; } }
