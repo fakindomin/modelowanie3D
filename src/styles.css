@@ -728,3 +728,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .review-bar .rv-note { flex: 1; min-width: 0; }
 .review-bar .rv-ok.on { background: #3f7d44; color: #fff; }
 .review-bar .rv-fix.on { background: #b8692a; color: #fff; }
+.review-bar button, .review-bar input, .review-bar select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; white-space: nowrap; cursor: pointer; }
+.review-bar input { cursor: text; }
+.review-bar button:hover:not(:disabled) { border-color: #6a6d72; background: var(--hover); }
+.review-bar button:disabled { opacity: 0.4; cursor: default; }
+.review-bar button.primary { border-color: var(--accent-2); color: var(--accent-2); }
+.review-bar option, .review-bar optgroup { background: var(--panel-2); color: var(--text); }
+.review-bar input::placeholder { color: var(--muted, #8b9096); }
+.review-bar .rv-ok.on { background: #3f7d44; border-color: #3f7d44; color: #fff; }
+.review-bar .rv-fix.on { background: #b8692a; border-color: #b8692a; color: #fff; }
