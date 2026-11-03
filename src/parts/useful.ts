@@ -2,7 +2,7 @@ import type { CrossSection, Manifold } from 'manifold-3d';
 import { M, settle } from '../geom/manifold';
 import type { ParamDef, Params, PartDef } from './def';
 import { box, cyl, hex, num, poly, select, union } from './util';
-import { textOutline } from './text';
+import { FONT, textOutline } from './text';
 
 /**
  * Everyday things for the „Projekty” tab: each one is sized from what the user can measure
@@ -190,13 +190,28 @@ function soapDish(p: Params) {
 
 // ------------------------------------------------------------------ garden
 function plantLabel(p: Params) {
-  const W = num(p, 'W'), H = num(p, 'H'), stake = num(p, 'stake'), T = 2;
+  const stake = num(p, 'stake'), T = 2, font = String(p.font || 'sans-bold'), margin = 3;
+  const lines = [String(p.text ?? ''), String(p.text2 ?? '')].map((t) => t.trim()).filter(Boolean);
+  if (!lines.length) lines.push('?');
+  let W = num(p, 'W'), H = num(p, 'H');
+  const gapK = 1.45; // line pitch as a multiple of the letter height
+  // Letter height: chosen, or the largest that fits the plate.
+  let size = num(p, 'size');
+  if (!(size > 0)) {
+    const widest = Math.max(...lines.map((t) => textOutline(t, font, 10, 0.8)?.bounds() ?? null).map((b) => (b ? b.max[0] - b.min[0] : 10)));
+    size = Math.max(3, Math.min((H - 2 * margin) / (1 + gapK * (lines.length - 1)) / 1.15, ((W - 2 * margin) / widest) * 10));
+  }
+  const css = lines.map((t) => textOutline(t, font, size, size * 0.08));
+  // The plate grows to hold the text when the letters are set bigger than it.
+  const textW = Math.max(...css.map((c) => (c ? c.bounds().max[0] - c.bounds().min[0] : 0)));
+  W = Math.max(W, textW + 2 * margin);
+  H = Math.max(H, size * 1.15 * (1 + gapK * (lines.length - 1)) + 2 * margin);
   const outline = ccw([[-W / 2, 0], [W / 2, 0], [W / 2, H], [-W / 2, H]]).add(ccw([[-5, 0.5], [5, 0.5], [0, -stake]]));
   let m = outline.extrude(T);
-  const txt = String(p.text || 'Bazylia');
-  const size = Math.min(H * 0.5, (W - 6) / Math.max(1, txt.length * 0.62));
-  const cs = textOutline(txt, 'sans-bold', size, size * 0.08);
-  if (cs) m = m.add(cs.translate([0, H / 2]).extrude(0.8).translate([0, 0, T - 0.01]));
+  css.forEach((cs, i) => {
+    const y = H / 2 + ((lines.length - 1) / 2 - i) * size * gapK;
+    if (cs) m = m.add(cs.translate([0, y]).extrude(num(p, 'depth') || 0.8).translate([0, 0, T - 0.01]));
+  });
   return settle(m);
 }
 /** Hose hanger: wall plate with a wide saddle the coiled hose hangs on (printed on its side). */
@@ -440,8 +455,17 @@ export const USEFUL_DEFS: PartDef[] = [
     label: 'Etykieta do roślin',
     category: 'useful',
     hole: false,
-    description: 'Wbijana tabliczka z wypukłym napisem (np. nazwa ziół). Dla dwóch kolorów: zmiana filamentu na wysokości napisu.',
-    params: [{ key: 'text', label: 'Napis', type: 'text', def: 'Bazylia', max: 24 }, n('W', 'Szerokość tabliczki', 60, 30, 150), n('H', 'Wysokość tabliczki', 20, 10, 60), n('stake', 'Długość szpikulca', 80, 30, 200)],
+    description: 'Wbijana tabliczka z wypukłym napisem w jednym albo dwóch wierszach, z wyborem kroju i wielkości liter. Dla dwóch kolorów: zmiana filamentu na wysokości napisu.',
+    params: [
+      { key: 'text', label: 'Napis (1. wiersz)', type: 'text', def: 'Bazylia', max: 24 },
+      { key: 'text2', label: '2. wiersz (opcjonalnie)', type: 'text', def: '', max: 24, hint: 'Np. odmiana albo data wysiewu. Puste = jeden wiersz.' },
+      FONT,
+      n('size', 'Wysokość liter', 0, 0, 40, 0.5, '0 = sama się dobiera do tabliczki. Większe litery powiększają tabliczkę.'),
+      n('depth', 'Wypukłość liter', 0.8, 0.4, 3, 0.2),
+      n('W', 'Szerokość tabliczki', 60, 30, 200),
+      n('H', 'Wysokość tabliczki', 20, 10, 100),
+      n('stake', 'Długość szpikulca', 80, 30, 200),
+    ],
     build: plantLabel,
   },
   {

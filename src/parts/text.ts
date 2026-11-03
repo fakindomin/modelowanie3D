@@ -89,7 +89,7 @@ function buildText(p: Params, cut: boolean): Manifold {
   return cs.extrude(depth);
 }
 
-const FONT = select('font', 'Krój pisma', 'sans-bold', [
+export const FONT = select('font', 'Krój pisma', 'sans-bold', [
   ['sans-bold', 'Prosty, gruby'],
   ['sans', 'Prosty, cienki'],
   ['serif-bold', 'Szeryfowy'],
