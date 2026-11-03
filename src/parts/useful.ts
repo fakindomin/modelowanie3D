@@ -190,7 +190,10 @@ function soapDish(p: Params) {
 
 // ------------------------------------------------------------------ garden
 function plantLabel(p: Params) {
-  const stake = num(p, 'stake'), T = 2, font = String(p.font || 'sans-bold'), margin = 3;
+  const stake = num(p, 'stake'), T = 2, font = String(p.font || 'sans-bold');
+  // Optional raised frame, as tall as the letters (so with one filament change it gets their colour).
+  const frame = !!p.frame, fw = num(p, 'frameW') || 1.2, fin = num(p, 'frameIn') || 0;
+  const margin = 3 + (frame ? fin + fw + 1 : 0);
   const lines = [String(p.text ?? ''), String(p.text2 ?? '')].map((t) => t.trim()).filter(Boolean);
   if (!lines.length) lines.push('?');
   let W = num(p, 'W'), H = num(p, 'H');
@@ -212,6 +215,12 @@ function plantLabel(p: Params) {
     const y = H / 2 + ((lines.length - 1) / 2 - i) * size * gapK;
     if (cs) m = m.add(cs.translate([0, y]).extrude(num(p, 'depth') || 0.8).translate([0, 0, T - 0.01]));
   });
+  if (frame) {
+    const C = M().CrossSection, r = Math.min(fw * 1.5, 3);
+    const rect = (inset: number) => C.square([W - 2 * inset - 2 * r, H - 2 * inset - 2 * r], true).offset(r, 'Round', undefined, 16).translate([0, H / 2]);
+    const ring = fin > 0 ? rect(fin).subtract(rect(fin + fw)) : C.square([W, H], true).translate([0, H / 2]).subtract(rect(fw));
+    m = m.add(ring.extrude(num(p, 'depth') || 0.8).translate([0, 0, T - 0.01]));
+  }
   return settle(m);
 }
 /** Hose hanger: wall plate with a wide saddle the coiled hose hangs on (printed on its side). */
@@ -455,13 +464,16 @@ export const USEFUL_DEFS: PartDef[] = [
     label: 'Etykieta do roślin',
     category: 'useful',
     hole: false,
-    description: 'Wbijana tabliczka z wypukłym napisem w jednym albo dwóch wierszach, z wyborem kroju i wielkości liter. Dla dwóch kolorów: zmiana filamentu na wysokości napisu.',
+    description: 'Wbijana tabliczka z wypukłym napisem w jednym albo dwóch wierszach, z wyborem kroju i wielkości liter, z ramką albo bez. Dla dwóch kolorów: zmiana filamentu na wysokości napisu.',
     params: [
       { key: 'text', label: 'Napis (1. wiersz)', type: 'text', def: 'Bazylia', max: 24 },
       { key: 'text2', label: '2. wiersz (opcjonalnie)', type: 'text', def: '', max: 24, hint: 'Np. odmiana albo data wysiewu. Puste = jeden wiersz.' },
       FONT,
       n('size', 'Wysokość liter', 0, 0, 40, 0.5, '0 = sama się dobiera do tabliczki. Większe litery powiększają tabliczkę.'),
       n('depth', 'Wypukłość liter', 0.8, 0.4, 3, 0.2),
+      { key: 'frame', label: 'Ramka', type: 'bool', def: false, hint: 'Wypukła ramka tej samej wysokości co litery, więc przy zmianie filamentu ma kolor napisu.' },
+      n('frameW', 'Grubość ramki', 1.2, 0.8, 5, 0.2, undefined, (p) => !!p.frame),
+      n('frameIn', 'Odstęp ramki od brzegu', 1.5, 0, 10, 0.5, '0 = ramka na samym brzegu tabliczki.', (p) => !!p.frame),
       n('W', 'Szerokość tabliczki', 60, 30, 200),
       n('H', 'Wysokość tabliczki', 20, 10, 100),
       n('stake', 'Długość szpikulca', 80, 30, 200),
