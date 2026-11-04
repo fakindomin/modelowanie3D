@@ -191,7 +191,7 @@ const MODELS: Impl[] = [
     desc: 'Na klucze, smycze albo ścierki. Liczba haczyków i odstęp ustalają długość listwy.',
     pieces: '1 listwa',
     dims: [
-      { key: 'N', label: 'Liczba haczyków', type: 'number', def: 5, min: 2, max: 10, step: 1, unit: 'szt.', hint: 'Listwa ma najwyżej 25 cm, żeby zmieściła się w drukarce: przy dużym odstępie liczba haczyków sama się zmniejszy.' },
+      { key: 'N', label: 'Liczba haczyków', type: 'number', def: 5, min: 2, max: 10, step: 1, unit: 'szt.', hint: 'Listwa ma najwyżej 24 cm, żeby zmieściła się w drukarce: przy dużym odstępie liczba haczyków sama się zmniejszy.' },
       { key: 'gap', label: 'Odstęp haczyków', type: 'number', def: 22, min: 10, max: 60, step: 1, unit: 'mm' },
       { key: 'D', label: 'Wysięg', type: 'number', def: 22, min: 12, max: 50, step: 1, unit: 'mm', axis: 'y' },
       mount,
@@ -332,7 +332,7 @@ export function estimate(id: string, v: Values) {
   const vol = m.volume() / 1000, area = m.surfaceArea() / 100;
   const pieces = m.decompose();
   const n = pieces.length;
-  // Each piece has to fit the printer (P1S: 256 × 256 × 256 mm, a few mm kept free at the edges).
+  // Each piece has to fit the printer (P1S: 256 mm, but Bambu Studio keeps the edges free: 240 mm).
   const longest = Math.round(Math.max(...pieces.map((p) => { const b = p.boundingBox(); return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]); })));
   pieces.forEach((p) => p.delete());
   m.delete();
@@ -343,7 +343,7 @@ export function estimate(id: string, v: Values) {
 }
 
 /** Longest piece the shop prints, mm. */
-export const BED = 250;
+export const BED = 240;
 
 const fileName = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -357,7 +357,7 @@ export function download(id: string, v: Values, name?: string, fmt: '3mf' | 'stl
   const bodies = pieces.map((p, i) => ({ body: i + 1, manifold: p, geometry: new THREE.BufferGeometry(), color: '#888' }));
   const names = new Map(bodies.map((b) => [b.body, pieces.length > 1 ? `${nm} ${b.body}` : nm]));
   if (fmt === 'stl') exportSTL(bodies, nm, names);
-  else export3MF(bodies, nm, names, false, [256, 256]);
+  else export3MF(bodies, nm, names, false, [BED, BED]);
   pieces.forEach((p) => p.delete());
 }
 
