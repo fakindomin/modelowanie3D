@@ -177,20 +177,34 @@ export function plates(sizes: { w: number; d: number; group: string }[], bed: [n
 }
 
 /** A plain 3MF (geometry only, every slicer reads it) with the given objects at their places. */
-function make3MF(objs: { mesh: ReturnType<BodyResult['manifold']['getMesh']>; name: string; dx: number; dy: number; dz: number }[], title: string) {
+type Mesh3 = ReturnType<BodyResult['manifold']['getMesh']>;
+/** A body printed in several filaments: one object made of named parts (the slicer lets each part take its own filament). */
+export type ColoredBody = BodyResult & { parts?: { manifold: BodyResult['manifold']; name: string }[] };
+
+function make3MF(objs: { mesh: Mesh3; name: string; dx: number; dy: number; dz: number; parts?: { mesh: Mesh3; name: string }[] }[], title: string) {
   const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const fmt = (n: number) => (Math.round(n * 1e4) / 1e4).toString();
   let objects = '';
   let items = '';
-  objs.forEach((o, i) => {
-    const v = o.mesh.vertProperties, np = o.mesh.numProp, t = o.mesh.triVerts;
+  let id = 0;
+  const meshXML = (mesh: Mesh3, o: { dx: number; dy: number; dz: number }) => {
+    const v = mesh.vertProperties, np = mesh.numProp, t = mesh.triVerts;
     const verts: string[] = [];
     // Positions baked into the mesh: slicers judge "several heights = one multi-part object" from the raw mesh, not the item transform.
     for (let k = 0; k < v.length; k += np) verts.push(`<vertex x="${fmt(v[k] + o.dx)}" y="${fmt(v[k + 1] + o.dy)}" z="${fmt(v[k + 2] + o.dz)}"/>`);
     const tris: string[] = [];
     for (let k = 0; k < t.length; k += 3) tris.push(`<triangle v1="${t[k]}" v2="${t[k + 1]}" v3="${t[k + 2]}"/>`);
-    objects += `<object id="${i + 1}" name="${esc(o.name)}" type="model"><mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh></object>`;
-    items += `<item objectid="${i + 1}"/>`;
+    return `<mesh><vertices>${verts.join('')}</vertices><triangles>${tris.join('')}</triangles></mesh>`;
+  };
+  objs.forEach((o) => {
+    if (o.parts?.length) {
+      const ids = o.parts.map((p) => {
+        objects += `<object id="${++id}" name="${esc(p.name)}" type="model">${meshXML(p.mesh, o)}</object>`;
+        return id;
+      });
+      objects += `<object id="${++id}" name="${esc(o.name)}" type="model"><components>${ids.map((c) => `<component objectid="${c}"/>`).join('')}</components></object>`;
+    } else objects += `<object id="${++id}" name="${esc(o.name)}" type="model">${meshXML(o.mesh, o)}</object>`;
+    items += `<item objectid="${id}"/>`;
   });
   const model = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="pl-PL" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
@@ -220,7 +234,7 @@ function make3MF(objs: { mesh: ReturnType<BodyResult['manifold']['getMesh']>; na
  * 3MF laid out bed by bed: one file per bed (each material on its own beds), several packed in a .zip.
  * Plain geometry files: slicers' own multi-plate projects need their full printer settings, which would replace the user's.
  */
-export function export3MF(bodies: BodyResult[], name: string, names: Map<number, string> = new Map(), _numbered = false, bed: [number, number] = [256, 256], groups: Map<number, string> = new Map()) {
+export function export3MF(bodies: ColoredBody[], name: string, names: Map<number, string> = new Map(), _numbered = false, bed: [number, number] = [256, 256], groups: Map<number, string> = new Map()) {
   const boxes = bodies.map((b) => b.manifold.boundingBox());
   const lay = plates(
     boxes.map((bb, i) => ({ w: bb.max[0] - bb.min[0], d: bb.max[1] - bb.min[1], group: groups.get(bodies[i].body) ?? '' })),
@@ -232,7 +246,8 @@ export function export3MF(bodies: BodyResult[], name: string, names: Map<number,
     const group = groups.get(bodies[ids[0]].body) ?? '';
     const objs = ids.map((i) => {
       const bb = boxes[i], at = lay.at[i];
-      return { mesh: bodies[i].manifold.getMesh(), name: names.get(bodies[i].body) ?? `Bryla ${bodies[i].body}`, dx: at.x - bb.min[0], dy: at.y - bb.min[1], dz: -bb.min[2] };
+      const parts = bodies[i].parts?.map((p) => ({ mesh: p.manifold.getMesh(), name: p.name }));
+      return { mesh: bodies[i].manifold.getMesh(), parts, name: names.get(bodies[i].body) ?? `Bryla ${bodies[i].body}`, dx: at.x - bb.min[0], dy: at.y - bb.min[1], dz: -bb.min[2] };
     });
     return { name: `${name} - stol ${k + 1}${group ? ` (${group})` : ''}.3mf`, data: make3MF(objs, `${name}, stół ${k + 1}`) };
   });

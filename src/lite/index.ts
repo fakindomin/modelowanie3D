@@ -48,6 +48,8 @@ export interface LiteModel {
   dims: Dim[];
   /** Short text with the chosen sizes, for the cart and the order. */
   summary: (v: Values) => string;
+  /** A second filament for the raised part (the letters): its label in the shop. */
+  accent?: string;
 }
 
 interface Impl extends LiteModel {
@@ -59,6 +61,8 @@ interface Impl extends LiteModel {
   fit?: (v: Values) => Values;
   /** Turn of the preview about X, in degrees: 90 stands a flat-printed wall part up, as on the wall. */
   standUp?: boolean;
+  /** With `accent`: height (as built, lying flat) above which the solid takes the second filament. */
+  accentZ?: (v: Values) => number;
 }
 
 const num = (v: Values, k: string) => Number(v[k]);
@@ -308,6 +312,9 @@ const MODELS: Impl[] = [
     summary: (v) => `„${String(v.text).trim()}”, szer. ${mm(num(v, 'W'))} mm, szpikulec ${mm(num(v, 'stake'))} mm`,
     build: part('plantLabel'),
     standUp: true,
+    accent: 'Kolor napisu',
+    // The plate is 2 mm thick; the letters stand on it (printed flat, letters up: a filament change at 2 mm).
+    accentZ: () => 2,
   },
 ];
 
@@ -374,15 +381,44 @@ export function estimate(id: string, v: Values) {
 /** Longest piece the shop prints, mm. */
 export const BED = 240;
 
+/** The solid cut into [base, accent] at the accent height (both as built). */
+function splitAccent(id: string, m: Manifold, v: Values): [Manifold, Manifold] | null {
+  const z = model(id).accentZ?.(v);
+  if (z === undefined) return null;
+  // A hair above the plate's top face, so no film of the plate (floats a little off z) goes with the letters.
+  const [above, below] = m.splitByPlane([0, 0, 1], z + 0.01);
+  if (above.isEmpty()) { above.delete(); below.delete(); return null; }
+  return [below, above];
+}
+
 const fileName = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** Saves the print file: 3MF (one plate) or STL. */
-export function download(id: string, v: Values, name?: string, fmt: '3mf' | 'stl' = '3mf') {
+/**
+ * Saves the print file: 3MF (one plate) or STL. With `colors` a two-filament model (the plant label) comes as one
+ * object of two parts named with their colours, lying flat as built, so each part takes its own filament in the slicer.
+ */
+export function download(id: string, v: Values, name?: string, fmt: '3mf' | 'stl' = '3mf', colors?: { base: string; accent: string }) {
+  const nm0 = fileName(name ?? model(id).label);
+  if (fmt === '3mf' && model(id).accentZ) {
+    const cv = clean(id, v);
+    const whole = model(id).build(cv);
+    const split = splitAccent(id, whole, cv);
+    if (split) {
+      const [base, acc] = split;
+      const body = { body: 1, manifold: whole, geometry: new THREE.BufferGeometry(), color: '#888', parts: [
+        { manifold: base, name: `${model(id).label.replace(/ .*/, '')} - ${colors?.base ?? 'kolor 1'}` },
+        { manifold: acc, name: `Napis - ${colors?.accent ?? 'kolor 2'}` },
+      ] };
+      export3MF([body], nm0, new Map([[1, nm0]]), false, [BED, BED]);
+      [whole, base, acc].forEach((x) => x.delete());
+      return;
+    }
+  }
   const m = printSolid(id, v);
   // Each piece its own body, so the plates are filled like in the editor (a second plate when they don't fit one).
   const pieces = m.decompose();
   m.delete();
-  const nm = fileName(name ?? model(id).label);
+  const nm = nm0;
   const bodies = pieces.map((p, i) => ({ body: i + 1, manifold: p, geometry: new THREE.BufferGeometry(), color: '#888' }));
   const names = new Map(bodies.map((b) => [b.body, pieces.length > 1 ? `${nm} ${b.body}` : nm]));
   if (fmt === 'stl') exportSTL(bodies, nm, names);
@@ -392,7 +428,7 @@ export function download(id: string, v: Values, name?: string, fmt: '3mf' | 'stl
 
 // ------------------------------------------------------------------------- preview
 export interface Viewer {
-  show(id: string, v: Values, color?: string, opts?: { labels?: boolean }): void;
+  show(id: string, v: Values, color?: string, opts?: { labels?: boolean; accent?: string }): void;
   dispose(): void;
 }
 
@@ -462,16 +498,24 @@ export function viewer(el: HTMLElement): Viewer {
       const mdl = model(id);
       const v = clean(id, values);
       const m = (mdl.preview ?? mdl.build)(v);
-      const geo = toGeometry(m);
+      // The letters in their own colour: the same solid cut at the accent height.
+      const split = opts.accent ? splitAccent(id, m, v) : null;
+      const geo = toGeometry(split ? split[0] : m);
+      const accGeo = split ? toGeometry(split[1]) : null;
+      split?.forEach((x) => x.delete());
       m.delete();
-      if (mdl.standUp) geo.rotateX(Math.PI / 2);
+      if (mdl.standUp) { geo.rotateX(Math.PI / 2); accGeo?.rotateX(Math.PI / 2); }
       clear();
       geo.computeBoundingBox();
       const bb = geo.boundingBox!;
       const c = bb.getCenter(new THREE.Vector3());
-      geo.translate(-c.x, -c.y, -bb.min.z);
+      const z0 = bb.min.z; // read before the move: translating updates `bb` in place
+      geo.translate(-c.x, -c.y, -z0);
+      accGeo?.translate(-c.x, -c.y, -z0);
       const box = geo.boundingBox!.clone();
-      group.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 })));
+      const surf = (col: string) => new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.05 });
+      group.add(new THREE.Mesh(geo, surf(color)));
+      if (accGeo) group.add(new THREE.Mesh(accGeo, surf(opts.accent!)));
       // Each size along its edge of the box: a thin line with a chip in the middle.
       const s = box.getSize(new THREE.Vector3());
       const off = Math.max(s.x, s.y, s.z) * 0.08;
