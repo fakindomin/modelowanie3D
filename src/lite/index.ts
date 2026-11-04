@@ -32,6 +32,10 @@ export interface Dim {
   max_len?: number;
   options?: { value: string; label: string }[];
   axis?: 'x' | 'y' | 'z';
+  /** Along X: at the top of the model instead of its foot. */
+  top?: boolean;
+  /** Along X: a line this long, centred, instead of the model's whole width (the foot of a tapered pot). */
+  span?: (v: Values) => number;
   show?: (v: Values) => boolean;
 }
 
@@ -96,14 +100,15 @@ const plate = (type: string) => (v: Values) => {
 // ------------------------------------------------------------------------- flower pot with a saucer
 let potCache: { key: string; m: Manifold } | null = null;
 function pot(v: Values): Manifold {
-  const W = num(v, 'W'), H = num(v, 'H');
-  const key = `${W}/${H}/${v.tex}`;
+  const W = num(v, 'W'), Wb = num(v, 'Wb'), H = num(v, 'H');
+  const key = `${W}/${Wb}/${H}/${v.tex}`;
   if (potCache?.key === key) return potCache.m.translate([0, 0, 0]);
+  // Built straight at the bottom diameter (texture and all), then the wall is leaned out (or in) to the top one.
   const box = DEFS.box;
-  const base = { ...defaultParams(box), shape: 'round', W, D: W, H, T: 2, B: 2.4, nx: 1, ny: 1, rad: 0, divMode: 'grid', div: '' } as Params;
+  const base = { ...defaultParams(box), shape: 'round', W: Wb, D: Wb, H, T: 2, B: 2.4, nx: 1, ny: 1, rad: 0, divMode: 'grid', div: '' } as Params;
   let m = box.build(base);
   // Drain holes: one in the middle and three on a ring.
-  const ring = W * 0.25;
+  const ring = Wb * 0.25;
   const holes = [[0, 0], ...[0, 1, 2].map((i) => [ring * Math.cos((i * 2 * Math.PI) / 3), ring * Math.sin((i * 2 * Math.PI) / 3)])];
   for (const [x, y] of holes) {
     const h = cyl(10, 4).translate([x, y, -5]);
@@ -113,6 +118,21 @@ function pot(v: Values): Manifold {
     m = c;
   }
   m = textured(m, v, 'around');
+  if (W !== Wb) {
+    // Each point moves outward by (top − bottom radius) × its height share: the wall and the relief keep their
+    // thickness. The floor's middle stays put; the ramp between keeps the mapping continuous.
+    const Rb = Wb / 2, lean = (W - Wb) / 2;
+    const warped = m.warp((p) => {
+      const r = Math.hypot(p[0], p[1]);
+      if (r < 1e-6) return;
+      const k = Math.min(1, Math.max(0, (r - (Rb - 6)) / 3));
+      const d = (lean * Math.max(0, p[2]) * k) / H;
+      p[0] += (p[0] / r) * d;
+      p[1] += (p[1] / r) * d;
+    });
+    m.delete();
+    m = warped;
+  }
   // A textured wall takes seconds: the preview and the estimate reuse the last one.
   if (v.tex && v.tex !== 'none') {
     potCache?.m.delete();
@@ -122,7 +142,7 @@ function pot(v: Values): Manifold {
   return m;
 }
 function saucer(v: Values): Manifold {
-  const W = num(v, 'W') + 12;
+  const W = num(v, 'Wb') + 12;
   const box = DEFS.box;
   let m = box.build({ ...defaultParams(box), shape: 'round', W, D: W, H: 16, T: 2, B: 2, nx: 1, ny: 1, rad: 0, divMode: 'grid', div: '' } as Params);
   // Three low ribs: the pot stands on them, not in the water.
@@ -141,21 +161,30 @@ const POT: Impl = {
   desc: 'Okrągła doniczka z otworami odpływowymi i podstawka z żeberkami, żeby doniczka nie stała w wodzie.',
   pieces: 'doniczka + podstawka',
   dims: [
-    { key: 'W', label: 'Średnica', type: 'number', def: 110, min: 60, max: 200, step: 5, unit: 'mm', axis: 'x' },
+    { key: 'W', label: 'Średnica u góry', type: 'number', def: 120, min: 60, max: 200, step: 5, unit: 'mm', axis: 'x', top: true },
+    { key: 'Wb', label: 'Średnica na dole', type: 'number', def: 95, min: 50, max: 200, step: 5, unit: 'mm', axis: 'x', span: (v) => num(v, 'Wb'), hint: 'Taka sama jak u góry = prosta ścianka. Ścianka może się pochylać najwyżej o 35°, żeby drukowała się bez podpór.' },
     { key: 'H', label: 'Wysokość', type: 'number', def: 100, min: 50, max: 200, step: 5, unit: 'mm', axis: 'z' },
     { key: 'saucer', label: 'Z podstawką', type: 'bool', def: true },
     // Knurl around a pot takes too long to build in a browser.
     { ...tex, options: tex.options!.filter((o) => o.value !== 'knurl') },
   ],
-  summary: (v) => `Ø${mm(num(v, 'W'))} × ${mm(num(v, 'H'))} mm${v.saucer ? ', z podstawką' : ''}${texTxt(v)}`,
+  summary: (v) => `Ø${mm(num(v, 'W'))}${num(v, 'Wb') !== num(v, 'W') ? `/${mm(num(v, 'Wb'))}` : ''} × ${mm(num(v, 'H'))} mm${v.saucer ? ', z podstawką' : ''}${texTxt(v)}`,
   build: (v) => {
     const p = pot(v);
     if (!v.saucer) return p;
     const s = saucer(v);
-    const out = M().Manifold.compose([p, s.translate([num(v, 'W') + 20, 0, 0])]);
+    const out = M().Manifold.compose([p, s.translate([(num(v, 'W') + num(v, 'Wb') + 12) / 2 + 10, 0, 0])]);
     p.delete();
     s.delete();
     return out;
+  },
+  // The wall leans at most 35° (prints without support, wide enough to stand): the bottom follows the top.
+  fit: (v) => {
+    const most = 2 * num(v, 'H') * Math.tan((35 * Math.PI) / 180);
+    const W = num(v, 'W'), Wb = num(v, 'Wb');
+    const lo = W - most, hi = W + most;
+    if (Wb >= lo && Wb <= hi) return v;
+    return { ...v, Wb: Math.max(50, Math.round(Math.min(hi, Math.max(lo, Wb)) / 5) * 5) };
   },
   preview: (v) => {
     const p = pot(v);
@@ -450,7 +479,13 @@ export function viewer(el: HTMLElement): Viewer {
       for (const d of mdl.dims) {
         if (opts.labels === false || !d.axis || (d.show && !d.show(v))) continue;
         const a = new THREE.Vector3(box.min.x - off, box.min.y - off, box.min.z), b = a.clone();
-        if (d.axis === 'x') { a.x = box.min.x; b.x = box.max.x; a.y = b.y = box.min.y - off; }
+        if (d.axis === 'x') {
+          const half = d.span ? d.span(v) / 2 : null;
+          a.x = half === null ? box.min.x : -half;
+          b.x = half === null ? box.max.x : half;
+          a.y = b.y = box.min.y - off;
+          if (d.top) a.z = b.z = box.max.z;
+        }
         if (d.axis === 'y') { a.y = box.min.y; b.y = box.max.y; a.x = b.x = box.max.x + off; }
         if (d.axis === 'z') { a.z = box.min.z; b.z = box.max.z; a.x = b.x = box.min.x - off; a.y = b.y = box.min.y; }
         group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), mat.clone()));
