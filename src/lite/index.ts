@@ -1,0 +1,441 @@
+/**
+ * „Lite”: a small bundle for a shop page (sezonowe3d.pl). It offers a handful of the library's models with only their
+ * basic sizes, shows a 3D preview with those sizes written next to the right edge, estimates grams and print time,
+ * and saves the print-ready 3MF. Built by `npm run build:lite` into dist-lite/model3d.js (one file, WASM inside),
+ * which sets `window.Model3D`.
+ */
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { Manifold } from 'manifold-3d';
+import { DEFS, defaultParams, type Params } from '../catalog';
+import { M, initManifold, toGeometry } from '../geom/manifold';
+import { bestPose, keepsPose, turnManifold } from '../geom/orient';
+import { export3MF, exportSTL } from '../export';
+import { cyl } from '../parts/util';
+
+export type Value = number | string | boolean;
+export type Values = Record<string, Value>;
+
+/** One size the client may set. `axis` is the edge of the model's box the size is written along. */
+export interface Dim {
+  key: string;
+  label: string;
+  type: 'number' | 'select' | 'bool' | 'text';
+  def: Value;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  hint?: string;
+  max_len?: number;
+  options?: { value: string; label: string }[];
+  axis?: 'x' | 'y' | 'z';
+  show?: (v: Values) => boolean;
+}
+
+export interface LiteModel {
+  id: string;
+  label: string;
+  desc: string;
+  /** What the client gets: pieces in the box. */
+  pieces: string;
+  dims: Dim[];
+  /** Short text with the chosen sizes, for the cart and the order. */
+  summary: (v: Values) => string;
+}
+
+interface Impl extends LiteModel {
+  /** Solid as printed (pieces laid out side by side). */
+  build: (v: Values) => Manifold;
+  /** Solid as used, for the preview (defaults to `build`). */
+  preview?: (v: Values) => Manifold;
+  /** Turn of the preview about X, in degrees: 90 stands a flat-printed wall part up, as on the wall. */
+  standUp?: boolean;
+}
+
+const num = (v: Values, k: string) => Number(v[k]);
+const mm = (x: number) => `${Math.round(x * 10) / 10}`.replace('.', ',');
+/** Builds a library part with its own defaults, the shop's fixed choices and the client's sizes. */
+const part = (type: string, fixed: Params = {}) => (v: Values) => DEFS[type].build({ ...defaultParams(DEFS[type]), ...fixed, ...v } as Params);
+
+const mount: Dim = { key: 'screwS', label: 'Mocowanie', type: 'select', def: 'screw', options: [{ value: 'screw', label: 'Na wkręty' }, { value: 'tape', label: 'Na taśmę dwustronną' }] };
+const mountTxt = (v: Values) => (v.screwS === 'tape' ? 'na taśmę' : 'na wkręty');
+
+// ------------------------------------------------------------------------- flower pot with a saucer
+function pot(v: Values): Manifold {
+  const W = num(v, 'W'), H = num(v, 'H');
+  const box = DEFS.box;
+  const base = { ...defaultParams(box), shape: 'round', W, D: W, H, T: 2, B: 2.4, nx: 1, ny: 1, rad: 0, divMode: 'grid', div: '' } as Params;
+  let m = box.build(base);
+  // Drain holes: one in the middle and three on a ring.
+  const ring = W * 0.25;
+  const holes = [[0, 0], ...[0, 1, 2].map((i) => [ring * Math.cos((i * 2 * Math.PI) / 3), ring * Math.sin((i * 2 * Math.PI) / 3)])];
+  for (const [x, y] of holes) {
+    const h = cyl(10, 4).translate([x, y, -5]);
+    const c = m.subtract(h);
+    m.delete();
+    h.delete();
+    m = c;
+  }
+  return m;
+}
+function saucer(v: Values): Manifold {
+  const W = num(v, 'W') + 12;
+  const box = DEFS.box;
+  let m = box.build({ ...defaultParams(box), shape: 'round', W, D: W, H: 16, T: 2, B: 2, nx: 1, ny: 1, rad: 0, divMode: 'grid', div: '' } as Params);
+  // Three low ribs: the pot stands on them, not in the water.
+  for (let i = 0; i < 3; i++) {
+    const r = M().Manifold.cube([W * 0.32, 3, 2.5]).translate([W * 0.1, -1.5, 1.9]).rotate([0, 0, 90 + i * 120]);
+    const u = m.add(r);
+    m.delete();
+    r.delete();
+    m = u;
+  }
+  return m;
+}
+const POT: Impl = {
+  id: 'pot',
+  label: 'Doniczka z podstawką',
+  desc: 'Okrągła doniczka z otworami odpływowymi i podstawka z żeberkami, żeby doniczka nie stała w wodzie.',
+  pieces: 'doniczka + podstawka',
+  dims: [
+    { key: 'W', label: 'Średnica', type: 'number', def: 110, min: 60, max: 200, step: 5, unit: 'mm', axis: 'x' },
+    { key: 'H', label: 'Wysokość', type: 'number', def: 100, min: 50, max: 200, step: 5, unit: 'mm', axis: 'z' },
+    { key: 'saucer', label: 'Z podstawką', type: 'bool', def: true },
+  ],
+  summary: (v) => `Ø${mm(num(v, 'W'))} × ${mm(num(v, 'H'))} mm${v.saucer ? ', z podstawką' : ''}`,
+  build: (v) => {
+    const p = pot(v);
+    if (!v.saucer) return p;
+    const s = saucer(v);
+    const out = M().Manifold.compose([p, s.translate([num(v, 'W') + 20, 0, 0])]);
+    p.delete();
+    s.delete();
+    return out;
+  },
+  preview: (v) => {
+    const p = pot(v);
+    if (!v.saucer) return p;
+    const s = saucer(v);
+    const out = M().Manifold.compose([s, p.translate([0, 0, 4.4])]);
+    p.delete();
+    s.delete();
+    return out;
+  },
+};
+
+const MODELS: Impl[] = [
+  {
+    id: 'wallHook',
+    label: 'Haczyk ścienny',
+    desc: 'Na ręcznik, kurtkę albo torbę: płytka do ściany i ramię z końcówką w górę.',
+    pieces: '1 haczyk',
+    dims: [
+      { key: 'D', label: 'Wysięg', type: 'number', def: 30, min: 15, max: 80, step: 1, unit: 'mm', axis: 'y', hint: 'Na ręcznik 30, na kurtkę 40–50.' },
+      { key: 'hookW', label: 'Szerokość', type: 'number', def: 16, min: 8, max: 40, step: 1, unit: 'mm', axis: 'x' },
+      { key: 'H', label: 'Wysokość płytki', type: 'number', def: 50, min: 30, max: 100, step: 1, unit: 'mm', axis: 'z' },
+      mount,
+    ],
+    summary: (v) => `wysięg ${mm(num(v, 'D'))}, szer. ${mm(num(v, 'hookW'))}, wys. ${mm(num(v, 'H'))} mm, ${mountTxt(v)}`,
+    build: part('wallHook'),
+    standUp: true,
+  },
+  {
+    id: 'hookRail',
+    label: 'Listwa z haczykami',
+    desc: 'Na klucze, smycze albo ścierki. Liczba haczyków i odstęp ustalają długość listwy.',
+    pieces: '1 listwa',
+    dims: [
+      { key: 'N', label: 'Liczba haczyków', type: 'number', def: 5, min: 2, max: 10, step: 1, unit: 'szt.' },
+      { key: 'gap', label: 'Odstęp haczyków', type: 'number', def: 22, min: 10, max: 60, step: 1, unit: 'mm' },
+      { key: 'D', label: 'Wysięg', type: 'number', def: 22, min: 12, max: 50, step: 1, unit: 'mm', axis: 'y' },
+      mount,
+    ],
+    summary: (v) => `${num(v, 'N')} haczyków co ${mm(num(v, 'gap'))} mm, wysięg ${mm(num(v, 'D'))} mm, ${mountTxt(v)}`,
+    build: part('hookRail'),
+    standUp: true,
+  },
+  {
+    id: 'shelfHook',
+    label: 'Haczyk pod półkę',
+    desc: 'Wsuwany na brzeg półki, bez wiercenia: kubki, ścierki i kable wiszą pod spodem.',
+    pieces: '1 haczyk',
+    dims: [
+      { key: 'shelf', label: 'Grubość półki', type: 'number', def: 18, min: 8, max: 36, step: 0.5, unit: 'mm', axis: 'z', hint: 'Zmierz półkę; haczyk ma 0,4 mm luzu.' },
+      { key: 'A', label: 'Głębokość wsunięcia', type: 'number', def: 40, min: 20, max: 80, step: 1, unit: 'mm', axis: 'x' },
+      { key: 'drop', label: 'Opuszczenie haczyka', type: 'number', def: 25, min: 10, max: 60, step: 1, unit: 'mm' },
+    ],
+    summary: (v) => `półka ${mm(num(v, 'shelf'))} mm, wsunięcie ${mm(num(v, 'A'))}, opuszczenie ${mm(num(v, 'drop'))} mm`,
+    build: part('shelfHook'),
+    standUp: true,
+  },
+  {
+    id: 'toiletPaperHolder',
+    label: 'Uchwyt na papier toaletowy',
+    desc: 'Ramię z końcówką w górę, opcjonalnie z półeczką na telefon nad rolką.',
+    pieces: '1 uchwyt',
+    dims: [
+      { key: 'D', label: 'Długość ramienia', type: 'number', def: 115, min: 95, max: 150, step: 1, unit: 'mm', axis: 'y', hint: 'Rolka ma ok. 100 mm szerokości.' },
+      { key: 'shelf', label: 'Półeczka na telefon', type: 'bool', def: false },
+      mount,
+    ],
+    summary: (v) => `ramię ${mm(num(v, 'D'))} mm${v.shelf ? ', z półeczką' : ''}, ${mountTxt(v)}`,
+    build: part('toiletPaperHolder'),
+    standUp: true,
+  },
+  {
+    id: 'paperTowelHolder',
+    label: 'Uchwyt na ręcznik papierowy',
+    desc: 'Dwa wsporniki i drążek. Na ścianę, pod szafkę albo nasuwany na półkę jak litera U.',
+    pieces: '2 wsporniki + drążek z 2 części',
+    dims: [
+      { key: 'mode', label: 'Montaż', type: 'select', def: 'wall', options: [{ value: 'wall', label: 'Na ścianę' }, { value: 'under', label: 'Pod szafkę' }, { value: 'shelf', label: 'Na półkę (U)' }] },
+      { key: 'st', label: 'Grubość półki', type: 'number', def: 18, min: 8, max: 36, step: 0.5, unit: 'mm', show: (v) => v.mode === 'shelf', hint: 'Zmierz półkę; trzyma się na wcisk.' },
+      { key: 'RW', label: 'Szerokość rolki', type: 'number', def: 230, min: 200, max: 300, step: 5, unit: 'mm' },
+    ],
+    summary: (v) => `${v.mode === 'shelf' ? `na półkę ${mm(num(v, 'st'))} mm` : v.mode === 'under' ? 'pod szafkę' : 'na ścianę'}, rolka ${mm(num(v, 'RW'))} mm`,
+    build: part('paperTowelHolder'),
+  },
+  POT,
+  {
+    id: 'keyShelf',
+    label: 'Wieszak na klucze z półką',
+    desc: 'Haczyki na klucze, a nad nimi półeczka z rantem na portfel, telefon albo listy.',
+    pieces: '1 wieszak',
+    dims: [
+      { key: 'N', label: 'Liczba haczyków', type: 'number', def: 4, min: 2, max: 8, step: 1, unit: 'szt.' },
+      { key: 'L', label: 'Szerokość', type: 'number', def: 160, min: 100, max: 240, step: 5, unit: 'mm', axis: 'x' },
+      { key: 'Ds', label: 'Głębokość półki', type: 'number', def: 40, min: 20, max: 80, step: 1, unit: 'mm', axis: 'y' },
+      mount,
+    ],
+    summary: (v) => `${num(v, 'N')} haczyki, szer. ${mm(num(v, 'L'))} mm, półka ${mm(num(v, 'Ds'))} mm, ${mountTxt(v)}`,
+    build: part('keyShelf'),
+    standUp: true,
+  },
+  {
+    id: 'plantLabel',
+    label: 'Tabliczka do roślin',
+    desc: 'Wbijana tabliczka z wypukłym napisem, np. nazwą zioła albo imieniem.',
+    pieces: '1 tabliczka',
+    dims: [
+      { key: 'text', label: 'Napis', type: 'text', def: 'Bazylia', max_len: 16 },
+      { key: 'W', label: 'Szerokość tabliczki', type: 'number', def: 60, min: 40, max: 120, step: 5, unit: 'mm', axis: 'x' },
+      { key: 'stake', label: 'Długość szpikulca', type: 'number', def: 80, min: 40, max: 150, step: 5, unit: 'mm' },
+    ],
+    summary: (v) => `„${String(v.text).trim()}”, szer. ${mm(num(v, 'W'))} mm, szpikulec ${mm(num(v, 'stake'))} mm`,
+    build: part('plantLabel'),
+    standUp: true,
+  },
+];
+
+const BY_ID = Object.fromEntries(MODELS.map((m) => [m.id, m]));
+
+function model(id: string): Impl {
+  const m = BY_ID[id];
+  if (!m) throw new Error(`Nieznany model: ${id}`);
+  return m;
+}
+
+/** The client's values, checked: missing ones take the default, numbers are clamped and snapped to the step. */
+export function clean(id: string, v: Values = {}): Values {
+  const out: Values = {};
+  for (const d of model(id).dims) {
+    const x = v[d.key];
+    if (d.type === 'number') {
+      let n = Number(x);
+      if (!Number.isFinite(n)) n = Number(d.def);
+      n = Math.min(d.max ?? n, Math.max(d.min ?? n, n));
+      if (d.step) n = Math.round(n / d.step) * d.step;
+      out[d.key] = Math.round(n * 100) / 100;
+    } else if (d.type === 'bool') out[d.key] = x === undefined ? d.def : !!x;
+    else if (d.type === 'select') out[d.key] = d.options!.some((o) => o.value === x) ? (x as string) : d.def;
+    else out[d.key] = String(x ?? d.def).slice(0, d.max_len ?? 24) || String(d.def);
+  }
+  return out;
+}
+
+/** Print-ready solid: laid out for the bed, each piece turned to need the least support. */
+function printSolid(id: string, v: Values): Manifold {
+  let m = model(id).build(clean(id, v));
+  if (!keepsPose([{ type: id }])) {
+    const pose = bestPose(m);
+    if (pose) {
+      const t = turnManifold(m, pose.turn);
+      m.delete();
+      m = t;
+    }
+  }
+  return m;
+}
+
+/**
+ * Grams and hours from the solid: two 0.4 mm walls (0.8 mm shell) are solid, the rest is 15 % infill;
+ * PLA 1.24 g/cm³; time from about 22 g an hour on a P1S plus warm-up.
+ */
+export function estimate(id: string, v: Values) {
+  const m = printSolid(id, v);
+  const bb = m.boundingBox();
+  const vol = m.volume() / 1000, area = m.surfaceArea() / 100;
+  const pieces = m.decompose();
+  const n = pieces.length;
+  pieces.forEach((p) => p.delete());
+  m.delete();
+  const shell = Math.min(vol, area * 0.08);
+  const grams = Math.round(1.24 * (shell + (vol - shell) * 0.15) * 10) / 10;
+  const hours = Math.round((0.15 + grams / 22) * 100) / 100;
+  return { grams, hours, size: [0, 1, 2].map((i) => Math.round(bb.max[i] - bb.min[i])) as [number, number, number], pieces: n };
+}
+
+const fileName = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Saves the print file: 3MF (one plate) or STL. */
+export function download(id: string, v: Values, name?: string, fmt: '3mf' | 'stl' = '3mf') {
+  const m = printSolid(id, v);
+  const body = { body: 1, manifold: m, geometry: new THREE.BufferGeometry(), color: '#888' };
+  const nm = fileName(name ?? model(id).label);
+  if (fmt === 'stl') exportSTL([body], nm, new Map([[1, nm]]));
+  else export3MF([body], nm, new Map([[1, nm]]));
+  m.delete();
+}
+
+// ------------------------------------------------------------------------- preview
+export interface Viewer {
+  show(id: string, v: Values, color?: string, opts?: { labels?: boolean }): void;
+  dispose(): void;
+}
+
+/** A small 3D view in `el`: the model turns with a finger or the mouse, the sizes stand along their edges. */
+export function viewer(el: HTMLElement): Viewer {
+  el.style.position ||= 'relative';
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  el.appendChild(renderer.domElement);
+  renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:none';
+  const labels = document.createElement('div');
+  labels.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden';
+  el.appendChild(labels);
+
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8178, 2.2));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  sun.position.set(1, -1.5, 2);
+  scene.add(sun);
+  const camera = new THREE.PerspectiveCamera(32, 1, 1, 5000);
+  camera.up.set(0, 0, 1);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.enablePan = false;
+  const group = new THREE.Group();
+  scene.add(group);
+  let marks: { el: HTMLDivElement; at: THREE.Vector3 }[] = [];
+  let first = true;
+
+  const resize = () => {
+    const w = el.clientWidth || 300, h = el.clientHeight || 300;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+  const ro = new ResizeObserver(resize);
+  ro.observe(el);
+  resize();
+
+  const clear = () => {
+    for (const o of [...group.children]) {
+      group.remove(o);
+      const mo = o as THREE.Mesh;
+      mo.geometry?.dispose();
+      (mo.material as THREE.Material | undefined)?.dispose?.();
+    }
+    labels.innerHTML = '';
+    marks = [];
+  };
+
+  let raf = 0;
+  const tick = () => {
+    raf = requestAnimationFrame(tick);
+    controls.update();
+    renderer.render(scene, camera);
+    const w = el.clientWidth, h = el.clientHeight;
+    for (const mk of marks) {
+      const p = mk.at.clone().project(camera);
+      mk.el.style.transform = `translate(${((p.x + 1) / 2) * w}px, ${((1 - p.y) / 2) * h}px) translate(-50%, -50%)`;
+      mk.el.style.display = p.z < 1 ? '' : 'none';
+    }
+  };
+  tick();
+
+  return {
+    show(id, values, color = '#d97706', opts = {}) {
+      const mdl = model(id);
+      const v = clean(id, values);
+      const m = (mdl.preview ?? mdl.build)(v);
+      const geo = toGeometry(m);
+      m.delete();
+      if (mdl.standUp) geo.rotateX(Math.PI / 2);
+      clear();
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox!;
+      const c = bb.getCenter(new THREE.Vector3());
+      geo.translate(-c.x, -c.y, -bb.min.z);
+      const box = geo.boundingBox!.clone();
+      group.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 })));
+      // Each size along its edge of the box: a thin line with a chip in the middle.
+      const s = box.getSize(new THREE.Vector3());
+      const off = Math.max(s.x, s.y, s.z) * 0.08;
+      const mat = new THREE.LineBasicMaterial({ color: 0x1c1917 });
+      for (const d of mdl.dims) {
+        if (opts.labels === false || !d.axis || (d.show && !d.show(v))) continue;
+        const a = new THREE.Vector3(box.min.x - off, box.min.y - off, box.min.z), b = a.clone();
+        if (d.axis === 'x') { a.x = box.min.x; b.x = box.max.x; a.y = b.y = box.min.y - off; }
+        if (d.axis === 'y') { a.y = box.min.y; b.y = box.max.y; a.x = b.x = box.max.x + off; }
+        if (d.axis === 'z') { a.z = box.min.z; b.z = box.max.z; a.x = b.x = box.min.x - off; a.y = b.y = box.min.y; }
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), mat.clone()));
+        const chip = document.createElement('div');
+        chip.textContent = `${d.label}: ${mm(Number(v[d.key]))} ${d.unit ?? ''}`.trim();
+        chip.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;font:600 11px/1.2 system-ui,sans-serif;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.92);color:#1c1917;border:1px solid #d6d3d1;box-shadow:0 1px 2px rgba(0,0,0,.08)';
+        labels.appendChild(chip);
+        marks.push({ el: chip, at: a.clone().add(b).multiplyScalar(0.5) });
+      }
+      // Camera: the first time from the front-left and a bit above; later the client's own view stays.
+      // Far enough for the whole box (its sphere) to fit the narrower side of the view, with room for the chips.
+      const fov = (camera.fov * Math.PI) / 360;
+      const half = Math.min(fov, Math.atan(Math.tan(fov) * camera.aspect));
+      const r = ((s.length() / 2 + off) / Math.sin(half)) * 1.08;
+      controls.target.set(0, 0, s.z / 2);
+      if (first) {
+        camera.position.set(-r * 0.55, -r * 0.8, s.z / 2 + r * 0.55);
+        first = false;
+      } else {
+        const dir = camera.position.clone().sub(controls.target).normalize();
+        camera.position.copy(controls.target.clone().add(dir.multiplyScalar(r)));
+      }
+      camera.near = r / 100;
+      camera.far = r * 20;
+      camera.updateProjectionMatrix();
+    },
+    dispose() {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      clear();
+      controls.dispose();
+      renderer.dispose();
+      el.innerHTML = '';
+    },
+  };
+}
+
+// ------------------------------------------------------------------------- public API
+const ready = initManifold().then(() => undefined);
+const api = {
+  ready,
+  /** The models on offer, without their builders. */
+  models: MODELS.map(({ build: _b, preview: _p, ...m }) => m) as LiteModel[],
+  model: (id: string) => model(id) as LiteModel,
+  clean,
+  estimate,
+  download,
+  viewer,
+};
+export type Model3D = typeof api;
+(window as unknown as { Model3D: Model3D }).Model3D = api;
