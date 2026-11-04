@@ -308,9 +308,10 @@ const MODELS: Impl[] = [
       { key: 'text', label: 'Napis', type: 'text', def: 'Bazylia', max_len: 16 },
       { key: 'W', label: 'Szerokość tabliczki', type: 'number', def: 60, min: 40, max: 120, step: 5, unit: 'mm', axis: 'x' },
       { key: 'stake', label: 'Długość szpikulca', type: 'number', def: 80, min: 40, max: 150, step: 5, unit: 'mm' },
+      { key: 'frame', label: 'Ramka', type: 'select', def: 'off', options: [{ value: 'off', label: 'Bez ramki' }, { value: 'on', label: 'Z ramką' }], hint: 'Wypukła ramka wokół napisu, w kolorze napisu.' },
     ],
-    summary: (v) => `„${String(v.text).trim()}”, szer. ${mm(num(v, 'W'))} mm, szpikulec ${mm(num(v, 'stake'))} mm`,
-    build: part('plantLabel'),
+    summary: (v) => `„${String(v.text).trim()}”, szer. ${mm(num(v, 'W'))} mm, szpikulec ${mm(num(v, 'stake'))} mm${v.frame === 'on' ? ', z ramką' : ''}`,
+    build: (v) => part('plantLabel')({ ...v, frame: v.frame === 'on' }),
     standUp: true,
     accent: 'Kolor napisu',
     // The plate is 2 mm thick; the letters stand on it (printed flat, letters up: a filament change at 2 mm).
