@@ -134,8 +134,11 @@ function aroundTexture(m: Manifold, t: Texture): Manifold {
   let s = Math.max(0.8, t.spacing);
   const n = () => Math.max(3, Math.round((2 * Math.PI * r) / s));
   const add = t.mode === 'add' && t.pattern !== 'grooves';
-  // Radial band where relief lives: outward when raised, inward when cut.
-  const rIn = add ? r - 0.05 : r - d, rOut = add ? r + d : r + 1;
+  // Radial band where relief lives: outward when raised, inward when cut. A round wall is a polygon of up to
+  // 90 sides (initManifold), whose flats lie r·(1 − cos 2°) inside the corners: raised relief starts below
+  // that, or on a big pot it floats off the wall between the corners.
+  const sink = r * (1 - Math.cos(Math.PI / 90)) + 0.05;
+  const rIn = add ? r - sink : r - d, rOut = add ? r + d : r + 1;
   const ring = (count: number, width: number) =>
     CS.union(
       Array.from({ length: count }, (_, i) =>
@@ -151,14 +154,16 @@ function aroundTexture(m: Manifold, t: Texture): Manifold {
     const g = ring(cnt, s * 0.35);
     const grooves = M().Manifold.union([g.extrude(H, slices, twist(ang)), g.extrude(H, slices, twist(-ang))]).translate([cx, cy, z0]);
     if (add) {
-      const band = CS.circle(r + d, 96).subtract(CS.circle(r - 0.05, 96)).extrude(H).translate([cx, cy, z0]);
+      const band = CS.circle(r + d, 96).subtract(CS.circle(rIn, 96)).extrude(H).translate([cx, cy, z0]);
       w = w.add(band.subtract(grooves));
     } else w = w.subtract(grooves);
     return w.rotate(back);
   }
   if (t.pattern === 'dots' || t.pattern === 'honeycomb') {
-    const rows = Math.max(1, Math.floor(H / s));
-    while (rows * n() > MAX_CELLS) s *= 1.25;
+    // Too many cells: wider spacing, and the rows counted again so they stay within the height.
+    const rowsOf = () => Math.max(1, Math.floor(H / s));
+    while (rowsOf() * n() > MAX_CELLS) s *= 1.25;
+    const rows = rowsOf();
     const cnt = n();
     const dots: Manifold[] = [];
     const segs = t.pattern === 'honeycomb' ? 6 : 12;

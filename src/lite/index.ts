@@ -51,6 +51,8 @@ interface Impl extends LiteModel {
   build: (v: Values) => Manifold;
   /** Solid as used, for the preview (defaults to `build`). */
   preview?: (v: Values) => Manifold;
+  /** Keeps linked sizes printable (e.g. as many hooks as fit the bed at the chosen spacing). */
+  fit?: (v: Values) => Values;
   /** Turn of the preview about X, in degrees: 90 stands a flat-printed wall part up, as on the wall. */
   standUp?: boolean;
 }
@@ -189,7 +191,7 @@ const MODELS: Impl[] = [
     desc: 'Na klucze, smycze albo ścierki. Liczba haczyków i odstęp ustalają długość listwy.',
     pieces: '1 listwa',
     dims: [
-      { key: 'N', label: 'Liczba haczyków', type: 'number', def: 5, min: 2, max: 10, step: 1, unit: 'szt.' },
+      { key: 'N', label: 'Liczba haczyków', type: 'number', def: 5, min: 2, max: 10, step: 1, unit: 'szt.', hint: 'Listwa ma najwyżej 25 cm, żeby zmieściła się w drukarce: przy dużym odstępie liczba haczyków sama się zmniejszy.' },
       { key: 'gap', label: 'Odstęp haczyków', type: 'number', def: 22, min: 10, max: 60, step: 1, unit: 'mm' },
       { key: 'D', label: 'Wysięg', type: 'number', def: 22, min: 12, max: 50, step: 1, unit: 'mm', axis: 'y' },
       mount,
@@ -197,6 +199,12 @@ const MODELS: Impl[] = [
     ],
     summary: (v) => `${num(v, 'N')} haczyków co ${mm(num(v, 'gap'))} mm, wysięg ${mm(num(v, 'D'))} mm, ${mountTxt(v)}${texTxt(v)}`,
     build: plate('hookRail'),
+    // Rail length = N hooks (8 mm) + gaps + ends; at most as many hooks as fit the bed at this spacing.
+    fit: (v) => {
+      const gap = num(v, 'gap'), w = Number(defaultParams(DEFS.hookRail).hookW) || 8;
+      const most = Math.max(2, Math.floor((BED - 2 * Math.max(12, gap / 2) + gap) / (w + gap)));
+      return num(v, 'N') > most ? { ...v, N: most } : v;
+    },
     standUp: true,
   },
   {
@@ -297,13 +305,13 @@ export function clean(id: string, v: Values = {}): Values {
     else if (d.type === 'select') out[d.key] = d.options!.some((o) => o.value === x) ? (x as string) : d.def;
     else out[d.key] = String(x ?? d.def).slice(0, d.max_len ?? 24) || String(d.def);
   }
-  return out;
+  return model(id).fit?.(out) ?? out;
 }
 
 /** Print-ready solid: laid out for the bed, each piece turned to need the least support. */
 function printSolid(id: string, v: Values): Manifold {
   let m = model(id).build(clean(id, v));
-  if (!keepsPose([{ type: id }])) {
+  if (id !== 'pot' && !keepsPose([{ type: id }])) {
     const pose = bestPose(m);
     if (pose) {
       const t = turnManifold(m, pose.turn);
@@ -324,24 +332,33 @@ export function estimate(id: string, v: Values) {
   const vol = m.volume() / 1000, area = m.surfaceArea() / 100;
   const pieces = m.decompose();
   const n = pieces.length;
+  // Each piece has to fit the printer (P1S: 256 × 256 × 256 mm, a few mm kept free at the edges).
+  const longest = Math.round(Math.max(...pieces.map((p) => { const b = p.boundingBox(); return Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]); })));
   pieces.forEach((p) => p.delete());
   m.delete();
   const shell = Math.min(vol, area * 0.08);
   const grams = Math.round(1.24 * (shell + (vol - shell) * 0.15) * 10) / 10;
   const hours = Math.round((0.15 + grams / 22) * 100) / 100;
-  return { grams, hours, size: [0, 1, 2].map((i) => Math.round(bb.max[i] - bb.min[i])) as [number, number, number], pieces: n };
+  return { grams, hours, size: [0, 1, 2].map((i) => Math.round(bb.max[i] - bb.min[i])) as [number, number, number], pieces: n, longest, fits: longest <= BED, bed: BED };
 }
+
+/** Longest piece the shop prints, mm. */
+export const BED = 250;
 
 const fileName = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** Saves the print file: 3MF (one plate) or STL. */
 export function download(id: string, v: Values, name?: string, fmt: '3mf' | 'stl' = '3mf') {
   const m = printSolid(id, v);
-  const body = { body: 1, manifold: m, geometry: new THREE.BufferGeometry(), color: '#888' };
-  const nm = fileName(name ?? model(id).label);
-  if (fmt === 'stl') exportSTL([body], nm, new Map([[1, nm]]));
-  else export3MF([body], nm, new Map([[1, nm]]));
+  // Each piece its own body, so the plates are filled like in the editor (a second plate when they don't fit one).
+  const pieces = m.decompose();
   m.delete();
+  const nm = fileName(name ?? model(id).label);
+  const bodies = pieces.map((p, i) => ({ body: i + 1, manifold: p, geometry: new THREE.BufferGeometry(), color: '#888' }));
+  const names = new Map(bodies.map((b) => [b.body, pieces.length > 1 ? `${nm} ${b.body}` : nm]));
+  if (fmt === 'stl') exportSTL(bodies, nm, names);
+  else export3MF(bodies, nm, names, false, [256, 256]);
+  pieces.forEach((p) => p.delete());
 }
 
 // ------------------------------------------------------------------------- preview
