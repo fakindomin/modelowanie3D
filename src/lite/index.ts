@@ -12,6 +12,8 @@ import { M, initManifold, toGeometry } from '../geom/manifold';
 import { bestPose, keepsPose, turnManifold } from '../geom/orient';
 import { export3MF, exportSTL } from '../export';
 import { cyl } from '../parts/util';
+import { TEXTURE_LABELS, applyTexture } from '../geom/texture';
+import type { Texture, TextureFace } from '../types';
 
 export type Value = number | string | boolean;
 export type Values = Record<string, Value>;
@@ -61,9 +63,40 @@ const part = (type: string, fixed: Params = {}) => (v: Values) => DEFS[type].bui
 const mount: Dim = { key: 'screwS', label: 'Mocowanie', type: 'select', def: 'screw', options: [{ value: 'screw', label: 'Na wkręty' }, { value: 'tape', label: 'Na taśmę dwustronną' }] };
 const mountTxt = (v: Values) => (v.screwS === 'tape' ? 'na taśmę' : 'na wkręty');
 
+/** Surface pattern, the editor's own (raised 0.8 mm, 3 mm apart, 3 mm plain border). */
+const tex: Dim = { key: 'tex', label: 'Faktura', type: 'select', def: 'none', options: [{ value: 'none', label: 'Gładka' }, ...Object.entries(TEXTURE_LABELS).map(([value, label]) => ({ value, label: label.replace(/ \(.*\)$/, '') }))] };
+const texTxt = (v: Values) => (v.tex && v.tex !== 'none' ? `, faktura: ${TEXTURE_LABELS[v.tex as Texture['pattern']].replace(/ \(.*\)$/, '').toLowerCase()}` : '');
+function textured(m: Manifold, v: Values, face: TextureFace): Manifold {
+  if (!v.tex || v.tex === 'none') return m;
+  const t: Texture = { pattern: v.tex as Texture['pattern'], face, mode: 'add', depth: 0.8, spacing: 3, angle: 0, margin: 3 };
+  const out = applyTexture(m, t);
+  if (out !== m) m.delete();
+  return out;
+}
+/**
+ * A wall part whose plate front takes the pattern. As printed the plate lies on the bed (thickness T from the
+ * bottom) with the arm standing on it: the plate alone gets the texture, the relief stays off the arm's footprint.
+ */
+const plate = (type: string) => (v: Values) => {
+  const m = part(type)(v);
+  if (!v.tex || v.tex === 'none') return m;
+  const T = Number(defaultParams(DEFS[type]).T) || 4;
+  const top = m.boundingBox().min[2] + T;
+  const slab = m.trimByPlane([0, 0, -1], -top);
+  const tex = textured(slab.translate([0, 0, 0]), v, 'top');
+  const arm = m.slice(top + 0.05).offset(0.6, 'Round').extrude(20).translate([0, 0, top - 1]);
+  const relief = tex.subtract(slab).subtract(arm);
+  const out = m.add(relief);
+  [m, slab, tex, arm, relief].forEach((x) => x.delete());
+  return out;
+};
+
 // ------------------------------------------------------------------------- flower pot with a saucer
+let potCache: { key: string; m: Manifold } | null = null;
 function pot(v: Values): Manifold {
   const W = num(v, 'W'), H = num(v, 'H');
+  const key = `${W}/${H}/${v.tex}`;
+  if (potCache?.key === key) return potCache.m.translate([0, 0, 0]);
   const box = DEFS.box;
   const base = { ...defaultParams(box), shape: 'round', W, D: W, H, T: 2, B: 2.4, nx: 1, ny: 1, rad: 0, divMode: 'grid', div: '' } as Params;
   let m = box.build(base);
@@ -76,6 +109,13 @@ function pot(v: Values): Manifold {
     m.delete();
     h.delete();
     m = c;
+  }
+  m = textured(m, v, 'around');
+  // A textured wall takes seconds: the preview and the estimate reuse the last one.
+  if (v.tex && v.tex !== 'none') {
+    potCache?.m.delete();
+    potCache = { key, m };
+    return m.translate([0, 0, 0]);
   }
   return m;
 }
@@ -102,8 +142,10 @@ const POT: Impl = {
     { key: 'W', label: 'Średnica', type: 'number', def: 110, min: 60, max: 200, step: 5, unit: 'mm', axis: 'x' },
     { key: 'H', label: 'Wysokość', type: 'number', def: 100, min: 50, max: 200, step: 5, unit: 'mm', axis: 'z' },
     { key: 'saucer', label: 'Z podstawką', type: 'bool', def: true },
+    // Knurl around a pot takes too long to build in a browser.
+    { ...tex, options: tex.options!.filter((o) => o.value !== 'knurl') },
   ],
-  summary: (v) => `Ø${mm(num(v, 'W'))} × ${mm(num(v, 'H'))} mm${v.saucer ? ', z podstawką' : ''}`,
+  summary: (v) => `Ø${mm(num(v, 'W'))} × ${mm(num(v, 'H'))} mm${v.saucer ? ', z podstawką' : ''}${texTxt(v)}`,
   build: (v) => {
     const p = pot(v);
     if (!v.saucer) return p;
@@ -135,9 +177,10 @@ const MODELS: Impl[] = [
       { key: 'hookW', label: 'Szerokość', type: 'number', def: 16, min: 8, max: 40, step: 1, unit: 'mm', axis: 'x' },
       { key: 'H', label: 'Wysokość płytki', type: 'number', def: 50, min: 30, max: 100, step: 1, unit: 'mm', axis: 'z' },
       mount,
+      tex,
     ],
-    summary: (v) => `wysięg ${mm(num(v, 'D'))}, szer. ${mm(num(v, 'hookW'))}, wys. ${mm(num(v, 'H'))} mm, ${mountTxt(v)}`,
-    build: part('wallHook'),
+    summary: (v) => `wysięg ${mm(num(v, 'D'))}, szer. ${mm(num(v, 'hookW'))}, wys. ${mm(num(v, 'H'))} mm, ${mountTxt(v)}${texTxt(v)}`,
+    build: plate('wallHook'),
     standUp: true,
   },
   {
@@ -150,9 +193,10 @@ const MODELS: Impl[] = [
       { key: 'gap', label: 'Odstęp haczyków', type: 'number', def: 22, min: 10, max: 60, step: 1, unit: 'mm' },
       { key: 'D', label: 'Wysięg', type: 'number', def: 22, min: 12, max: 50, step: 1, unit: 'mm', axis: 'y' },
       mount,
+      tex,
     ],
-    summary: (v) => `${num(v, 'N')} haczyków co ${mm(num(v, 'gap'))} mm, wysięg ${mm(num(v, 'D'))} mm, ${mountTxt(v)}`,
-    build: part('hookRail'),
+    summary: (v) => `${num(v, 'N')} haczyków co ${mm(num(v, 'gap'))} mm, wysięg ${mm(num(v, 'D'))} mm, ${mountTxt(v)}${texTxt(v)}`,
+    build: plate('hookRail'),
     standUp: true,
   },
   {
@@ -178,9 +222,10 @@ const MODELS: Impl[] = [
       { key: 'D', label: 'Długość ramienia', type: 'number', def: 115, min: 95, max: 150, step: 1, unit: 'mm', axis: 'y', hint: 'Rolka ma ok. 100 mm szerokości.' },
       { key: 'shelf', label: 'Półeczka na telefon', type: 'bool', def: false },
       mount,
+      tex,
     ],
-    summary: (v) => `ramię ${mm(num(v, 'D'))} mm${v.shelf ? ', z półeczką' : ''}, ${mountTxt(v)}`,
-    build: part('toiletPaperHolder'),
+    summary: (v) => `ramię ${mm(num(v, 'D'))} mm${v.shelf ? ', z półeczką' : ''}, ${mountTxt(v)}${texTxt(v)}`,
+    build: plate('toiletPaperHolder'),
     standUp: true,
   },
   {
@@ -207,9 +252,10 @@ const MODELS: Impl[] = [
       { key: 'L', label: 'Szerokość', type: 'number', def: 160, min: 100, max: 240, step: 5, unit: 'mm', axis: 'x' },
       { key: 'Ds', label: 'Głębokość półki', type: 'number', def: 40, min: 20, max: 80, step: 1, unit: 'mm', axis: 'y' },
       mount,
+      tex,
     ],
-    summary: (v) => `${num(v, 'N')} haczyki, szer. ${mm(num(v, 'L'))} mm, półka ${mm(num(v, 'Ds'))} mm, ${mountTxt(v)}`,
-    build: part('keyShelf'),
+    summary: (v) => `${num(v, 'N')} haczyki, szer. ${mm(num(v, 'L'))} mm, półka ${mm(num(v, 'Ds'))} mm, ${mountTxt(v)}${texTxt(v)}`,
+    build: plate('keyShelf'),
     standUp: true,
   },
   {
