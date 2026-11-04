@@ -453,11 +453,24 @@ export function viewer(el: HTMLElement): Viewer {
   camera.up.set(0, 0, 1);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.enablePan = false;
+  // Zoom goes where the cursor (or the pinch) points, and the view can be moved (right button, two fingers),
+  // so a part far from the middle — the plate on top of a long stake — can be brought up close.
+  controls.zoomToCursor = true;
+  controls.enablePan = true;
+  controls.screenSpacePanning = true;
   const group = new THREE.Group();
   scene.add(group);
   let marks: { el: HTMLDivElement; at: THREE.Vector3 }[] = [];
   let first = true;
+  let home: { target: THREE.Vector3; r: number } | null = null;
+  // Double click / double tap: back to the whole model.
+  const reset = () => {
+    if (!home) return;
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    controls.target.copy(home.target);
+    camera.position.copy(home.target.clone().add(dir.multiplyScalar(home.r)));
+  };
+  renderer.domElement.addEventListener('dblclick', reset);
 
   const resize = () => {
     const w = el.clientWidth || 300, h = el.clientHeight || 300;
@@ -553,7 +566,10 @@ export function viewer(el: HTMLElement): Viewer {
         const dir = camera.position.clone().sub(controls.target).normalize();
         camera.position.copy(controls.target.clone().add(dir.multiplyScalar(r)));
       }
-      camera.near = r / 100;
+      home = { target: controls.target.clone(), r };
+      controls.minDistance = r * 0.05;
+      controls.maxDistance = r * 4;
+      camera.near = r / 400;
       camera.far = r * 20;
       camera.updateProjectionMatrix();
     },
