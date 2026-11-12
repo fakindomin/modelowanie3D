@@ -14,6 +14,7 @@ import { export3MF, exportSTL } from '../export';
 import { cyl } from '../parts/util';
 import { TEXTURE_LABELS, applyTexture } from '../geom/texture';
 import type { Texture, TextureFace } from '../types';
+import { engrave, engraveAt, findSpot, markOutline, markWidth } from './mark';
 
 export type Value = number | string | boolean;
 export type Values = Record<string, Value>;
@@ -89,17 +90,105 @@ function textured(m: Manifold, v: Values, face: TextureFace): Manifold {
  */
 const plate = (type: string) => (v: Values) => {
   const m = part(type)(v);
-  if (!v.tex || v.tex === 'none') return m;
   const T = Number(defaultParams(DEFS[type]).T) || 4;
   const top = m.boundingBox().min[2] + T;
+  // The mark's spot is found on the plain plate (clear of the arms and the screw holes), then cut after the texture.
+  const spot = markSpot(m, top);
+  if (!v.tex || v.tex === 'none') return signed(m, spot, top);
   const slab = m.trimByPlane([0, 0, -1], -top);
   const tex = textured(slab.translate([0, 0, 0]), v, 'top');
   const arm = m.slice(top + 0.05).offset(0.6, 'Round').extrude(20).translate([0, 0, top - 1]);
   const relief = tex.subtract(slab).subtract(arm);
   const out = m.add(relief);
   [m, slab, tex, arm, relief].forEach((x) => x.delete());
+  return signed(out, spot, top);
+};
+
+// ------------------------------------------------------------------------- maker's mark („f”)
+/** Mark height: 7 mm, smaller where nothing bigger fits. */
+const MARK_SIZES = [7, 6, 5];
+type Spot = { at: [number, number]; h: number } | null;
+/** A calm spot on the flat face at height `z` facing up (or down): away from whatever stands on it. */
+function markSpot(m: Manifold, z: number, down = false): Spot {
+  const face = m.slice(down ? z + 0.1 : z - 0.1);
+  const above = m.slice(down ? z - 0.1 : z + 0.1);
+  const keep = above.isEmpty() ? null : above.offset(1.5, 'Round');
+  const free = keep ? face.subtract(keep) : face;
+  try {
+    for (const h of MARK_SIZES) {
+      const at = findSpot(free, h, down ? ['bl', 'b', 'br', 'tl', 'tr', 't'] : undefined);
+      if (at) return { at, h };
+    }
+    return null;
+  } finally {
+    [face, above, keep, free].forEach((x) => { if (x && x !== face) x.delete(); });
+    face.delete();
+  }
+}
+function signed(m: Manifold, spot: Spot, z: number, down = false): Manifold {
+  if (!spot) return m;
+  const out = engrave(m, spot.at, z, spot.h, { down });
+  m.delete();
+  return out;
+}
+/**
+ * A part printed flat: the mark goes on its top face (the side that shows), or the bottom one with `down`.
+ * Several pieces side by side: the largest flat top that holds it.
+ */
+const signTop = (build: (v: Values) => Manifold, down = false) => (v: Values) => {
+  const m = build(v);
+  const bb = m.boundingBox();
+  if (down) return signed(m, markSpot(m, bb.min[2], true), bb.min[2], true);
+  for (const z of flatTops(m)) {
+    const spot = markSpot(m, z);
+    if (spot) return signed(m, spot, z);
+  }
+  return m;
+};
+/** Heights of the upward flat faces, the largest (by area) first. */
+function flatTops(m: Manifold): number[] {
+  const mesh = m.getMesh(), v = mesh.vertProperties, np = mesh.numProp, t = mesh.triVerts;
+  const area = new Map<number, number>();
+  for (let i = 0; i < t.length; i += 3) {
+    const a = t[i] * np, b = t[i + 1] * np, c = t[i + 2] * np;
+    const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2];
+    const wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
+    const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    const len = Math.hypot(nx, ny, nz);
+    if (len < 1e-9 || nz / len < 0.999) continue;
+    const z = Math.round(v[a + 2] * 100) / 100;
+    area.set(z, (area.get(z) ?? 0) + len / 2);
+  }
+  return [...area.entries()].filter(([, a]) => a > 60).sort((a, b) => b[1] - a[1]).map(([z]) => z);
+}
+/** The shelf hook: on the front of the clamp (the face over the shelf's edge), upright as it hangs. */
+const signShelfHook = (build: (v: Values) => Manifold) => (v: Values) => {
+  const m = build(v);
+  const bb = m.boundingBox();
+  const t = Number(defaultParams(DEFS.shelfHook).T) || 4;
+  const span = num(v, 'shelf') + 0.4 + t;
+  const h = Math.min(7, span - 4, bb.max[2] - bb.min[2] - 4);
+  if (h < 4) return m;
+  const out = engraveAt(m, [bb.min[0], bb.max[1] - span / 2, (bb.min[2] + bb.max[2]) / 2], [-1, 0, 0], [0, 1, 0], h);
+  m.delete();
   return out;
 };
+/** The pot's mark: low on the wall facing the front, in a smooth field when the wall is textured. */
+function signPot(m: Manifold, Rb: number, textured: boolean): Manifold {
+  // Above the saucer's rim (the pot stands 4.4 mm into a 16 mm saucer).
+  const h = 7, depth = 0.5, w = markWidth(h) + 3, zc = 13.6 + (h + 3) / 2;
+  const half = w / 2, sag = Rb - Math.sqrt(Math.max(0, Rb * Rb - half * half));
+  const C = M().CrossSection;
+  const letter = markOutline(h).extrude(depth + 3).translate([0, 0, -depth]);
+  const parts: Manifold[] = [letter];
+  if (textured) parts.push(C.square([w - 2.4, h + 3 - 2.4], true).offset(1.2, 'Round', undefined, 12).extrude(3 + sag).translate([0, 0, -sag]));
+  // Built facing +Z, then stood on the wall at −Y (the front of the preview): letter up = +Z, reads left to right.
+  const cut = M().Manifold.union(parts).rotate([90, 0, 0]).translate([0, -Rb, zc]);
+  const out = m.subtract(cut);
+  [...parts, cut].forEach((x) => x.delete());
+  m.delete();
+  return out;
+}
 
 // ------------------------------------------------------------------------- flower pot with a saucer
 let potCache: { key: string; m: Manifold } | null = null;
@@ -122,6 +211,7 @@ function pot(v: Values): Manifold {
     m = c;
   }
   m = textured(m, v, 'around');
+  m = signPot(m, Wb / 2, !!v.tex && v.tex !== 'none');
   if (W !== Wb) {
     // Each point moves outward by (top − bottom radius) × its height share: the wall and the relief keep their
     // thickness. The floor's middle stays put; the ramp between keeps the mapping continuous.
@@ -251,7 +341,7 @@ const MODELS: Impl[] = [
       { key: 'drop', label: 'Opuszczenie haczyka', type: 'number', def: 25, min: 10, max: 60, step: 1, unit: 'mm' },
     ],
     summary: (v) => `półka ${mm(num(v, 'shelf'))} mm, wsunięcie ${mm(num(v, 'A'))}, opuszczenie ${mm(num(v, 'drop'))} mm`,
-    build: part('shelfHook'),
+    build: signShelfHook(part('shelfHook')),
     standUp: true,
   },
   {
@@ -280,7 +370,7 @@ const MODELS: Impl[] = [
       { key: 'RW', label: 'Szerokość rolki', type: 'number', def: 230, min: 200, max: 300, step: 5, unit: 'mm' },
     ],
     summary: (v) => `${v.mode === 'shelf' ? `na półkę ${mm(num(v, 'st'))} mm` : v.mode === 'under' ? 'pod szafkę' : 'na ścianę'}, rolka ${mm(num(v, 'RW'))} mm`,
-    build: part('paperTowelHolder'),
+    build: signTop(part('paperTowelHolder')),
   },
   POT,
   {
@@ -311,7 +401,8 @@ const MODELS: Impl[] = [
       { key: 'frame', label: 'Ramka', type: 'select', def: 'off', options: [{ value: 'off', label: 'Bez ramki' }, { value: 'on', label: 'Z ramką' }], hint: 'Wypukła ramka wokół napisu, w kolorze napisu.' },
     ],
     summary: (v) => `„${String(v.text).trim()}”, szer. ${mm(num(v, 'W'))} mm, szpikulec ${mm(num(v, 'stake'))} mm${v.frame === 'on' ? ', z ramką' : ''}`,
-    build: (v) => part('plantLabel')({ ...v, frame: v.frame === 'on' }),
+    // The mark on the back of the plate (its bottom as printed), mirrored so it reads from behind.
+    build: signTop((v) => part('plantLabel')({ ...v, frame: v.frame === 'on' }), true),
     standUp: true,
     accent: 'Kolor napisu',
     // The plate is 2 mm thick; the letters stand on it (printed flat, letters up: a filament change at 2 mm).
