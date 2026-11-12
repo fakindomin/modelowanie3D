@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Znak na STL</title>
+<style>
+:root {
+  --bg: #f3f4f1; --card: #ffffff; --ink: #1f2420; --muted: #6b716b; --line: #dcdfd9;
+  --green: #3f7a52; --green-soft: #e3efe6; --orange: #e0782b; --bad: #c2412d; --view: #eef0ec; --model: #c9cec7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161917; --card: #202421; --ink: #e9ece8; --muted: #9aa19a; --line: #343a35;
+    --green: #6fb585; --green-soft: #243529; --orange: #f0954f; --bad: #ef7a64; --view: #1a1d1b; --model: #8e958d;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161917; --card: #202421; --ink: #e9ece8; --muted: #9aa19a; --line: #343a35;
+  --green: #6fb585; --green-soft: #243529; --orange: #f0954f; --bad: #ef7a64; --view: #1a1d1b; --model: #8e958d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.lead { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+.drop { display: block; border: 2px dashed var(--line); border-radius: 14px; background: var(--card); padding: 22px 16px; text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--green); background: var(--green-soft); }
+.drop b { color: var(--green); }
+.grid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-top: 16px; }
+@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.file { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; display: flex; gap: 10px; align-items: center; }
+.file.sel { border-color: var(--green); box-shadow: 0 0 0 2px var(--green-soft); }
+.file .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file .st { font-size: 12px; color: var(--muted); }
+.file .st.bad { color: var(--bad); }
+.file .st.ok { color: var(--green); }
+.file .info { flex: 1; min-width: 0; }
+.file input { width: 18px; height: 18px; accent-color: var(--green); }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; }
+.views { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .views { grid-template-columns: 1fr; } }
+.view { position: relative; background: var(--view); border-radius: 10px; aspect-ratio: 1 / 1; overflow: hidden; }
+.view canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.view .cap { position: absolute; left: 10px; top: 8px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 12px; }
+.controls label { display: flex; align-items: center; gap: 8px; }
+.controls input[type=range] { width: 140px; accent-color: var(--green); }
+button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--green); }
+button.primary { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; padding: 10px 16px; }
+button.primary:disabled { opacity: 0.5; cursor: default; }
+.msg { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 1.4em; }
+.msg.bad { color: var(--bad); }
+.bar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 16px; }
+.empty { color: var(--muted); text-align: center; padding: 40px 10px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Znak na STL</h1>
+  <p class="lead">Wrzuć gotowe pliki STL. Znak „f” zostanie wgłębiony 0,5 mm w spód modelu (tam, gdzie leży na stole), lustrzanie, żeby po odwróceniu wydruku czytał się normalnie. Pliki nigdzie nie są wysyłane, wszystko dzieje się w przeglądarce.</p>
+  <label id="drop" class="drop">
+    <input id="pick" type="file" accept=".stl" multiple class="hidden">
+    <b>Wybierz pliki STL</b> albo upuść je tutaj
+  </label>
+  <div id="work" class="grid hidden">
+    <div id="list" class="list"></div>
+    <div class="panel">
+      <div class="views">
+        <div class="view"><canvas id="v3d"></canvas><span class="cap">Model od spodu (obracaj)</span></div>
+        <div class="view"><canvas id="v2d"></canvas><span class="cap">Spód: przeciągnij znak</span></div>
+      </div>
+      <div class="controls">
+        <label><input id="on" type="checkbox" checked> Ze znakiem</label>
+        <label>Wielkość <input id="size" type="range" min="5" max="12" step="0.5"> <span id="sizev"></span></label>
+        <button id="rot">Obróć o 90°</button>
+        <button id="auto">Na środek</button>
+      </div>
+      <div id="msg" class="msg"></div>
+    </div>
+  </div>
+  <div id="bar" class="bar hidden">
+    <span id="summary" class="msg" style="margin:0"></span>
+    <button id="dl" class="primary">Pobierz</button>
+  </div>
+</main>
+<script type="module" src="/src/stamp/main.ts"></script>
+</body>
+</html>

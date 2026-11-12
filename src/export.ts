@@ -20,7 +20,7 @@ async function hostSave(bytes: Uint8Array<ArrayBuffer>, name: string): Promise<b
   return true;
 }
 
-async function download(data: ArrayBuffer | Uint8Array<ArrayBuffer> | string, name: string, type: string) {
+export async function download(data: ArrayBuffer | Uint8Array<ArrayBuffer> | string, name: string, type: string) {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data instanceof Uint8Array ? data : new Uint8Array(data);
   if (await hostSave(bytes, name)) return;
   const url = URL.createObjectURL(new Blob([bytes], { type }));
@@ -34,7 +34,7 @@ async function download(data: ArrayBuffer | Uint8Array<ArrayBuffer> | string, na
 }
 
 /** Binary STL of one mesh, moved by (dx, dy, dz). */
-function stlOf(m: ReturnType<BodyResult['manifold']['getMesh']>, dx = 0, dy = 0, dz = 0): Uint8Array<ArrayBuffer> {
+export function stlOf(m: ReturnType<BodyResult['manifold']['getMesh']>, dx = 0, dy = 0, dz = 0): Uint8Array<ArrayBuffer> {
   const tris = m.triVerts.length / 3;
   const buf = new ArrayBuffer(84 + tris * 50);
   const dv = new DataView(buf);
@@ -91,7 +91,7 @@ function crc32(data: Uint8Array) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffer> {
+export function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];

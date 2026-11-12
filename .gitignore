@@ -3,3 +3,5 @@ dist
 *.log
 dist-single
 dist-lite
+.tmpt/
+dist-stamp/
