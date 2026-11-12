@@ -51,6 +51,8 @@ export interface LiteModel {
   summary: (v: Values) => string;
   /** A second filament for the raised part (the letters): its label in the shop. */
   accent?: string;
+  /** Where the shop's „f” mark may go (value `mark`); the first is the default. The shop owner picks one per model. */
+  marks: { value: string; label: string }[];
 }
 
 interface Impl extends LiteModel {
@@ -93,7 +95,7 @@ const plate = (type: string) => (v: Values) => {
   const T = Number(defaultParams(DEFS[type]).T) || 4;
   const top = m.boundingBox().min[2] + T;
   // The mark's spot is found on the plain plate (clear of the arms and the screw holes), then cut after the texture.
-  const spot = markSpot(m, top);
+  const spot = v.mark === 'none' ? null : markSpot(m, top, false, v.mark as Corner);
   if (!v.tex || v.tex === 'none') return signed(m, spot, top);
   const slab = m.trimByPlane([0, 0, -1], -top);
   const tex = textured(slab.translate([0, 0, 0]), v, 'top');
@@ -108,15 +110,37 @@ const plate = (type: string) => (v: Values) => {
 /** Mark height: 7 mm, smaller where nothing bigger fits. */
 const MARK_SIZES = [7, 6, 5];
 type Spot = { at: [number, number]; h: number } | null;
-/** A calm spot on the flat face at height `z` facing up (or down): away from whatever stands on it. */
-function markSpot(m: Manifold, z: number, down = false): Spot {
+type Corner = 'br' | 'bl' | 'tr' | 'tl' | 'b' | 't';
+const CORNERS: Corner[] = ['br', 'bl', 'tr', 'tl', 'b', 't'];
+/** Positions on a face, as seen on it in use. */
+const MARK_FACE = [
+  { value: 'br', label: 'Prawy dolny róg' },
+  { value: 'bl', label: 'Lewy dolny róg' },
+  { value: 'tr', label: 'Prawy górny róg' },
+  { value: 'tl', label: 'Lewy górny róg' },
+  { value: 'b', label: 'Na dole, na środku' },
+  { value: 't', label: 'Na górze, na środku' },
+];
+const MARK_NONE = { value: 'none', label: 'Bez znaku' };
+/**
+ * A calm spot on the flat face at height `z` facing up (or down, read from below): away from whatever stands on
+ * it. `pref` is the corner as seen on that face; when the mark fits nowhere there, the nearest calm spot elsewhere.
+ */
+function markSpot(m: Manifold, z: number, down = false, pref?: Corner): Spot {
   const face = m.slice(down ? z + 0.1 : z - 0.1);
   const above = m.slice(down ? z - 0.1 : z + 0.1);
   const keep = above.isEmpty() ? null : above.offset(1.5, 'Round');
   const free = keep ? face.subtract(keep) : face;
   try {
+    // Read from below, left and right swap.
+    const flip = (c: Corner) => (down ? (c.replace('l', 'R').replace('r', 'l').replace('R', 'r') as Corner) : c);
+    const first = pref && CORNERS.includes(pref) ? pref : 'br';
     for (const h of MARK_SIZES) {
-      const at = findSpot(free, h, down ? ['bl', 'b', 'br', 'tl', 'tr', 't'] : undefined);
+      const at = findSpot(free, h, [flip(first)]);
+      if (at) return { at, h };
+    }
+    for (const h of MARK_SIZES) {
+      const at = findSpot(free, h, [first, ...CORNERS.filter((c) => c !== first)].map(flip));
       if (at) return { at, h };
     }
     return null;
@@ -137,14 +161,22 @@ function signed(m: Manifold, spot: Spot, z: number, down = false): Manifold {
  */
 const signTop = (build: (v: Values) => Manifold, down = false) => (v: Values) => {
   const m = build(v);
+  return signFlat(m, v.mark as string, down);
+};
+/** `mark`: a corner, optionally `back-` (the face lying on the bed, read from behind) or `front-` (the top). */
+function signFlat(m: Manifold, mark: string, down = false): Manifold {
+  if (mark === 'none') return m;
+  if (mark?.startsWith('back-')) [down, mark] = [true, mark.slice(5)];
+  else if (mark?.startsWith('front-')) [down, mark] = [false, mark.slice(6)];
   const bb = m.boundingBox();
-  if (down) return signed(m, markSpot(m, bb.min[2], true), bb.min[2], true);
+  const pref = CORNERS.includes(mark as Corner) ? (mark as Corner) : undefined;
+  if (down) return signed(m, markSpot(m, bb.min[2], true, pref), bb.min[2], true);
   for (const z of flatTops(m)) {
-    const spot = markSpot(m, z);
+    const spot = markSpot(m, z, false, pref);
     if (spot) return signed(m, spot, z);
   }
   return m;
-};
+}
 /** Heights of the upward flat faces, the largest (by area) first. */
 function flatTops(m: Manifold): number[] {
   const mesh = m.getMesh(), v = mesh.vertProperties, np = mesh.numProp, t = mesh.triVerts;
@@ -164,6 +196,7 @@ function flatTops(m: Manifold): number[] {
 /** The shelf hook: on the front of the clamp (the face over the shelf's edge), upright as it hangs. */
 const signShelfHook = (build: (v: Values) => Manifold) => (v: Values) => {
   const m = build(v);
+  if (v.mark !== 'front') return signFlat(m, v.mark === 'side' ? 'br' : 'none');
   const bb = m.boundingBox();
   const t = Number(defaultParams(DEFS.shelfHook).T) || 4;
   const span = num(v, 'shelf') + 0.4 + t;
@@ -194,7 +227,7 @@ function signPot(m: Manifold, Rb: number, textured: boolean): Manifold {
 let potCache: { key: string; m: Manifold } | null = null;
 function pot(v: Values): Manifold {
   const W = num(v, 'W'), Wb = num(v, 'Wb'), H = num(v, 'H');
-  const key = `${W}/${Wb}/${H}/${v.tex}`;
+  const key = `${W}/${Wb}/${H}/${v.tex}/${v.mark}`;
   if (potCache?.key === key) return potCache.m.translate([0, 0, 0]);
   // Built straight at the bottom diameter (texture and all), then the wall is leaned out (or in) to the top one.
   const box = DEFS.box;
@@ -211,7 +244,9 @@ function pot(v: Values): Manifold {
     m = c;
   }
   m = textured(m, v, 'around');
-  m = signPot(m, Wb / 2, !!v.tex && v.tex !== 'none');
+  // The mark: on the wall at the front, or under the floor (read from below), clear of the drain holes.
+  if (v.mark === 'wall') m = signPot(m, Wb / 2, !!v.tex && v.tex !== 'none');
+  else if (v.mark === 'bottom') m = signFlat(m, 'back-b');
   if (W !== Wb) {
     // Each point moves outward by (top − bottom radius) × its height share: the wall and the relief keep their
     // thickness. The floor's middle stays put; the ramp between keeps the mapping continuous.
@@ -254,6 +289,7 @@ const POT: Impl = {
   label: 'Doniczka z podstawką',
   desc: 'Okrągła doniczka z otworami odpływowymi i podstawka z żeberkami, żeby doniczka nie stała w wodzie.',
   pieces: 'doniczka + podstawka',
+  marks: [{ value: 'wall', label: 'Na ściance, z przodu nisko' }, { value: 'bottom', label: 'Pod spodem doniczki' }, MARK_NONE],
   dims: [
     { key: 'W', label: 'Średnica u góry', type: 'number', def: 120, min: 60, max: 200, step: 5, unit: 'mm', axis: 'x', top: true },
     { key: 'Wb', label: 'Średnica na dole', type: 'number', def: 95, min: 50, max: 200, step: 5, unit: 'mm', axis: 'x', span: (v) => num(v, 'Wb'), hint: 'Taka sama jak u góry = prosta ścianka. Ścianka może się pochylać najwyżej o 35°, żeby drukowała się bez podpór.' },
@@ -297,6 +333,7 @@ const MODELS: Impl[] = [
     label: 'Haczyk ścienny',
     desc: 'Na ręcznik, kurtkę albo torbę: płytka do ściany i ramię z końcówką w górę.',
     pieces: '1 haczyk',
+    marks: [...MARK_FACE, MARK_NONE],
     dims: [
       { key: 'D', label: 'Wysięg', type: 'number', def: 30, min: 15, max: 80, step: 1, unit: 'mm', axis: 'y', hint: 'Na ręcznik 30, na kurtkę 40–50.' },
       { key: 'hookW', label: 'Szerokość', type: 'number', def: 16, min: 8, max: 40, step: 1, unit: 'mm', axis: 'x' },
@@ -313,6 +350,7 @@ const MODELS: Impl[] = [
     label: 'Listwa z haczykami',
     desc: 'Na klucze, smycze albo ścierki. Liczba haczyków i odstęp ustalają długość listwy.',
     pieces: '1 listwa',
+    marks: [...MARK_FACE, MARK_NONE],
     dims: [
       { key: 'N', label: 'Liczba haczyków', type: 'number', def: 5, min: 2, max: 10, step: 1, unit: 'szt.', hint: 'Listwa ma najwyżej 24 cm, żeby zmieściła się w drukarce: przy dużym odstępie liczba haczyków sama się zmniejszy.' },
       { key: 'gap', label: 'Odstęp haczyków', type: 'number', def: 22, min: 10, max: 60, step: 1, unit: 'mm' },
@@ -335,6 +373,7 @@ const MODELS: Impl[] = [
     label: 'Haczyk pod półkę',
     desc: 'Wsuwany na brzeg półki, bez wiercenia: kubki, ścierki i kable wiszą pod spodem.',
     pieces: '1 haczyk',
+    marks: [{ value: 'front', label: 'Z przodu, na krawędzi półki' }, { value: 'side', label: 'Na boku haczyka' }, MARK_NONE],
     dims: [
       { key: 'shelf', label: 'Grubość półki', type: 'number', def: 18, min: 8, max: 36, step: 0.5, unit: 'mm', axis: 'z', hint: 'Zmierz półkę; haczyk ma 0,4 mm luzu.' },
       { key: 'A', label: 'Głębokość wsunięcia', type: 'number', def: 40, min: 20, max: 80, step: 1, unit: 'mm', axis: 'x' },
@@ -349,6 +388,7 @@ const MODELS: Impl[] = [
     label: 'Uchwyt na papier toaletowy',
     desc: 'Ramię z końcówką w górę, opcjonalnie z półeczką na telefon nad rolką.',
     pieces: '1 uchwyt',
+    marks: [...MARK_FACE, MARK_NONE],
     dims: [
       { key: 'D', label: 'Długość ramienia', type: 'number', def: 115, min: 95, max: 150, step: 1, unit: 'mm', axis: 'y', hint: 'Rolka ma ok. 100 mm szerokości.' },
       { key: 'shelf', label: 'Półeczka na telefon', type: 'bool', def: false },
@@ -364,6 +404,7 @@ const MODELS: Impl[] = [
     label: 'Uchwyt na ręcznik papierowy',
     desc: 'Dwa wsporniki i drążek. Na ścianę, pod szafkę albo nasuwany na półkę jak litera U.',
     pieces: '2 wsporniki + drążek z 2 części',
+    marks: [{ value: 'side', label: 'Na boku wspornika' }, MARK_NONE],
     dims: [
       { key: 'mode', label: 'Montaż', type: 'select', def: 'wall', options: [{ value: 'wall', label: 'Na ścianę' }, { value: 'under', label: 'Pod szafkę' }, { value: 'shelf', label: 'Na półkę (U)' }] },
       { key: 'st', label: 'Grubość półki', type: 'number', def: 18, min: 8, max: 36, step: 0.5, unit: 'mm', show: (v) => v.mode === 'shelf', hint: 'Zmierz półkę; trzyma się na wcisk.' },
@@ -378,6 +419,7 @@ const MODELS: Impl[] = [
     label: 'Wieszak na klucze z półką',
     desc: 'Haczyki na klucze, a nad nimi półeczka z rantem na portfel, telefon albo listy.',
     pieces: '1 wieszak',
+    marks: [...MARK_FACE, MARK_NONE],
     dims: [
       { key: 'N', label: 'Liczba haczyków', type: 'number', def: 4, min: 2, max: 8, step: 1, unit: 'szt.' },
       { key: 'L', label: 'Szerokość', type: 'number', def: 160, min: 100, max: 240, step: 5, unit: 'mm', axis: 'x' },
@@ -394,6 +436,7 @@ const MODELS: Impl[] = [
     label: 'Tabliczka do roślin',
     desc: 'Wbijana tabliczka z wypukłym napisem, np. nazwą zioła albo imieniem.',
     pieces: '1 tabliczka',
+    marks: [...MARK_FACE.map((o) => ({ value: `back-${o.value}`, label: `Z tyłu: ${o.label.toLowerCase()}` })), ...MARK_FACE.map((o) => ({ value: `front-${o.value}`, label: `Z przodu: ${o.label.toLowerCase()}` })), MARK_NONE],
     dims: [
       { key: 'text', label: 'Napis', type: 'text', def: 'Bazylia', max_len: 16 },
       { key: 'W', label: 'Szerokość tabliczki', type: 'number', def: 60, min: 40, max: 120, step: 5, unit: 'mm', axis: 'x' },
@@ -433,6 +476,8 @@ export function clean(id: string, v: Values = {}): Values {
     else if (d.type === 'select') out[d.key] = d.options!.some((o) => o.value === x) ? (x as string) : d.def;
     else out[d.key] = String(x ?? d.def).slice(0, d.max_len ?? 24) || String(d.def);
   }
+  const marks = model(id).marks;
+  out.mark = marks.some((o) => o.value === v.mark) ? (v.mark as string) : marks[0].value;
   return model(id).fit?.(out) ?? out;
 }
 

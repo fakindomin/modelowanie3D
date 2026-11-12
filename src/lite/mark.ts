@@ -37,18 +37,21 @@ export function findSpot(free: CrossSection, h: number, prefs: Corner[] = ['br',
     i.delete();
     return ok;
   };
-  // Candidate centres: along the outline of the free area shrunk by half the field's shorter side (where a field
-  // hugs the edges), every millimetre; the exact test then keeps the ones the whole field fits around.
-  const er = free.offset(-(Math.min(w, hh) / 2 + 0.05), 'Round');
+  // Candidate centres: along the outline of the free area shrunk by half the field's side (where a field hugs the
+  // edges), every half millimetre; the exact test then keeps the ones the whole field fits around.
+  // Both half-sides: the shorter lets it hug a side edge, the longer the top or bottom edge.
   const pts: [number, number][] = [];
-  for (const poly of er.toPolygons()) {
-    for (let k = 0; k < poly.length; k++) {
-      const a = poly[k], b = poly[(k + 1) % poly.length];
-      const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1])));
-      for (let q = 0; q < n; q++) pts.push([a[0] + ((b[0] - a[0]) * q) / n, a[1] + ((b[1] - a[1]) * q) / n]);
+  for (const r of [Math.min(w, hh) / 2 + 0.05, Math.max(w, hh) / 2 + 0.05]) {
+    const er = free.offset(-r, 'Round');
+    for (const poly of er.toPolygons()) {
+      for (let k = 0; k < poly.length; k++) {
+        const a = poly[k], b = poly[(k + 1) % poly.length];
+        const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 2));
+        for (let q = 0; q < n; q++) pts.push([a[0] + ((b[0] - a[0]) * q) / n, a[1] + ((b[1] - a[1]) * q) / n]);
+      }
     }
+    er.delete();
   }
-  er.delete();
   try {
     for (const c of prefs) {
       const ax = c.endsWith('r') ? x1 : c.endsWith('l') ? x0 : (x0 + x1) / 2;
