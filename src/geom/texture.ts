@@ -117,6 +117,36 @@ function roundAxis(m: Manifold): 0 | 1 | 2 | null {
   return null;
 }
 
+/**
+ * Heights where a round solid stands at its full radius: the longest such run. A narrower end (a threaded
+ * neck, a spigot) is left bare, so ribs never climb onto a thread.
+ */
+function fullBand(w: Manifold, cx: number, cy: number, r: number): [number, number] {
+  const b = w.boundingBox();
+  const n = Math.min(400, Math.max(2, Math.ceil((b.max[2] - b.min[2]) / 0.5)));
+  const dz = (b.max[2] - b.min[2]) / n;
+  let best: [number, number] = [b.min[2], b.max[2]], bestLen = -1, start = -1;
+  for (let i = 0; i <= n + 1; i++) {
+    let full = false;
+    if (i <= n) {
+      const z = Math.min(b.max[2] - 0.02, Math.max(b.min[2] + 0.02, b.min[2] + i * dz));
+      const s = w.slice(z);
+      const sb = s.bounds();
+      full = !s.isEmpty() && Math.max(sb.max[0] - cx, cx - sb.min[0], sb.max[1] - cy, cy - sb.min[1]) > r - 1;
+      s.delete();
+    }
+    if (full && start < 0) start = i;
+    if (!full && start >= 0) {
+      if (i - start > bestLen) {
+        bestLen = i - start;
+        best = [start === 0 ? b.min[2] : b.min[2] + (start - 0.5) * dz, i > n ? b.max[2] : b.min[2] + (i - 0.5) * dz];
+      }
+      start = -1;
+    }
+  }
+  return best;
+}
+
 function aroundTexture(m: Manifold, t: Texture): Manifold {
   const axis = roundAxis(m);
   if (axis === null) return m;
@@ -126,7 +156,8 @@ function aroundTexture(m: Manifold, t: Texture): Manifold {
   const b = w.boundingBox();
   const cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2;
   const r = (b.max[0] - b.min[0]) / 2;
-  const z0 = b.min[2] + t.margin, z1 = b.max[2] - t.margin;
+  const [f0, f1] = fullBand(w, cx, cy, r);
+  const z0 = f0 + t.margin, z1 = f1 - t.margin;
   const H = z1 - z0;
   if (H <= 0.2 || r <= 0.5) return m;
   const CS = M().CrossSection;

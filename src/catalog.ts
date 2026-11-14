@@ -19,7 +19,7 @@ import { PIPE_DEFS } from './parts/pipes';
 import { COUPLING_DEFS } from './parts/couplings';
 import { SKETCH_DEFS } from './parts/sketch';
 import { stockEndParams, stockEnds, stockMarks, type StockKind, type StockShape } from './parts/ends';
-import { gasket, isJar, jarBox, jarCap, jarParams } from './parts/jar';
+import { gasket, isJar, jarBox, jarCap, jarInside, jarParams } from './parts/jar';
 import { meshSolid } from './geom/meshes';
 import { dividerSolid, segmentsOf } from './geom/dividers';
 
@@ -265,11 +265,18 @@ const BASE: PartDef[] = [
       const rect = !p.shape || p.shape === 'rect';
       // Dividers stop under a sliding lid's groove so the lid can pass over them.
       const top = Math.min(H - (Number(p.low) || 0), rect && p.slide ? slideGroove(p).z0 - 0.3 : H);
-      const div = boxDividers(p, b, top);
       if (isJar(p)) {
+        // Without a bottom the dividers start at the box's foot; inside the neck they stay within its hollow.
+        const jd = boxDividers(p, p.ends === 'open' || p.ends === 'both' ? 0 : b, top);
         const m = jarBox(p);
-        return div ? m.add(div) : m;
+        if (!jd) return m;
+        const hollow = jarInside(p, Math.min(0.4, num(p, 'T') / 2));
+        const inner = jd.intersect(hollow);
+        jd.delete();
+        hollow.delete();
+        return m.add(inner);
       }
+      const div = boxDividers(p, b, top);
       if (p.shape === 'round') {
         const m = cyl(H, W / 2).subtract(cyl(H, W / 2 - t).translate([0, 0, b]));
         return div ? m.add(div) : m;

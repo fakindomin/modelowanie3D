@@ -65,16 +65,29 @@ export function jarBox(p: Params): Manifold {
   const neck = externalThread(d.spec, Hn, threadGap(p, 'out'), true, false);
   let m = cyl(H - Hn - lo, d.W / 2).translate([0, 0, lo]).add(neck.translate([0, 0, H - Hn]));
   if (both) m = m.add(neck.rotate([180, 0, 0]).translate([0, 0, Hn]));
-  const step = Math.max(0, ri - d.riN);
+  m = m.subtract(jarInside(p));
+  return m;
+}
+
+/**
+ * The hollow of the box (body, the 45° steps and the narrower neck), `grow` mm wider. Dividers are clipped to it
+ * grown a little, so they join the wall but never come through the thinner neck onto the thread.
+ */
+export function jarInside(p: Params, grow = 0): Manifold {
+  const d = jarDims(p);
+  const H = num(p, 'H'), both = p.ends === 'both', open = both || p.ends === 'open';
+  const b = open ? -1 : num(p, 'B');
+  const Hn = Math.min(d.L, (both ? H / 2 : H - Math.max(0, b)) - 1);
+  const ri = d.W / 2 - d.t + grow, riN = d.riN + grow;
+  const step = Math.max(0, ri - riN);
   const z1 = Math.max(b, H - Hn - step);
   const z0 = both ? Math.min(Hn + step, z1) : b;
   let inside = cyl(z1 - z0 + 0.01, ri)
     .translate([0, 0, z0])
-    .add(cyl(step + 0.01, ri, d.riN).translate([0, 0, z1]))
-    .add(cyl(H + 2, d.riN).translate([0, 0, b]));
-  if (both && step > 0) inside = inside.add(cyl(step + 0.01, d.riN, ri).translate([0, 0, z0 - step - 0.01]));
-  m = m.subtract(inside);
-  return m;
+    .add(cyl(step + 0.01, ri, riN).translate([0, 0, z1]))
+    .add(cyl(H + 2, riN).translate([0, 0, b]));
+  if (both && step > 0) inside = inside.add(cyl(step + 0.01, riN, ri).translate([0, 0, z0 - step - 0.01]));
+  return inside;
 }
 
 /** The cap, printed top down: top plate, a recess for the gasket, then the internal thread. */
