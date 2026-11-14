@@ -8,7 +8,8 @@
     "build": "tsc -p . && vite build",
     "preview": "vite preview",
     "build:lite": "vite build -c vite.lite.config.ts",
-    "build:stamp": "vite build -c vite.stamp.config.ts"
+    "build:stamp": "vite build -c vite.stamp.config.ts",
+    "check:parts": "sh scripts/check/run.sh"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
