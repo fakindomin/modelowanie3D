@@ -18,9 +18,20 @@ Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 
 ## Szuflady
 - Liczba: 0 / 1 / 2, zawsze identyczne; ustawia się wymiary jednej, druga jest kopią.
-- Jedna szuflada: ustawiana dowolnie (szerokość i strona lewo/prawo), reszta miejsca lita. (Interpretacja do potwierdzenia.)
+- Jedna szuflada: ustawiana dowolnie (wymiary jak niżej, położenie płynnie), reszta miejsca lita.
 - Zero szuflad: wysokość = minimum potrzebne na młynek i bibułki, z możliwością zmiany w zakresie (suwak od minimum).
 - Wysokość szuflady jeden suwak (domyślnie 13,2 mm przy H = 56,1); wyższa szuflada podnosi H o tyle samo.
+
+### Wymiary i położenie szuflady (suwaki)
+- Szerokość, wysokość i długość: osobne suwaki (nie tylko szerokość). Wysokość nadal podnosi/obniża H pudełka; długość ograniczona głębokością pudełka (Y) minus ścianki.
+- Położenie: płynny suwak przesunięcia w X (nie tylko lewo/prawo) w obrębie strefy szuflad; dla dwóch szuflad przesuwa się cały zestaw, przegroda zostaje między nimi.
+- Skalowanie względem magnesów: minima suwaków wynikają z rozmiaru magnesu (domyślnie 5×2, luz 0,25; gniazdo Ø+luz, głębokość MAG_T+0,2, kryjąca ścianka 0,8; MAG_WALL 1,2 z `src/geom/magnets.ts`) i są liczone na żywo, nie stałe:
+  - wysokość ≥ (Ø+luz) + 2·MAG_WALL (poziomy magnes w tylnym rogu mieści się w ściance),
+  - długość ≥ skos przód + skos tył + miejsce na tylny magnes; skosy skalują się w dół (max 1/3 długości), nie wychodzą poza szufladę,
+  - szerokość ≥ miejsce na ściankę boczną z gniazdem (MAG_T+0,2+0,8 = 3,0 mm) po obu stronach + minimum użytkowe,
+  - odstęp od zewnętrznej ściany i od przegrody ≥ 3,0 mm przy magnesach (1,6 mm bez nich); położenie X obcinane do tego zakresu.
+- Magnesy „brak” zdejmuje te ograniczenia (minima spadają do technologicznych); zmiana rozmiaru magnesu przelicza wszystkie minima.
+- Magnes nigdy nie może wystawać: kontrola błędu (czerwona), gdyby jakaś kombinacja (np. ręcznie wpisana wartość z JSON) naruszała minimum – wtedy wartość jest przycinana i podświetlona.
 - Dół otwarty (brak podłogi pod szufladami), mini prowadnice (ząb 1,5 mm, spód 45°) w rowkach boków szuflady; dno szuflady równo z dołem pudełka → druk bez podpór; +3 mm wysokości wnętrza. Sufity wnęk (~73×71) z podłoża lub mostkowane (ostrzeżenie > 60 mm).
 - Płynne skosy dna z przodu i z tyłu szuflady (25 × 3 mm jak w tacce, przełączane); magnesy ukryte w tylnym skosie.
 - Magnesy: przełącznik są/brak (na szufladę). Poziomy magnes w tylnym rogu ścianki szuflady; ścianki wnęki: para tylna (zamknięcie) + przednia (zatrzymanie przy wysunięciu ~56 mm). Magnesy w zewnętrznych ściankach opcjonalnie (domyślnie wył.).
