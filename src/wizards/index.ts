@@ -2,9 +2,11 @@ import { FRAME_WIZARD } from './frame';
 import { BOX_WIZARD, CABINET_WIZARD, ORGANIZER_WIZARD } from './containers';
 import { CASE_WIZARD, JUNCTION_WIZARD, PANEL_WIZARD } from './electronics';
 import { POT_WIZARD, STAND_WIZARD } from './home';
+import { DOME_WIZARD } from './dome';
+import { GEARBOX_WIZARD } from './gearbox';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD].map((w) => [w.id, w]));
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD].map((w) => [w.id, w]));
 const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
 
 const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
@@ -16,8 +18,8 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
     items: [
       ready(FRAME_WIZARD),
       soon('profileFrame', 'Rama z profili', 'Kwadratowe profile, łączniki z czopem, panele.'),
+      ready(DOME_WIZARD),
       soon('rack', 'Regał modułowy', 'Półki, przegrody, rozbudowa w górę i w bok.'),
-      soon('dome', 'Kopuła geodezyjna', 'Pręty i węzły, rozmiar i częstotliwość podziału.'),
     ],
   },
   {
@@ -40,7 +42,7 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
   {
     label: 'Mechanizmy',
     items: [
-      soon('gearbox', 'Przekładnia', 'Przełożenie, osie, obudowa.'),
+      ready(GEARBOX_WIZARD),
       soon('door', 'Drzwiczki z zawiasem', 'Zawias, zamknięcie na magnes.'),
       soon('slide', 'Prowadnica liniowa', 'Wózek na rurach albo profilu.'),
     ],

@@ -69,6 +69,8 @@ export interface Plan {
   parts?: Part[];
   /** Bought boards (shelves, top), centre and size: shown in the preview, not added to the model. */
   boards?: { size: Vec3; position: Vec3 }[];
+  /** Bought rods (dome struts) from a to b: shown in the preview, not added to the model. */
+  rods?: { a: Vec3; b: Vec3; d: number; color: string }[];
 }
 
 export interface Wizard {

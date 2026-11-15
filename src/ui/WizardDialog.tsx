@@ -410,6 +410,16 @@ function Frame({ plan, focus, ghost }: { plan: Plan; focus: string[]; ghost?: st
         const dim = focus.length > 0 && !focus.includes(it.group);
         return <mesh key={i} geometry={g} material={mat(it.color, dim)} position={pl.position} rotation={[pl.rotation[0] * DEG, pl.rotation[1] * DEG, pl.rotation[2] * DEG]} />;
       })}
+      {plan.rods?.map((r, i) => {
+        const a = new THREE.Vector3(...r.a), b = new THREE.Vector3(...r.b);
+        const len = a.distanceTo(b);
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+        return (
+          <mesh key={'rod' + i} position={a.clone().add(b).multiplyScalar(0.5)} quaternion={q} material={mat(r.color, focus.length > 0 && !focus.includes('strut'))}>
+            <cylinderGeometry args={[r.d / 2, r.d / 2, len, 12]} />
+          </mesh>
+        );
+      })}
       {plan.boards?.map((b, i) => (
         <mesh key={'b' + i} position={b.position} material={mat('#c8b38a', focus.length > 0)}>
           <boxGeometry args={b.size} />
