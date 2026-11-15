@@ -1,6 +1,6 @@
 # Pudełko na akcesoria – moduł parametryczny
 
-Stan: projekt (bez kodu modułu). Wzorzec geometrii: `tools/pudelko/pudelko.py` (v11, Python/manifold3d) – służy do porównań (bbox/objętość przy wartościach domyślnych).
+Stan: punkt 1 gotowy (korpus + pokrywa-tacka + napis jako `PartDef` w `src/parts/pudelko.ts`); wnętrze i szuflady nadal jak w v11. Wzorzec geometrii: `tools/pudelko/pudelko.py` (v11, Python/manifold3d) – służy do porównań (bbox/objętość przy wartościach domyślnych).
 Docelowo: `PartDef` `pudelko` w `src/parts/` (kategoria `useful`), części przez `pieces`: korpus, pokrywa, napis, szuflada. Jądro: `manifold-3d` (to samo co w Pythonie).
 Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 
@@ -46,3 +46,6 @@ Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 ## Do zrobienia później
 - Dół całego pudełka (do zmiany), opcjonalnie napis na dnie korpusu jako wkładka.
 - Kolejność prac: (1) korpus + pokrywa z domyślnymi wartościami i test zgodności z `pudelko.py`, (2) parametry wnętrza, (3) szuflady, (4) faktury i „f”, (5) kontrole i eksport 3MF.
+
+## Test zgodności (punkt 1)
+`sh scripts/check/pudelko.sh` buduje korpus i pokrywę z parametrami „legacy” (pokrywa 2,8, bez tacki, garby, napis grawerowany) i porównuje z `tools/pudelko/ref.json` (wynik `pudelko.py` v11): bbox identyczny, objętość korpusu −0,04%, pokrywy 0,00%. Dla wartości domyślnych sprawdza też: Z_CH0 bez zmian (H = 57,1), brak kolizji korpus/pokrywa, wkładka napisu nie nachodzi na pokrywę.
