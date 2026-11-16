@@ -1,3 +1,4 @@
+import { bareParts, printable } from './simple';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import { bestPose, keepsPose } from './geom/orient';
@@ -70,6 +71,9 @@ interface State {
   /** A part id, or "g:<body>" for a whole group. */
   selectedId: string | null;
   hoveredId: string | null;
+  /** Size parameter under the cursor (its row in the panel or its handle on the model). */
+  dimHover: string | null;
+  setDimHover(key: string | null): void;
   past: Part[][];
   future: Part[][];
   settings: Settings;
@@ -180,7 +184,7 @@ interface State {
   /** Mirrored copy of a body placed beside it. */
   mirrorCopy(body: number, axis: 'x' | 'y'): void;
   /** Hide or lock parts; a group id ("g:3") means every member of that body. */
-  setFlags(ids: string[], patch: { hidden?: boolean; locked?: boolean }): void;
+  setFlags(ids: string[], patch: { hidden?: boolean; locked?: boolean; noPrint?: boolean }): void;
   /** Keeps only what the solids of `body` share with the solids of `other` (other becomes a clip). */
   clipWith(body: number, other: number): void;
   /** Extra picks for aligning (Ctrl+click); `selectedId` stays the main one. */
@@ -225,6 +229,8 @@ interface State {
   redo(): void;
   load(project: Project | ProjectV1): void;
   reset(): void;
+  /** One project is one ready-made model: clears the scene before the next one (Cofnij brings it back). */
+  startNew(): void;
   setSettings(s: Partial<Settings>): void;
   setPreview(v: boolean): void;
   setSnapTargets(ids: string[]): void;
@@ -310,8 +316,10 @@ function loadSaved(): { tech: Part[]; fig: Part[] } {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw) as Project | ProjectV1;
-      if (p.version === 1) return { tech: sanitize(p.parts), fig: [] };
-      return { tech: sanitize(p.tech), fig: sanitize(p.fig) };
+      const tech = sanitize(p.version === 1 ? p.parts : p.tech), fig = p.version === 1 ? [] : sanitize(p.fig);
+      // A scene built from bare blocks belongs to the old editor: start empty.
+      if (bareParts(tech).length || bareParts(fig).length) return { tech: [], fig: [] };
+      return { tech, fig };
     }
   } catch {
     /* ignore broken or blocked storage */
@@ -364,6 +372,44 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
     if (f) q = { ...q, position: f.position, pattern: f.pattern };
     return q;
   })));
+}
+
+/**
+ * Parts are not moved by hand any more, so when a body grows or shrinks, the bodies standing beside it
+ * (a lid laid next to its box) move with its side and keep their gap. Bodies inside or overlapping it stay.
+ */
+function keepApart(before: Part[], after: Part[], changed: string): Part[] {
+  const ids = [...new Set(after.map((p) => p.body))];
+  const box0 = new Map(ids.map((b) => [b, bodyBox(before, b)]));
+  const box1 = new Map(ids.map((b) => [b, bodyBox(after, b)]));
+  const shift = new Map<number, [number, number]>();
+  const cBody = after.find((p) => p.id === changed)?.body;
+  for (const c of ids) {
+    if (c !== cBody) continue;
+    const a = box0.get(c)!, z = box1.get(c)!;
+    if (a.isEmpty() || z.isEmpty()) continue;
+    for (const ax of [0, 1] as const) {
+      const dMax = z.max.getComponent(ax) - a.max.getComponent(ax), dMin = z.min.getComponent(ax) - a.min.getComponent(ax);
+      if (Math.abs(dMax) < 1e-6 && Math.abs(dMin) < 1e-6) continue;
+      for (const o of ids) {
+        if (o === c) continue;
+        const ob = box0.get(o)!;
+        if (ob.isEmpty()) continue;
+        let d = 0;
+        if (ob.min.getComponent(ax) >= a.max.getComponent(ax) - 0.01) d = dMax;
+        else if (ob.max.getComponent(ax) <= a.min.getComponent(ax) + 0.01) d = dMin;
+        if (!d) continue;
+        const s = shift.get(o) ?? [0, 0];
+        s[ax] += d;
+        shift.set(o, s);
+      }
+    }
+  }
+  if (!shift.size) return after;
+  return after.map((p) => {
+    const s = shift.get(p.body);
+    return s ? { ...p, position: r3([p.position[0] + s[0], p.position[1] + s[1], p.position[2]]) } : p;
+  });
 }
 
 /** New positions of every member of `src`'s pattern after `src` moves to `to` (rule kept). */
@@ -746,7 +792,11 @@ export const useStore = create<State>((set, get) => {
       if (run) {
         origin = parts.find((p) => p.wiz?.run === run && p.wiz.recipe)?.wiz?.recipe?.origin ?? [0, 0, 0];
         parts = parts.filter((p) => p.wiz?.run !== run);
-      } else origin = parts.length ? [besideAll(parts, new THREE.Vector3(40, 0, 0))[0], 0, 0] : [round(-plan.size[0] / 2), round(-plan.size[1] / 2), 0];
+      } else {
+        // One project is one ready-made model: a new wizard run replaces the scene (Cofnij brings it back).
+        parts = [];
+        origin = [round(-plan.size[0] / 2), round(-plan.size[1] / 2), 0];
+      }
       const tag = run ?? uid();
       const next = [...parts];
       const links: Record<string, string> = {};
@@ -827,6 +877,10 @@ export const useStore = create<State>((set, get) => {
     },
 
     select: (id) => set((s) => ({ selectedId: id, multi: [], faceSel: s.faceSel && s.faceSel.id === id ? s.faceSel : null, sketchSel: s.sketchSel && s.sketchSel.id === id ? s.sketchSel : null, suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
+    dimHover: null,
+    setDimHover: (key) => {
+      if (get().dimHover !== key) set({ dimHover: key });
+    },
     setHover: (id) => {
       if (get().hoveredId !== id) set({ hoveredId: id });
     },
@@ -883,7 +937,9 @@ export const useStore = create<State>((set, get) => {
     },
 
     update(id, patch) {
-      commit(applyPatch(get().parts, id, patch));
+      const before = get().parts;
+      const next = applyPatch(before, id, patch);
+      commit(patch.params ? keepApart(before, syncLids(before, next), id) : next);
       // A picked face no longer sits where it was drawn.
       const fs = get().faceSel;
       if (fs && fs.id === id && (patch.position || patch.rotation || patch.params)) set({ faceSel: { ...fs, tris: [] } });
@@ -901,7 +957,10 @@ export const useStore = create<State>((set, get) => {
     },
 
     updateLive(id, patch) {
-      set((s) => ({ parts: applyPatch(s.parts, id, patch) }));
+      set((s) => {
+        const next = applyPatch(s.parts, id, patch);
+        return { parts: patch.params ? keepApart(s.parts, syncLids(s.parts, next), id) : next };
+      });
     },
 
     moveManyLive(start, delta) {
@@ -1037,7 +1096,7 @@ export const useStore = create<State>((set, get) => {
       made.name = `${made.name} (para do: ${src.name})`;
       made.gearMate = { of: src.id, angle: 0 };
       commit(placeMates([...parts, made]), { selectedId: made.id });
-      get().notify('Pasująca część stoi tam, gdzie zęby się zazębiają. Zmieniasz liczbę zębów, a para sama się rozsuwa; przesunięcie jej ręcznie odpina ją.');
+      get().notify('Pasująca część stoi tam, gdzie zęby się zazębiają. Zmieniasz liczbę zębów, a para sama się rozsuwa. Niepotrzebną odznacz na liście „Części do druku”.');
     },
 
     matchingPipes(id) {
@@ -1993,6 +2052,7 @@ export const useStore = create<State>((set, get) => {
         const q = { ...p, ...patch };
         if (!q.hidden) delete q.hidden;
         if (!q.locked) delete q.locked;
+        if (!q.noPrint) delete q.noPrint;
         return q;
       };
       commit(parts.map((p) => (hit.has(p.id) ? clean(p) : p)));
@@ -2226,7 +2286,7 @@ export const useStore = create<State>((set, get) => {
     },
 
     runCheck() {
-      set({ check: runCheck(get().parts, get().settings.minWall), preview: false });
+      set({ check: runCheck(printable(get().parts), get().settings.minWall), preview: false });
     },
     closeCheck: () => set({ check: null }),
 
@@ -2244,6 +2304,11 @@ export const useStore = create<State>((set, get) => {
 
     load(project) {
       const s = get();
+      const all = project.version === 1 ? sanitize(project.parts) : [...sanitize(project.tech), ...sanitize(project.fig)];
+      if (bareParts(all).length) {
+        get().notify('Ta wersja nie otwiera tego projektu: zawiera elementy złożone ręcznie z brył i otworów (np. walec, otwór, czop). Wybierz gotowy model albo kreator.');
+        return;
+      }
       if (project.version === 2) decodeMeshes(project.meshes);
       if (project.version === 1) {
         commit(sanitize(project.parts), { selectedId: null, fitRequest: s.fitRequest + 1 });
@@ -2256,6 +2321,12 @@ export const useStore = create<State>((set, get) => {
 
     reset() {
       commit([], { selectedId: null });
+    },
+
+    startNew() {
+      if (!get().parts.length) return set({ selectedId: null });
+      commit([], { selectedId: null });
+      get().notify('Poprzedni model zastąpiony nowym. „Cofnij” go przywróci.');
     },
 
     setSettings: (s) => set((st) => ({ settings: { ...st.settings, ...s } })),

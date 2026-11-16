@@ -4,7 +4,8 @@ import { Library, Properties } from './Panels';
 import { MeasurePanel } from './MeasurePanel';
 import { WizardDialog } from './WizardDialog';
 import { Manual } from './Manual';
-import { CornerSuggest, SettingsFields, useProjectActions } from '../App';
+import { CornerSuggest, useProjectActions } from '../App';
+import { mainOf } from '../simple';
 import { groupBody, isLocked, useStore } from '../store';
 import type { Tab } from '../types';
 
@@ -149,11 +150,8 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
             {item('Eksport STL', () => act.exportAs('stl'), 'primary')}
             {item('Eksport 3MF', () => act.exportAs('3mf'), 'primary')}
           </div>
-          <div className="mmenu-settings">
-            <SettingsFields />
-          </div>
           <p className="mmenu-help">
-            Jeden palec: obrót widoku. Dwa palce: przesuw i przybliżenie. Stuknięcie: wybór elementu. Przeciągnięcie zaznaczonego elementu: przesuwanie. Dwa stuknięcia w ściankę: faktura, napis i magnesy na niej.
+            Jeden palec: obrót widoku. Dwa palce: przesuw i przybliżenie. Stuknięcie: wybór części. Wymiary zmieniasz suwakami w zakładce ⚙ Właściwości. Dwa stuknięcia w ściankę: faktura, napis i magnesy na niej.
           </p>
         </div>
       )}
@@ -166,33 +164,14 @@ function SelectionChip({ onProps }: { onProps: () => void }) {
   const st = useStore();
   const id = st.selectedId;
   if (!id) return null;
-  const gb = groupBody(id);
-  const part = st.parts.find((p) => p.id === id);
-  if (!part && gb === null) return null;
-  const name = gb !== null ? `Bryła ${gb}` : part!.name;
-  const locked = isLocked(st.parts, id);
+  const gb = groupBody(id) ?? st.parts.find((p) => p.id === id)?.body ?? null;
+  const part = gb !== null ? mainOf(st.parts, gb) : undefined;
+  if (!part) return null;
   return (
     <div className="selchip">
       <button className="selchip-name" onClick={onProps}>
-        {locked && '🔒 '}
-        {name}
-        <span className="muted"> · ustaw ›</span>
-      </button>
-      <button aria-label="Duplikuj" title="Duplikuj" onClick={() => (gb !== null ? st.duplicateBody(gb) : st.duplicate(id))}>
-        ⧉
-      </button>
-      {part && (
-        <button aria-label="Obróć o 90°" title="Obróć o 90° wokół Z" disabled={locked} onClick={() => st.rotateBy(id, 2, 90)}>
-          ⟳
-        </button>
-      )}
-      {part && (
-        <button aria-label={locked ? 'Odblokuj' : 'Zablokuj'} title={locked ? 'Odblokuj' : 'Zablokuj'} onClick={() => st.setFlags([id], { locked: !part.locked })}>
-          {part.locked ? '🔓' : '🔒'}
-        </button>
-      )}
-      <button className="danger" aria-label="Usuń" title="Usuń" disabled={locked} onClick={() => (gb !== null ? st.removeBody(gb) : st.remove(id))}>
-        🗑
+        {part.name}
+        <span className="muted"> · wymiary ›</span>
       </button>
       <button aria-label="Odznacz" title="Odznacz" onClick={() => st.select(null)}>
         ✕

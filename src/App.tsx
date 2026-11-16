@@ -1,3 +1,4 @@
+import { printable } from './simple';
 import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
 import { Library, Properties } from './ui/Panels';
@@ -80,12 +81,12 @@ export function useProjectActions() {
   const st = useStore();
   const file = useRef<HTMLInputElement>(null);
   const exportAs = (fmt: 'stl' | '3mf', fileName?: string) => {
-    const { bodies, names, turnedN } = printBodies(st.parts);
+    const { bodies, names, turnedN } = printBodies(printable(st.parts));
     if (!bodies.length) return st.notify('Brak brył do eksportu. Dodaj jakiś element.');
     // STL: one file per kind of print (as in the manual: number, name, how many to print), not one per copy.
     let out = bodies;
     let plateN = 0;
-    const items = makeManual(st.parts).items;
+    const items = makeManual(printable(st.parts)).items;
     if (fmt === '3mf') {
       // Each material on its own plates (PETG clips, TPU seals, PLA the rest).
       const groups = new Map<number, string>();
@@ -126,13 +127,13 @@ export function useProjectActions() {
     <input
       ref={file}
       type="file"
-      accept=".json,application/json,.stl,model/stl"
+      accept=".json,application/json"
       hidden
       onChange={async (e) => {
         const f = e.target.files?.[0];
         e.target.value = '';
         if (!f) return;
-        if (/\.stl$/i.test(f.name)) return st.importSTL(f.name, await f.arrayBuffer());
+        if (/\.stl$/i.test(f.name)) return st.notify('Pliki STL nie są tu edytowane: wybierz gotowy model albo kreator i dopasuj jego wymiary.');
         try {
           st.load(JSON.parse(await f.text()) as Project);
         } catch {
@@ -143,6 +144,8 @@ export function useProjectActions() {
   );
   return { exportAs, fresh, open, save, manual, input };
 }
+
+const REVIEW_ON = typeof location !== 'undefined' && /przeglad/.test(location.search + location.hash);
 
 function Toolbar() {
   const st = useStore();
@@ -169,7 +172,7 @@ function Toolbar() {
       <span className="sep" />
       <div className="group">
         <button onClick={act.fresh}>Nowy</button>
-        <button onClick={act.open} title="Otwiera zapisany projekt (.json) albo dodaje model z pliku STL">
+        <button onClick={act.open} title="Otwiera zapisany projekt (.json)">
           Otwórz
         </button>
         <button onClick={act.save}>Zapisz</button>
@@ -190,15 +193,17 @@ function Toolbar() {
         <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">
           📏 Wymiary
         </button>
-        <Settings />
       </div>
       <div className="group right">
         <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Podgląd wydruku: wynik po wycięciu otworów i sklejeniu brył">
           {st.preview ? '✓ Podgląd' : 'Podgląd'}
         </button>
-        <button className={review.open ? 'toggle on' : 'toggle'} onClick={() => review.setOpen(!review.open)} title="Przegląd: wszystkie elementy po kolei, każdy z 3MF do slicera i oceną OK / do zmiany z uwagą">
-          🔍 Przegląd
-        </button>
+        {/* Model review (internal): opened with ?przeglad in the address. */}
+        {REVIEW_ON && (
+          <button className={review.open ? 'toggle on' : 'toggle'} onClick={() => review.setOpen(!review.open)} title="Przegląd: wszystkie elementy po kolei, każdy z 3MF do slicera i oceną OK / do zmiany z uwagą">
+            🔍 Przegląd
+          </button>
+        )}
         <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają">Sprawdź model</button>
         <button onClick={act.manual} title="Co wydrukować, co kupić, co do czego pasuje i jak złożyć. Do wydruku albo PDF">
           📖 Instrukcja
@@ -273,13 +278,11 @@ function Help() {
       {open && (
         <div className="help-pop">
           <ul>
-            <li><b>Przeciągnij</b> element: przesuń. <b>Shift</b>: bez kładzenia, <b>Alt</b>: bez przyciągania</li>
-            <li><b>Kliknij ponownie</b>: wybierz to, co leży pod spodem (np. otwór w bryle)</li>
+            <li><b>Chwyć kropkę</b> na ściance modelu i przeciągnij: zmienia ten wymiar (co 1 mm, z <b>Shift</b> co 0,1 mm, <b>Esc</b> anuluje)</li>
+            <li><b>Kliknij kropkę</b>: wpisz dokładną wartość</li>
             <li><b>Dwuklik w ściankę</b>: faktura, napis i magnesy na tej ściance (panel po prawej)</li>
             <li><b>Tło</b>: obrót widoku · <b>prawy przycisk</b>: przesuń widok · <b>kółko</b>: zoom</li>
-            <li><b>Strzałki, PgUp/PgDn</b>: przesuń o krok siatki · <b>R</b>: obróć o 90°</li>
-            <li><b>F</b>: widok całości · <b>W</b>: wymiary · <b>Ctrl+Z / Ctrl+D / Delete</b></li>
-            <li><b>Otwórz</b> wczytuje też plik <b>STL</b>: robisz w nim otwory, napisy, magnesy i go tniesz</li>
+            <li><b>F</b>: widok całości · <b>W</b>: pomiar · <b>Ctrl+Z / Ctrl+Y</b>: cofnij, ponów</li>
           </ul>
         </div>
       )}
@@ -295,25 +298,12 @@ function useShortcuts() {
       const st = useStore.getState();
       const ctrl = e.ctrlKey || e.metaKey;
       const id = st.selectedId;
-      const locked = isLocked(st.parts, id);
-      const moving = e.key === 'Delete' || e.key === 'Backspace' || e.key.toLowerCase() === 'r' || e.key.startsWith('Arrow') || e.key.startsWith('Page');
-      if (locked && moving && !ctrl) {
-        if (e.key.startsWith('Arrow') || e.key.startsWith('Page')) e.preventDefault();
-        return st.notify('Zaznaczony element jest zablokowany (🔒).');
-      }
       if (ctrl && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? st.redo() : st.undo();
       } else if (ctrl && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         st.redo();
-      } else if (ctrl && e.key.toLowerCase() === 'd' && id) {
-        e.preventDefault();
-        if (id.startsWith('g:')) st.duplicateBody(Number(id.slice(2)));
-        else st.duplicate(id);
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && id) {
-        if (id.startsWith('g:')) st.removeBody(Number(id.slice(2)));
-        else st.remove(id);
       } else if (e.key.toLowerCase() === 'f' && !ctrl) {
         st.fit();
       } else if (e.key.toLowerCase() === 'w' && !ctrl) {
@@ -323,25 +313,6 @@ function useShortcuts() {
           if (st.pins.length) st.clearPins();
           else st.setMeasure(false);
         } else st.select(null);
-      } else if (id && e.key.toLowerCase() === 'r') {
-        if (id.startsWith('g:')) st.rotateBody(Number(id.slice(2)), 2, e.shiftKey ? -90 : 90);
-        else st.rotateBy(id, 2, e.shiftKey ? -90 : 90);
-      } else if (id && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(e.key)) {
-        e.preventDefault();
-        const gb = id.startsWith('g:') ? Number(id.slice(2)) : null;
-        const p = gb !== null ? (st.parts.find((x) => x.body === gb && !x.hole) ?? st.parts.find((x) => x.body === gb)) : st.parts.find((x) => x.id === id);
-        if (!p) return;
-        const step = (st.settings.grid || 1) * (e.shiftKey ? 10 : 1);
-        const pos = [...p.position] as [number, number, number];
-        if (e.key === 'ArrowLeft') pos[0] -= step;
-        if (e.key === 'ArrowRight') pos[0] += step;
-        if (e.key === 'ArrowUp') pos[1] += step;
-        if (e.key === 'ArrowDown') pos[1] -= step;
-        if (e.key === 'PageUp') pos[2] += step;
-        if (e.key === 'PageDown') pos[2] -= step;
-        const next = pos.map((v) => Math.round(v * 1000) / 1000) as [number, number, number];
-        if (gb !== null) st.moveBody(gb, next);
-        else st.update(id, { position: next });
       }
     };
     window.addEventListener('keydown', onKey);

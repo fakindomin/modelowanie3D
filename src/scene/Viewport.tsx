@@ -13,6 +13,7 @@ import { distance, featureAt, type Feature } from './measure';
 import { slopeFace } from '../geom/texture';
 import { SketchHandles } from './SketchHandles';
 import { DimHandles } from './DimHandles';
+import { useMobile } from '../ui/Mobile';
 
 const DEG = Math.PI / 180;
 const BED = 220;
@@ -33,6 +34,14 @@ interface Look {
 
 /** Above this many vertices, outlines cost too much: highlight with a tint instead. */
 const EDGE_LIMIT = 60000;
+/** Parts are not moved or turned by hand: the app adjusts ready-made models. */
+const FIXED = true;
+
+/** Bodies shown as the finished print (holes cut): every body with a hole in it, plus merged and finished ones. */
+function shownCut(parts: Part[]): Set<number> {
+  const holes = new Set(parts.filter((p) => p.hole).map((p) => p.body));
+  return new Set(parts.filter((p) => !p.hole && (p.merged || finishing(p) || (FIXED && holes.has(p.body)))).map((p) => p.body));
+}
 
 function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolean }) {
   const { geometry } = built(part);
@@ -45,7 +54,18 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
         {part.hole ? (
           <meshStandardMaterial color={look.hovered || look.selected ? '#d6d8da' : part.color} transparent opacity={ghost ? (look.hovered || look.selected ? 0.3 : 0.1) : look.hovered ? 0.6 : 0.42} depthWrite={false} roughness={0.6} />
         ) : (
-          <meshStandardMaterial color={part.color} roughness={0.55} metalness={0.05} emissive={tint} emissiveIntensity={tint === '#000000' ? 0 : 0.55} />
+          <meshStandardMaterial
+            key={part.noPrint ? 'off' : 'on'}
+            color={part.color}
+            roughness={0.55}
+            metalness={0.05}
+            emissive={tint}
+            emissiveIntensity={tint === '#000000' ? 0 : 0.55}
+            // Switched off with „drukuj”: see-through, so it is clear it will not be printed.
+            transparent={!!part.noPrint}
+            opacity={part.noPrint ? 0.22 : 1}
+            depthWrite={!part.noPrint}
+          />
         )}
         {edge && <Edges threshold={20} color={edge} lineWidth={look.selected ? 2 : 1.5} />}
         {!edge && ghost && !heavy && <Edges threshold={20} color="#8b939e" lineWidth={1} />}
@@ -116,18 +136,23 @@ function PreviewBodies() {
 
 function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | null; hoveredBody: number | null }) {
   const parts = useStore((s) => s.parts);
-  const merged = useMemo(() => [...new Set(parts.filter((p) => (p.merged || finishing(p)) && !p.hole).map((p) => p.body))].sort((a, b) => a - b), [parts]);
+  const merged = useMemo(() => [...shownCut(parts)].sort((a, b) => a - b), [parts]);
   const bodies = useBodies(parts, merged, merged.join(','));
   const hidden = new Set(merged.filter((b) => parts.filter((p) => p.body === b && !p.hole).every((p) => p.hidden)));
+  const off = new Set(parts.filter((p) => p.noPrint).map((p) => p.body));
   return (
     <>
       {bodies.filter((b) => !hidden.has(b.body)).map((b) => (
         <mesh key={b.body} geometry={b.geometry} castShadow receiveShadow userData={{ pick: groupId(b.body) }}>
           <meshStandardMaterial
+            key={off.has(b.body) ? 'off' : 'on'}
             color={b.color}
             roughness={0.5}
             emissive={selectedBody === b.body && b.geometry.attributes.position.count > EDGE_LIMIT ? '#5a3c22' : hoveredBody === b.body ? '#3e3a36' : '#000000'}
             emissiveIntensity={hoveredBody === b.body || selectedBody === b.body ? 0.55 : 0}
+            transparent={off.has(b.body)}
+            opacity={off.has(b.body) ? 0.22 : 1}
+            depthWrite={!off.has(b.body)}
           />
           {selectedBody === b.body && b.geometry.attributes.position.count <= EDGE_LIMIT && <Edges threshold={20} color="#ffffff" lineWidth={2} />}
         </mesh>
@@ -304,11 +329,9 @@ function Scene() {
     gizmo.pick = { prev: sel };
     setTimeout(() => (gizmo.pick = null), 0);
     const target = sel && cands.includes(sel) ? sel : cands[0];
-    if (e.nativeEvent.ctrlKey || e.nativeEvent.metaKey || e.nativeEvent.shiftKey) {
-      st.toggleMulti(cands.find((c) => c !== sel && !st.multi.includes(c)) ?? target);
-      return;
-    }
     st.select(target);
+    // Ready-made models stay where they are: a click only picks (sizes change with the handles and the panel).
+    if (FIXED) return;
     if (isLocked(st.parts, target)) return;
     // On a touch screen the first tap only picks; dragging an element needs it picked first, so the view can still be turned over it.
     if (e.nativeEvent.pointerType === 'touch' && target !== sel && !(sel && groupBody(sel) === groupBody(target) && groupBody(target) !== null)) return;
@@ -382,7 +405,7 @@ function Scene() {
   const selectedPart = parts.find((p) => p.id === selectedId);
   const selBody = groupBody(selectedId);
   const hovBody = groupBody(hoveredId);
-  const mergedBodies = new Set(parts.filter((p) => (p.merged || finishing(p)) && !p.hole).map((p) => p.body));
+  const mergedBodies = shownCut(parts);
   const bentBodies = new Set(parts.filter(warped).map((p) => p.body));
   const look = (p: Part): Look => ({
     selected: p.id === selectedId || multi.includes(p.id) || (((selBody !== null && p.body === selBody) || multi.includes(groupId(p.body))) && !mergedBodies.has(p.body)),
@@ -403,7 +426,7 @@ function Scene() {
     >
       {parts.map((p) =>
         p.hidden && p.id !== selectedId ? null : // A bent body's flat holes would float beside the bent shape: shown only when picked.
-        bentBodies.has(p.body) && p.hole && p.id !== selectedId ? null : mergedBodies.has(p.body) && !p.hole ? (
+        bentBodies.has(p.body) && p.hole && p.id !== selectedId ? null : FIXED && p.hole && mergedBodies.has(p.body) ? null : mergedBodies.has(p.body) && !p.hole ? (
           <MergedMember key={p.id} part={p} look={look(p)} />
         ) : (
           <PartMesh key={p.id} part={p} look={look(p)} ghost={mergedBodies.has(p.body)} />
@@ -726,6 +749,7 @@ function Bed() {
 }
 
 export function Viewport() {
+  const mobile = useMobile();
   const preview = useStore((s) => s.preview);
   const measure = useStore((s) => s.measure);
   const select = useStore((s) => s.select);
@@ -751,9 +775,9 @@ export function Viewport() {
       {lights}
       <Bed />
       {preview ? <PreviewBodies /> : <Scene />}
-      {!preview && !measure && <Gizmo />}
-      {!preview && !measure && <SketchHandles />}
-      {!preview && !measure && <DimHandles />}
+      {!preview && !measure && !FIXED && <Gizmo />}
+      {!preview && !measure && !FIXED && <SketchHandles />}
+      {!preview && !measure && !mobile && <DimHandles />}
       <MeasureMarks />
       <FaceSelMark />
       <FaceHoverMark />

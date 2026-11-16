@@ -737,3 +737,28 @@ body.resizing { cursor: col-resize; user-select: none; }
 .review-bar input::placeholder { color: var(--muted, #8b9096); }
 .review-bar .rv-ok.on { background: #3f7d44; border-color: #3f7d44; color: #fff; }
 .review-bar .rv-fix.on { background: #b8692a; border-color: #b8692a; color: #fff; }
+
+/* ready-made variants: the whole row starts a new project */
+button.variant.pick { width: 100%; background: none; border: 0; border-radius: 4px; text-align: left; cursor: pointer; color: inherit; font: inherit; padding: 4px 2px; }
+button.variant.pick:hover { background: var(--panel-2); }
+button.variant.pick:hover .chip { border-color: var(--accent); }
+
+/* one size: exact value + slider */
+.size-row { padding: 2px 4px 4px; margin: 0 -4px; border-radius: 6px; }
+.size-row.hot { background: rgba(232, 128, 48, 0.12); }
+.size-row .field { margin-bottom: 0; }
+.size-slider { width: 100%; margin: 2px 0 0; accent-color: var(--accent); height: 18px; }
+.num { position: relative; }
+.num-limit { position: absolute; right: 0; bottom: 100%; margin-bottom: 2px; padding: 1px 6px; font-size: 11px; white-space: nowrap; background: var(--accent); color: #111; border-radius: 4px; pointer-events: none; z-index: 2; }
+@media (pointer: coarse) { .size-slider { height: 32px; } }
+
+/* printed parts list */
+.print-list { list-style: none; margin: 0; padding: 0; }
+.print-list li { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 5px; cursor: pointer; font-size: 12.5px; }
+.print-list li.hov { background: var(--panel-2); }
+.print-list li.sel { background: rgba(232, 128, 48, 0.16); }
+.print-list li.is-off .label { color: var(--muted, #888); text-decoration: line-through; }
+.print-list .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.print-list .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outliner h4 .muted { font-weight: 400; opacity: 0.7; }
+.dim-tag .dim-limit { color: #ffb070; font-weight: 600; }

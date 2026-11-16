@@ -1,3 +1,4 @@
+import { printable } from '../simple';
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { itemPicture, makeManual, modelPicture, piecesText, type Manual as ManualData } from '../manual';
@@ -19,7 +20,7 @@ export function Manual() {
     // Let the "preparing" screen paint first: building every print takes a moment.
     const t = setTimeout(() => {
       try {
-        const parts = useStore.getState().parts;
+        const parts = printable(useStore.getState().parts);
         const m = makeManual(parts);
         setData({ m, cover: modelPicture(parts), pics: m.items.map(itemPicture) });
       } catch (e) {

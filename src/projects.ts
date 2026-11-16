@@ -48,6 +48,8 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   wiz('junction', ['electronics', 'garden'], 'gland'),
   wiz('pot', ['garden', 'home'], 'cylinder'),
   wiz('stand', ['desk'], 'wedge'),
+  wiz('gearbox', ['workshop', 'kids'], 'gear'),
+  wiz('dome', ['garden', 'kids'], 'pipeEnd'),
   // Everyday things sized from one measurement.
   part('pudelko', ['desk', 'home']),
   part('wallHook', ['home', 'bath']),

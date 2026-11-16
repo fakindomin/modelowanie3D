@@ -116,6 +116,8 @@ export interface Part {
   xform?: Xform;
   /** Kept in the model and the print, just not drawn. */
   hidden?: boolean;
+  /** Switched off with „drukuj”: shown see-through, left out of export, manual and checks (set on every part of the body). */
+  noPrint?: boolean;
   /** Cannot be moved, rotated or deleted until unlocked. */
   locked?: boolean;
   /** With `hole`: instead of cutting, keeps only what lies inside it (intersection). */

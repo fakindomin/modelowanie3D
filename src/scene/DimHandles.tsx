@@ -6,6 +6,7 @@ import { DEFS, paramsOf, type Params } from '../catalog';
 import { groupBody, isLocked, useStore } from '../store';
 import { built, partMatrix } from '../geom/parts';
 import type { Part, Vec3 } from '../types';
+import { REMOVED_TYPES, mainOf } from '../simple';
 
 const DEG = Math.PI / 180;
 const fmt = (v: number) => String(Math.round(v * 10) / 10).replace('.', ',');
@@ -70,12 +71,18 @@ export function DimHandles() {
   const selectedId = useStore((s) => s.selectedId);
   const hoveredId = useStore((s) => s.hoveredId);
   const [held, setHeld] = useState<string | null>(null);
-  const ids = [...new Set([held, hoveredId, selectedId].filter((x): x is string => !!x && groupBody(x) === null))];
+  // A picked body, a magnet pocket or a label stands for the part the body is known by.
+  const resolve = (x: string | null) => {
+    if (!x) return null;
+    const gb = groupBody(x) ?? parts.find((p) => p.id === x && (p.hole || REMOVED_TYPES.has(p.type)) && !p.wiz)?.body ?? null;
+    return gb !== null ? (mainOf(parts, gb)?.id ?? null) : x;
+  };
+  const ids = [...new Set([held, resolve(hoveredId), resolve(selectedId)].filter((x): x is string => !!x))];
   return (
     <>
       {ids.map((id) => {
         const part = parts.find((p) => p.id === id);
-        if (!part || part.hidden || isLocked(parts, id) || part.type === 'figurine' || part.type === 'mesh') return null;
+        if (!part || part.hidden || part.hole || isLocked(parts, id) || part.type === 'figurine' || part.type === 'mesh') return null;
         return <PartHandles key={id} part={part} onHold={(on) => setHeld(on ? id : null)} />;
       })}
     </>
@@ -105,7 +112,18 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   });
   const [hot, setHot] = useState<number | null>(null);
   const [edit, setEdit] = useState<number | null>(null);
-  const [live, setLive] = useState<{ i: number; from: number; to: number } | null>(null);
+  const [live, setLive] = useState<{ i: number; from: number; to: number; limit?: string } | null>(null);
+  const dimHover = useStore((s) => s.dimHover);
+  const setDimHover = useStore((s) => s.setDimHover);
+  // The handle under the cursor (or held) lights up its row in the panel.
+  const lit = live?.i ?? hot;
+  const litKey = lit !== null && handles[lit] ? handles[lit].dim.key : null;
+  useEffect(() => {
+    if (litKey) setDimHover(litKey);
+    return () => {
+      if (litKey && useStore.getState().dimHover === litKey) setDimHover(null);
+    };
+  }, [litKey, setDimHover]);
   const drag = useRef<Drag | null>(null);
   const near = useNear(part, box, handles);
 
@@ -146,12 +164,15 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
       }
       const t = along(ev, d);
       if (t === null) return;
-      const step = st.settings.grid > 0 && !ev.shiftKey ? st.settings.grid : 0.1;
+      // Whole millimetres; Shift for tenths.
+      const step = ev.shiftKey ? 0.1 : 1;
       const grow = Math.round((t - d.t0) / step) * step;
       const value = d.value + grow / d.h.dim.per;
       const i = handles.findIndex((x) => x.axis === d.h.axis && x.sign === d.h.sign);
       const patch = patchFor(d.start, d.h, value);
-      setLive({ i, from: d.value, to: Number(patch.params![d.h.dim.key]) });
+      const to = Number(patch.params![d.h.dim.key]);
+      // The handle stops at the limit and says so.
+      setLive({ i, from: d.value, to, limit: value > d.h.dim.max ? 'maks.' : value < d.h.dim.min ? 'min.' : undefined });
       st.updateLive(d.start.id, patch);
     };
     const along = (ev: PointerEvent, d: Drag) => {
@@ -205,12 +226,12 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
     onHold(true);
   };
 
-  const shown = handles.map((_, i) => (live ? live.i === i : hot === i || edit === i || near.includes(i)));
+  const shown = handles.map((h, i) => (live ? live.i === i : hot === i || edit === i || near.includes(i) || h.dim.key === dimHover));
   return (
     <group position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
       {handles.map((h, i) => {
         const at = facePoint(h);
-        const active = hot === i || live?.i === i || edit === i;
+        const active = hot === i || live?.i === i || edit === i || (!live && h.dim.key === dimHover && h.sign > 0);
         return (
           <group key={i}>
             {(active || shown[i]) && <FaceOutline box={box} axis={h.axis} sign={h.sign} strong={active} />}
@@ -231,11 +252,13 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
                     onDone={(v) => {
                       setEdit(null);
                       if (v !== null) useStore.getState().update(part.id, patchFor(part, h, v));
+                      if (v !== null && (v > h.dim.max || v < h.dim.min)) useStore.getState().notify(`${h.dim.label}: ${v > h.dim.max ? 'maks.' : 'min.'} ${fmt(v > h.dim.max ? h.dim.max : h.dim.min)} mm.`);
                     }}
                   />
                 ) : (
                   <span className="dim-tag">
                     {h.dim.label} {live?.i === i ? `${fmt(live.from)} → ${fmt(live.to)}` : fmt(Number(part.params[h.dim.key]))} mm
+                    {live?.i === i && live.limit && <b className="dim-limit"> {live.limit} {fmt(live.to)} mm</b>}
                   </span>
                 )}
               </Html>

@@ -7,6 +7,16 @@ import { buildBodies, built } from '../geom/parts';
 import { WIZARDS, WIZARD_GROUPS } from '../wizards';
 import { estimate, fmtH, fmtKg, type Estimate } from '../wizards/estimate';
 import type { Field, Plan, Wizard } from '../wizards/types';
+import { SizeRow } from './Panels';
+
+/** Tiles that offer sizes in millimetres (wall 1,6 / 2 / 3 mm): the tiles stay as quick picks, and the exact value has its field and slider. */
+function sizeOf(f: Field): { label: string; min: number; max: number; step: number } | null {
+  if (f.kind !== 'tiles' || f.multi || f.options.length < 2) return null;
+  if (!f.options.every((o) => typeof o.value === 'number') || !f.options.some((o) => / ?mm\b/.test(o.label))) return null;
+  const vals = f.options.map((o) => Number(o.value));
+  const whole = vals.every((v) => Number.isInteger(v));
+  return { label: 'Dokładnie', min: Math.min(...vals), max: Math.max(...vals), step: whole ? 1 : 0.1 };
+}
 import type { Part, WizValues } from '../types';
 
 const DEG = Math.PI / 180;
@@ -286,17 +296,7 @@ function FieldView({ f, values, set }: { f: Field; values: WizValues; set: (k: s
       </label>
     );
   if (f.kind === 'slider')
-    return (
-      <label className="wiz-slider">
-        <span>
-          {f.label}
-          <b>
-            {String(values[f.key])} {f.unit}
-          </b>
-        </span>
-        <input type="range" min={f.min} max={f.max} step={f.step} value={Number(values[f.key])} onChange={(e) => set(f.key, Number(e.target.value))} />
-      </label>
-    );
+    return <SizeRow label={f.label} value={Number(values[f.key])} min={f.min} max={f.max} step={f.step} unit={f.unit || undefined} onChange={(v) => set(f.key, v)} />;
   const picked = f.multi ? String(values[f.key] ?? '').split(',').filter(Boolean) : [];
   const on = (value: unknown) => (f.multi ? picked.includes(String(value)) : values[f.key] === value);
   const pick = (value: string | number) => {
@@ -321,6 +321,7 @@ function FieldView({ f, values, set }: { f: Field; values: WizValues; set: (k: s
           </button>
         ))}
       </div>
+      {sizeOf(f) && <SizeRow label={sizeOf(f)!.label} value={Number(values[f.key])} min={sizeOf(f)!.min} max={sizeOf(f)!.max} step={sizeOf(f)!.step} unit="mm" onChange={(v) => set(f.key, v)} />}
     </div>
   );
 }

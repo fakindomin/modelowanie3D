@@ -22,6 +22,7 @@ import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, se
 import { fittingGeo } from '../parts/couplings';
 import { PROJECT_ITEMS, USE_CATS, itemsIn, type ProjectItem } from '../projects';
 import { cardInfo, fmtMin, type CardInfo } from './modelCard';
+import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf } from '../simple';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 /** The „Części” tab: the building blocks in a few groups, each holding one or more of the old categories. */
@@ -77,10 +78,14 @@ export function Library() {
   const add = useStore((s) => s.add);
   const addFigurine = useStore((s) => s.addFigurine);
   const tab = useStore((s) => s.tab);
-  const selName = useStore((s) => {
-    const gb = groupBody(s.selectedId);
-    return gb !== null ? `Bryła ${gb}` : s.parts.find((p) => p.id === s.selectedId)?.name;
-  });
+  const startNew = useStore((s) => s.startNew);
+  const matingGear = useStore((s) => s.matingGear);
+  /** A new project from one ready-made part; gears come with their mating partner. */
+  const startWith = (type: string) => {
+    startNew();
+    const id = add(type);
+    if (GEAR_PAIR[type]) matingGear(id, GEAR_PAIR[type]);
+  };
   const [open, setOpen] = useState<string | null>('box');
   const [q, setQ] = useState('');
   const [card, setCard] = useState<{ item: ProjectItem; top: number; left: number } | null>(null);
@@ -112,6 +117,10 @@ export function Library() {
   };
   const openWizard = useStore((s) => s.openWizard);
   const addVariant = useStore((s) => s.addVariant);
+  const startVariant = (f: Family, v: Family['variants'][number]) => {
+    startNew();
+    addVariant(f, v, 'M');
+  };
   const setTab = useStore((s) => s.setTab);
   const [closed, setClosed] = useState<Set<string>>(() => {
     try {
@@ -137,27 +146,30 @@ export function Library() {
   }, [tab, mode]);
   const query = norm(q.trim());
   const hit = (...texts: string[]) => !query || texts.some((t) => norm(t).includes(query));
-  const cats = tab === 'fig' ? FIG_TOOLS.map((id) => CATEGORIES.find((c) => c.id === id)!) : CATEGORIES;
   const figs = tab === 'fig' ? FIG_ORDER.filter((id) => hit(FIG_MODELS[id].n)) : [];
-  const sections = cats.map((c) => {
-    const fams = tab === 'tech' ? FAMILIES.filter((f) => f.category === c.id).map((f) => ({ f, only: f.variants.filter((v) => hit(f.label, v.label)) })).filter((x) => x.only.length) : [];
-    const tiles = CATALOG.filter((d) => d.category === c.id && !d.hidden && (tab !== 'tech' || !IN_FAMILY.has(d.type)) && hit(d.label));
-    return { c, fams, tiles };
+  // Ready-made technical parts only: bare blocks and features are gone (see simple.ts).
+  const sections = tab !== 'tech' ? [] : TECH_GROUPS.map((g) => {
+    const fams = g.fams
+      .map((id) => FAMILIES.find((f) => f.id === id)!)
+      .map((f) => ({ f, only: f.variants.filter((v) => !REMOVED_TYPES.has(v.type) && hit(f.label, v.label)) }))
+      .filter((x) => x.only.length);
+    const tiles = g.types.map((t) => DEFS[t]).filter((d) => d && hit(d.label));
+    return { g, fams, tiles };
   });
   // Projects: by use (only the technical tab); while searching, every match once.
   const projectsOn = tab === 'tech' && (mode === 'projects' || !!query);
-  const partsOn = tab !== 'tech' || mode === 'parts' || !!query;
+  const partsOn = tab === 'tech' && (mode === 'parts' || !!query);
   const projHits = projectsOn && query ? PROJECT_ITEMS.filter((i) => hit(i.label, i.desc, ...i.tags.map((t) => USE_CATS.find((c) => c.id === t)!.label))) : [];
   const nothing = !!query && !figs.length && !projHits.length && (!partsOn || sections.every((x) => !x.fams.length && !x.tiles.length));
   // Main part groups start open; project categories start shut (the set lists the ones flipped).
   const shown = (id: string) => !!query || (id.startsWith('proj:') ? closed.has(id) : !closed.has(id));
   const runItem = (i: ProjectItem) => {
     if (i.kind === 'wizard') openWizard({ id: i.wizard });
-    else if (i.kind === 'part') add(i.type);
+    else if (i.kind === 'part') startWith(i.type);
     else if (i.kind === 'figurines') setTab('fig');
     else {
       const f = FAMILIES.find((x) => x.id === i.family)!;
-      addVariant(f, f.variants.find((v) => v.label === i.variant)!, 'M');
+      startVariant(f, f.variants.find((v) => v.label === i.variant)!);
     }
   };
   const itemTile = (i: ProjectItem, key: string) => (
@@ -167,20 +179,15 @@ export function Library() {
       {i.kind === 'wizard' && <span className="badge">✨</span>}
     </button>
   );
-  /** A part group: its old categories one after another, each with a small heading when there are several. */
-  const groups = PART_GROUPS.map((g) => {
-    const parts = sections.filter((x) => g.cats.includes(x.c.id) && (x.fams.length || x.tiles.length));
-    return { g, parts };
-  }).filter((x) => x.parts.length);
-  const sectionBody = ({ c, fams, tiles }: (typeof sections)[number], heading: boolean) => (
-    <Fragment key={c.id}>
-      {heading && <div className="cat-sub">{c.label}</div>}
+  const groups = sections.filter((x) => x.fams.length || x.tiles.length);
+  const sectionBody = ({ g, fams, tiles }: (typeof sections)[number]) => (
+    <Fragment key={g.id}>
       {fams.map(({ f, only }) => (
-        <FamilyTile key={f.id} family={f} only={query ? only : undefined} open={!!query || open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} />
+        <FamilyTile key={f.id} family={f} only={only.length < f.variants.length ? only : undefined} open={!!query || open === f.id} onToggle={() => setOpen(open === f.id ? null : f.id)} onPick={(v) => startVariant(f, v)} />
       ))}
       {tiles.map((d) => (
-        <button key={d.type} className={d.hole ? 'tile hole' : 'tile'} title={`${d.label}: ${d.description}`} onClick={() => add(d.type)}>
-          <Icon type={d.type} hole={d.hole} />
+        <button key={d.type} className="tile" title={`${d.label}: ${d.description}`} onClick={() => startWith(d.type)}>
+          <Icon type={d.type} hole={false} />
           <span>{d.label}</span>
         </button>
       ))}
@@ -216,16 +223,12 @@ export function Library() {
           <button role="tab" aria-selected={mode === 'projects'} className={mode === 'projects' ? 'on' : ''} onClick={() => setMode('projects')} title="Gotowe rzeczy według miejsca: dom, kuchnia, ogród, warsztat…">
             Projekty
           </button>
-          <button role="tab" aria-selected={mode === 'parts'} className={mode === 'parts' ? 'on' : ''} onClick={() => setMode('parts')} title="Klocki do budowania: bryły, profile, łączenia, mechanika, elektronika">
+          <button role="tab" aria-selected={mode === 'parts'} className={mode === 'parts' ? 'on' : ''} onClick={() => setMode('parts')} title="Części techniczne: pojemniki, listwy i łączniki, śruby, zawiasy, zębatki, sprężyny, uszczelki">
             Części
           </button>
         </div>
       )}
-      {selName && (
-        <div className="hint">
-          Nowy element pojawi się na górze: <b>{selName}</b>
-        </div>
-      )}
+
       {figs.length > 0 &&
         category(
           'figs',
@@ -234,7 +237,7 @@ export function Library() {
           figs.length,
           figs.length,
           figs.map((id) => (
-            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => addFigurine(id)}>
+            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => (startNew(), addFigurine(id))}>
               <Icon type="figurine" hole={false} />
               <span>{FIG_MODELS[id].n}</span>
             </button>
@@ -249,29 +252,16 @@ export function Library() {
         })}
       {partsOn && tab === 'tech' && query && <div className="lib-head">Części</div>}
       {partsOn &&
-        (tab === 'tech'
-          ? groups.map(({ g, parts }) =>
-              category(
-                `${tab}:g:${g.id}`,
-                g.label,
-                parts[0].fams[0]?.f.icon ?? parts[0].tiles[0].type,
-                parts.reduce((n, { fams, tiles }) => n + fams.reduce((k, x) => k + x.only.length, 0) + tiles.length, 0),
-                parts.reduce((n, { fams, tiles }) => n + fams.length + tiles.length, 0),
-                <>{parts.map((x) => sectionBody(x, parts.length > 1))}</>,
-              ),
-            )
-          : sections
-              .filter((x) => x.fams.length || x.tiles.length)
-              .map((x) =>
-                category(
-                  `${tab}:${x.c.id}`,
-                  x.c.id === 'joints' ? 'Otwory, magnesy, czopy' : x.c.label,
-                  x.fams[0]?.f.icon ?? x.tiles[0].type,
-                  x.fams.reduce((n, f) => n + f.only.length, 0) + x.tiles.length,
-                  x.fams.length + x.tiles.length,
-                  sectionBody(x, false),
-                ),
-              ))}
+        groups.map((x) =>
+          category(
+            `${tab}:t:${x.g.id}`,
+            x.g.label,
+            x.fams[0]?.f.icon ?? x.tiles[0].type,
+            x.fams.reduce((n, f) => n + f.only.length, 0) + x.tiles.length,
+            x.fams.length + x.tiles.length,
+            sectionBody(x),
+          ),
+        )}
       {card && <ModelCard item={card.item} top={card.top} left={card.left} />}
       {nothing && <p className="lib-empty">Nic nie pasuje do „{q}”.</p>}
       <LibraryResize />
@@ -351,18 +341,16 @@ const norm = (t: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ł/g, 'l');
 
-/** A family of ready elements: a click anywhere on the tile opens its variants (with S/M/L); adding is done from the list. */
-function FamilyTile({ family, open, onToggle, only }: { family: Family; open: boolean; onToggle: () => void; only?: Family['variants'] }) {
-  const addVariant = useStore((s) => s.addVariant);
-  const recent = useStore((s) => s.recent);
+/** A family of ready elements: a click on the tile opens its variants; a click on a variant starts a new project from it. */
+function FamilyTile({ family, open, onToggle, only, onPick }: { family: Family; open: boolean; onToggle: () => void; only?: Family['variants']; onPick: (v: Family['variants'][number]) => void }) {
   return (
     <>
       <div className={open ? 'tile family open' : 'tile family'}>
-        <button className="fam-main" title={open ? 'Zwiń' : `${family.label}: pokaż ${family.variants.length} odmian${family.noSizes ? '' : ' i rozmiary'}`} onClick={onToggle} aria-expanded={open}>
+        <button className="fam-main" title={open ? 'Zwiń' : `${family.label}: pokaż ${family.variants.length} odmian`} onClick={onToggle} aria-expanded={open}>
           <Icon type={family.icon} hole={false} />
           <span>{family.label}</span>
         </button>
-        <button className="fam-more" onClick={onToggle} aria-expanded={open} title={open ? 'Zwiń' : `Pokaż ${family.variants.length} odmian i rozmiary`}>
+        <button className="fam-more" onClick={onToggle} aria-expanded={open} title={open ? 'Zwiń' : `Pokaż ${family.variants.length} odmian`}>
           <span className="count">{(only ?? family.variants).length}</span>
           <span className="chev">▾</span>
         </button>
@@ -370,29 +358,13 @@ function FamilyTile({ family, open, onToggle, only }: { family: Family; open: bo
       <Expand open={open}>
         <div className="variants">
           {(only ?? family.variants).map((v) => (
-            <div key={v.label} className="variant" title={`${v.label}: ${v.hint ?? DEFS[v.type].description}`}>
+            <button key={v.label} className="variant pick" title={`${v.label}: ${v.hint ?? DEFS[v.type].description}`} onClick={() => onPick(v)}>
               <span className="vname">
                 <Icon type={v.type} hole={false} />
                 <span>{v.label}</span>
               </span>
-              <span className="sizes">
-                {family.noSizes && (
-                  <button className="chip main" onClick={() => addVariant(family, v, 'M')} title={v.hint ?? DEFS[v.type].description}>
-                    +
-                  </button>
-                )}
-                {!family.noSizes && (['S', 'M', 'L'] as Size[]).map((sz) => (
-                  <button key={sz} className={sz === 'M' ? 'chip main' : 'chip'} onClick={() => addVariant(family, v, sz)} title={sizeHint(family, v, sz)}>
-                    {sz}
-                  </button>
-                ))}
-                {!family.noSizes && recent[v.type] && (
-                  <button className="chip recent" onClick={() => addVariant(family, v, 'recent')} title="Wymiary, których ostatnio użyłeś dla tego elementu">
-                    ↺
-                  </button>
-                )}
-              </span>
-            </div>
+              <span className="chip main">+</span>
+            </button>
           ))}
         </div>
       </Expand>
@@ -410,17 +382,28 @@ function sizeHint(family: Family, v: Family['variants'][number], sz: Size) {
 
 export function NumberInput({ value, onChange, min, max, step = 1, unit }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) {
   const [text, setText] = useState(String(value));
+  const [limit, setLimit] = useState<string | null>(null);
+  const timer = useRef<number | undefined>(undefined);
   useEffect(() => setText(String(value)), [value]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   const commit = (raw: string) => {
     let v = parseFloat(raw.replace(',', '.'));
     if (!Number.isFinite(v)) return setText(String(value));
+    // Out of range: the nearest allowed value, and a short note saying why.
+    const want = v;
     if (min !== undefined) v = Math.max(min, v);
     if (max !== undefined) v = Math.min(max, v);
+    if (v !== want) {
+      setLimit(`${v > want ? 'min.' : 'maks.'} ${String(v).replace('.', ',')}${unit ? ` ${unit}` : ''}`);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setLimit(null), 2200);
+    }
     if (v !== value) onChange(v);
     setText(String(v));
   };
   return (
     <span className="num">
+      {limit && <span className="num-limit">{limit}</span>}
       <input
         value={text}
         inputMode="decimal"
@@ -466,11 +449,62 @@ function TextInput({ value, max, onChange }: { value: string; max?: number; onCh
   );
 }
 
-function ParamField({ def, value, onChange }: { def: ParamDef; value: unknown; onChange: (v: number | string | boolean) => void }) {
+/** One size: the exact value typed in the field, or set smoothly with the slider under it. */
+export function SizeRow({ label, hint, value, min, max, step = 1, unit, onChange, onStart, onLive, hoverKey }: {
+  label: string;
+  /** Parameter key: hovering the row lights up its handle on the model, and the other way round. */
+  hoverKey?: string;
+  hint?: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  unit?: string;
+  onChange: (v: number) => void;
+  /** Slider drag: called once when it starts, then on every move (no history per step). */
+  onStart?: () => void;
+  onLive?: (v: number) => void;
+}) {
+  const dragging = useRef(false);
+  const hovered = useStore((s) => !!hoverKey && s.dimHover === hoverKey);
+  const setDimHover = useStore((s) => s.setDimHover);
+  return (
+    <div className={hovered ? 'size-row hot' : 'size-row'} title={hint} onMouseEnter={() => hoverKey && setDimHover(hoverKey)} onMouseLeave={() => hoverKey && setDimHover(null)}>
+      <label className="field">
+        <span>{label}</span>
+        <NumberInput value={value} min={min} max={max} step={step} unit={unit} onChange={onChange} />
+      </label>
+      <input
+        type="range"
+        className="size-slider"
+        min={min}
+        max={max}
+        step={step}
+        value={Math.min(max, Math.max(min, value))}
+        onPointerDown={() => {
+          if (onLive && !dragging.current) {
+            dragging.current = true;
+            onStart?.();
+          }
+        }}
+        onPointerUp={() => (dragging.current = false)}
+        onKeyDown={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (dragging.current && onLive) onLive(v);
+          else onChange(v);
+        }}
+      />
+    </div>
+  );
+}
+
+function ParamField({ def, value, onChange, onStart, onLive }: { def: ParamDef; value: unknown; onChange: (v: number | string | boolean) => void; onStart?: () => void; onLive?: (v: number) => void }) {
+  if (def.type === 'number')
+    return <SizeRow label={def.label} hint={def.hint} value={Number(value)} min={def.min} max={def.max} step={def.step ?? 1} unit={def.unit} onChange={onChange} onStart={onStart} onLive={onLive} hoverKey={def.key} />;
   return (
     <label className="field" title={def.hint}>
       <span>{def.label}</span>
-      {def.type === 'number' && <NumberInput value={Number(value)} min={def.min} max={def.max} step={def.step ?? 1} unit={def.unit} onChange={onChange} />}
       {def.type === 'select' && (
         <select value={String(value)} onChange={(e) => onChange(e.target.value)}>
           {def.options.map((o) => (
@@ -515,16 +549,11 @@ function Helpers({ part }: { part: Part }) {
     out.push(b(`✎ Edytuj w kreatorze „${WIZARDS[wz.w].label}”`, () => st.openWizard({ id: wz.w, values: wz.recipe?.values, run: wz.run }), INFO.wizard));
     out.push(b('📖 Instrukcja projektu', () => st.setManual(true), INFO.manual));
   }
-  if (part.type === 'peg' || part.type === 'pegSquare' || part.type === 'dovetail') out.push(b('+ Dodaj pasujące gniazdo (z luzem)', () => st.matchingHole(part.id), INFO.matchHole));
-  if (part.type === 'angle' || part.type === 'channel' || part.type === 'tee')
-    out.push(b('◣ Dodaj żebra w narożnikach', () => st.addRibs(part.id, Math.max(2, Math.round((Number(part.params.L) || 100) / 50) + 1)), INFO.ribs));
   if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id), INFO.drawers));
   if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id), INFO.lid));
   if (part.type === 'box' && part.params.shape === 'round' && !part.params.screw) out.push(b('+ Gwint i zakręcana pokrywka z uszczelką', () => st.makeJar(part.id), INFO.jar));
   if (part.type === 'box' && part.params.shape === 'round' && part.params.screw && !st.parts.some((p) => p.type === 'gasket' && p.fitTo === part.id))
     out.push(b('+ Dodaj płaską uszczelkę', () => st.addGasket(part.id), INFO.jar));
-  if ((part.type === 'box' && (!part.params.shape || part.params.shape === 'rect') && !part.params.slide) || part.type === 'drawer')
-    out.push(b('⊞ Rozbij na płyty', () => st.explode(part.id), INFO.explode));
   if (part.type === 'threadHole' || part.type === 'threadNut') out.push(b('+ Dodaj pasującą śrubę', () => st.matchingBolt(part.id), INFO.bolt));
   if (part.type === 'gear' || part.type === 'rack') out.push(b('+ Dodaj pasującą zębatkę', () => st.matingGear(part.id, 'gear'), INFO.mateGear));
   if (part.type === 'gear' && part.params.kind === 'spur') out.push(b('+ Dodaj listwę zębatą', () => st.matingGear(part.id, 'rack'), INFO.mateGear));
@@ -1349,7 +1378,16 @@ function PartProperties({ part }: { part: Part }) {
   const field = (p: ParamDef) => (
     <div key={p.key}>
       {p.group && <h5>{p.group}</h5>}
-      <ParamField def={p} value={part.params[p.key]} onChange={(v) => st.update(part.id, { params: { ...part.params, [p.key]: v } })} />
+      <ParamField
+        def={p}
+        value={part.params[p.key]}
+        onChange={(v) => st.update(part.id, { params: { ...part.params, [p.key]: v } })}
+        onStart={() => st.beginGesture()}
+        onLive={(v) => {
+          const cur = useStore.getState().parts.find((x) => x.id === part.id);
+          if (cur) st.updateLive(part.id, { params: { ...cur.params, [p.key]: v } });
+        }}
+      />
     </div>
   );
   const [noteFor, setNoteFor] = useState<string | null>(null);
@@ -1459,70 +1497,19 @@ function PartProperties({ part }: { part: Part }) {
           </button>
         </div>
       )}
-      {(part.type === 'sketch' || part.type === 'sketchRev') && <SketchEditor key={part.id} part={part} />}
       {(part.type === 'box' || part.type === 'drawer') && (
         <Section title="▦ Układ przegródek" info={INFO.dividers} open={typeof part.params.div === 'string' && part.params.div.length > 0}>
           <DividerEditor part={part} />
         </Section>
       )}
       {part.type === 'connector' && <ConnectorWalls part={part} />}
-      {(part.type === 'text' || part.type === 'textCut') && (
-        <>
-          <h5>Na którą ściankę</h5>
-          <div className="row">
-            {WALL_SIDES.map((w) => (
-              <button key={w.side} className="small" onClick={() => st.textToWall(part.id, w.side)}>
-                {w.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      <h4>
-        Położenie i obrót <Info text={`${INFO.position} ${INFO.rotation}`} />
-      </h4>
-      <div className="place">
-        <span className="place-lbl">mm</span>
-        <XYZ value={part.position} step={st.settings.grid || 1} onChange={setPos} />
-        <span className="place-lbl">°</span>
-        <XYZ value={part.rotation} step={15} unit="°" onChange={setRot} />
-      </div>
-      <div className="row">
-        <button className="small" onClick={() => st.dropToFloor(part.id)}>
-          Połóż na stole
-        </button>
-        {(['X', 'Y', 'Z'] as const).map((a, i) => (
-          <button key={a} className="small" title={`Obróć o 90° wokół osi ${a}`} onClick={() => st.rotateBy(part.id, i as 0 | 1 | 2, 90)}>
-            ⟳ {a}
-          </button>
-        ))}
-      </div>
 
       {/* Every element lists the same operations in the same order; the ones that make no sense for it are greyed out. */}
       <OpSection part={part} op="magnets" title="🧲 Miejsca na magnesy" info={INFO.magnets}>
         {part.type === 'box' || part.type === 'lid' ? <MagnetTool target={part.id} body={part.body} /> : <FaceMagnetTool part={part} />}
       </OpSection>
-      <OpSection part={part} op="bend" title="↪ Gięcie" open={st.parts.some((p) => p.body === part.body && p.bend)} info={INFO.bend}>
-        <Risk body={part.body} op="bend" />
-        <BendTool body={part.body} prefer={part.id} />
-      </OpSection>
-      <OpSection part={part} op="shell" title="◫ Skorupa (wydrążenie)" open={st.parts.some((p) => p.body === part.body && p.shell)} info={INFO.shell}>
-        <ShellTool body={part.body} prefer={part.id} />
-      </OpSection>
       <OpSection part={part} op="infill" title="▦ Wypełnienie (ażur)" open={st.parts.some((p) => p.body === part.body && p.infill)} info={INFO.infill}>
         <InfillTool body={part.body} prefer={part.id} />
-      </OpSection>
-      <OpSection part={part} op="xform" title="⇋ Lustro i skala" open={st.parts.some((p) => p.body === part.body && p.xform)} info={INFO.xform}>
-        <Risk body={part.body} op="xform" />
-        <XformTool body={part.body} prefer={part.id} />
-      </OpSection>
-      {opOff(part, 'split') ? <OpSection part={part} op="split" title="✂ Podziel na części" /> : <SplitTool body={part.body} />}
-      <OpSection part={part} op="pattern" title="Szyk i kopie" info={INFO.pattern}>
-        <PatternTool part={part} />
-      </OpSection>
-      <OpSection part={part} op="edges" title="◠ Zaokrąglenia i fazki" open={!!part.edges} info={INFO.edges}>
-        <EdgesTool part={part} />
       </OpSection>
       <OpSection part={part} op="texture" title="Faktura powierzchni" open={texturesOf(part).length > 0} info={INFO.texture}>
         <TextureTool part={part} />
@@ -1531,35 +1518,9 @@ function PartProperties({ part }: { part: Part }) {
       <h4>
         Wydruk <Info text={INFO.print} />
       </h4>
-      <label className="field">
-        <span>
-          Rodzaj <Info text={INFO.hole} />
-        </span>
-        <select
-          value={part.clip ? 'clip' : part.hole ? 'hole' : 'solid'}
-          onChange={(e) => {
-            const v = e.target.value;
-            const plain = part.color === '#8b939e' || part.color === '#7fb3d5' ? '#a9aeb3' : part.color;
-            st.update(part.id, { hole: v !== 'solid', clip: v === 'clip' ? true : undefined, color: v === 'hole' ? '#8b939e' : v === 'clip' ? '#7fb3d5' : plain });
-          }}
-        >
-          <option value="solid">Bryła (materiał)</option>
-          <option value="hole">Otwór (wycina)</option>
-          <option value="clip">Część wspólna (zostawia, co w środku)</option>
-        </select>
-      </label>
-      <label className="field" title="Elementy w tej samej bryle są sklejane w jeden wydruk. Otwory wycinają tylko swoją bryłę.">
-        <span>
-          Należy do bryły <Info text={INFO.body} />
-        </span>
-        <select value={part.body} onChange={(e) => st.update(part.id, { body: Number(e.target.value) })}>
-          {bodies.map((b) => (
-            <option key={b} value={b}>
-              Bryła {b}
-            </option>
-          ))}
-          <option value={newBody}>+ nowa bryła ({newBody})</option>
-        </select>
+      <label className="field" title="Wyłączona część zostaje w podglądzie jako półprzezroczysta, ale nie trafia do eksportu, instrukcji ani wyliczeń.">
+        <span>Drukuj tę część</span>
+        <input type="checkbox" checked={!part.noPrint} onChange={(e) => st.setFlags([groupId(part.body)], { noPrint: !e.target.checked })} />
       </label>
       {!part.hole && (
         <label className="field">
@@ -1569,12 +1530,6 @@ function PartProperties({ part }: { part: Part }) {
       )}
 
       <div className="row end">
-        <button className="small" onClick={() => st.select(groupId(part.body))}>
-          Zaznacz całą bryłę
-        </button>
-        <button className="small" onClick={() => st.duplicate(part.id)}>
-          Duplikuj
-        </button>
         <button className="small danger" onClick={() => st.remove(part.id)}>
           Usuń
         </button>
@@ -2095,73 +2050,50 @@ function badgeOf(members: Part[]) {
   return out.length ? out.join(', ') : 'złączona';
 }
 
-/** Always-visible list of everything in the project, grouped by printed body. */
+/** Always-visible list of the printed parts of the model, each with its „drukuj” switch. */
 function Outliner() {
   const parts = useStore((s) => s.parts);
   const selectedId = useStore((s) => s.selectedId);
-  const multi = useStore((s) => s.multi);
   const hoveredId = useStore((s) => s.hoveredId);
   const select = useStore((s) => s.select);
-  const toggleMulti = useStore((s) => s.toggleMulti);
-  const pick = (id: string) => (e: React.MouseEvent) => (e.ctrlKey || e.metaKey || e.shiftKey ? toggleMulti(id) : select(id));
   const setHover = useStore((s) => s.setHover);
-  const merge = useStore((s) => s.merge);
-  const unmerge = useStore((s) => s.unmerge);
-  const mergeAll = useStore((s) => s.mergeAll);
+  const setFlags = useStore((s) => s.setFlags);
   const bodies = [...new Set(parts.map((p) => p.body))].sort((a, b) => a - b);
   if (!parts.length) return null;
-  const cls = (id: string) => [id === selectedId || multi.includes(id) ? 'sel' : '', id === hoveredId ? 'hov' : ''].join(' ');
+  const selBody = parts.find((p) => p.id === selectedId)?.body ?? groupBody(selectedId);
+  const hovBody = parts.find((p) => p.id === hoveredId)?.body ?? groupBody(hoveredId);
+  const off = bodies.filter((b) => parts.some((p) => p.body === b && p.noPrint)).length;
   return (
     <div className="outliner" onMouseLeave={() => setHover(null)}>
-      <h4>Elementy projektu</h4>
-      {bodies.map((b) => {
-        const members = parts.filter((p) => p.body === b);
-        const merged = isMerged(parts, b);
-        const bent = members.some(finishing);
-        const holes = members.some((p) => p.hole) && !bent;
-        const g = groupId(b);
-        return (
-          <div key={b} className="body">
-            <div className={`body-head ${cls(g)}`} onMouseEnter={() => setHover(g)} onClick={pick(g)}>
-              <b>Bryła {b}</b>
-              {merged && <span className="badge">{badgeOf(members)}</span>}
-              {holes && (
-                <button
-                  className="mini"
-                  title={merged ? 'Rozdziel: pokaż otwory osobno' : 'Złącz otwory z bryłą: pokaż gotowy element'}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (merged) unmerge(b);
-                    else merge(b);
-                  }}
-                >
-                  {merged ? 'Rozdziel' : 'Złącz'}
-                </button>
-              )}
-              <Flags id={g} hidden={members.every((p) => p.hidden)} locked={members.every((p) => p.locked)} />
-            </div>
-            <ul>
-              {members.map((p) => (
-                <li key={p.id} className={`${p.hole ? 'is-hole' : ''} ${p.hidden ? 'is-hidden' : ''} ${cls(p.id)}`} onMouseEnter={() => setHover(p.id)} onClick={pick(p.id)}>
-                  <span className="dot" style={{ background: p.color }} />
-                  <span className="label">{p.name}</span>
-                  {p.link && parts.some((q) => q.link === p.link && q.id !== p.id && (!p.rigid || q.rigid !== p.rigid)) && <span title="Powiązana kopia">🔗</span>}
-                  <Flags id={p.id} hidden={!!p.hidden} locked={!!p.locked} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-      {bodies.length > 1 && (
-        <button className="small" onClick={mergeAll}>
-          Połącz wszystko w jedną bryłę
-        </button>
-      )}
+      <h4>
+        Części do druku{' '}
+        <span className="muted">
+          {bodies.length - off} z {bodies.length}
+        </span>
+      </h4>
+      <ul className="print-list">
+        {bodies.map((b) => {
+          const main = mainOf(parts, b);
+          if (!main) return null;
+          const on = !parts.some((p) => p.body === b && p.noPrint);
+          return (
+            <li key={b} className={`${selBody === b ? 'sel' : ''} ${hovBody === b ? 'hov' : ''} ${on ? '' : 'is-off'}`} onMouseEnter={() => setHover(main.id)} onClick={() => select(main.id)}>
+              <input
+                type="checkbox"
+                checked={on}
+                title={on ? 'Drukuj (odznacz, żeby pominąć tę część)' : 'Nie drukuj (zaznacz, żeby wrócić)'}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setFlags([groupId(b)], { noPrint: !e.target.checked })}
+              />
+              <span className="dot" style={{ background: main.color }} />
+              <span className="label">{main.name}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
-
 function CheckPanel() {
   const check = useStore((s) => s.check);
   const close = useStore((s) => s.closeCheck);
@@ -2222,16 +2154,14 @@ function Welcome() {
         <ol>
           <li>Wybierz figurkę z menu po lewej, np. <b>Królik</b>.</li>
           <li>Suwaki w tym panelu zmieniają kształt wszystkich jej części.</li>
-          <li>Zaznacz część i dodaj <b>magnes</b>, <b>otwór</b> albo <b>czop</b> z narzędzi poniżej figurek.</li>
           <li>Pobierz <b>STL/3MF</b>: każda część jest osobnym wydrukiem.</li>
         </ol>
       ) : (
         <ol>
-          <li>Kliknij element w menu po lewej, np. <b>Pudełka</b>. Strzałka obok kafelka pokazuje odmiany i rozmiary S/M/L.</li>
-          <li>Zmień wymiary w tym panelu.</li>
-          <li>Przeciągaj elementy myszką. Same się przyciągają do sąsiednich ścianek.</li>
-          <li>Zaznacz element i dodaj <b>otwór</b>, <b>gwint</b>, <b>zawias</b> albo <b>dławik</b>: pojawi się na jego wierzchu.</li>
-          <li><b>📏 Wymiary</b> (klawisz W) pokazują rozmiar ścianki, krawędzi lub otworu pod kursorem.</li>
+          <li>Wybierz gotowy model w <b>Projektach</b> albo w <b>Częściach technicznych</b>, albo zacznij od <b>✨ Kreatora</b>.</li>
+          <li>Dopasuj wymiary: wpisz liczbę albo przesuń suwak. Na komputerze możesz też chwycić strzałkę wymiaru na modelu.</li>
+          <li>Wybierz opcje: fakturę, napis, magnesy, kolor.</li>
+          <li>Odznacz części, których nie chcesz drukować.</li>
           <li>Kliknij <b>Sprawdź model</b>, potem pobierz <b>STL/3MF</b>.</li>
         </ol>
       )}
@@ -2241,7 +2171,9 @@ function Welcome() {
 
 /** Right panel; on a phone its two halves live in separate tabs of the bottom sheet. */
 export function Properties({ show = 'all' }: { show?: 'all' | 'list' | 'props' }) {
-  const part = useStore((s) => s.parts.find((p) => p.id === s.selectedId));
+  const picked = useStore((s) => s.parts.find((p) => p.id === s.selectedId));
+  // A magnet pocket or a label picked on the model belongs to its part: show that part.
+  const part = useStore((s) => (picked && REMOVED_TYPES.has(picked.type) && !picked.wiz ? mainOf(s.parts, picked.body) : picked));
   const body = useStore((s) => {
     const gb = groupBody(s.selectedId);
     return gb !== null && s.parts.some((p) => p.body === gb) ? gb : null;
@@ -2249,13 +2181,17 @@ export function Properties({ show = 'all' }: { show?: 'all' | 'list' | 'props' }
   const empty = useStore((s) => !s.parts.length);
   const multi = useStore((s) => s.multi);
   const sel = useStore((s) => s.selectedId);
-  const picks = multi.length && sel ? [sel, ...multi] : null;
+  const picks = null as string[] | null;
+  void multi;
+  void sel;
+  // A body picked on the model shows the part it is known by.
+  const main = useStore((s) => (body !== null ? mainOf(s.parts, body) : undefined));
   return (
     <aside className="properties">
       {show !== 'props' && <CheckPanel />}
       {show !== 'props' && <Outliner />}
       {show === 'list' && empty && <p className="desc pad">Projekt jest pusty. Dodaj element w zakładce ➕ Dodaj albo użyj kreatora.</p>}
-      {show === 'list' ? null : picks ? <MultiProperties ids={picks} /> : part ? <PartProperties key={part.id} part={part} /> : body !== null ? <GroupProperties key={body} body={body} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
+      {show === 'list' ? null : picks ? <MultiProperties ids={picks} /> : part ? <PartProperties key={part.id} part={part} /> : main ? <PartProperties key={main.id} part={main} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
     </aside>
   );
 }
