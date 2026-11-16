@@ -2,6 +2,7 @@ import type { CrossSection, Manifold } from 'manifold-3d';
 import { M } from '../geom/manifold';
 import type { ParamDef, Params, PartDef } from './def';
 import { num, select } from './util';
+import { markOutline, markWidth } from '../lite/mark';
 
 /**
  * Pudełko na akcesoria: korpus + wsuwana pokrywa-tacka (jaskółczy ogon) + napis jako wkładka w innym kolorze.
@@ -32,7 +33,7 @@ const EPS = 0.01;
 const MAG_R = (MAG_D + MAG_CLR) / 2;
 
 // ---------- parametry wnętrza (domyślne = v11) ----------
-export const DEF = { lidT: 3.8, gD: 40, gH: 33, bookL: 120, bookT: 13, bookH: 30, bookIn: 0.5, lL: 82, lW: 26, lT: 15, rampLen: 25, rampDepth: 2.0, trayDepth: 2.0, traySlope: 18, textDepth: 0.8, dW: 71.1, dH: 12.8, baseExtra: 0, dL: 70.0, dX: 0, dRampH: 3.0, dRampL: 25 } as const;
+export const DEF = { lidT: 3.8, gD: 40, gH: 33, bookL: 120, bookT: 13, bookH: 30, bookIn: 0.5, lL: 82, lW: 26, lT: 15, rampLen: 25, rampDepth: 2.0, trayDepth: 2.0, traySlope: 18, textDepth: 0.8, dW: 71.1, dH: 12.8, baseExtra: 0, dL: 70.0, dX: 0, dRampH: 3.0, dRampL: 25, dMarkH: 14 } as const;
 const val = (p: Params, k: keyof typeof DEF) => (p[k] === undefined || Number.isNaN(Number(p[k])) ? DEF[k] : Number(p[k]));
 
 // ---------- układ ----------
@@ -272,6 +273,25 @@ function rampSolid(xa: number, xb: number, yWall: number, dir: 1 | -1, R: number
   return prismX(pts, xa, xb);
 }
 
+const MARK_DEPTH = 0.6;
+/** Wysunięcie szuflady `bi` w podglądzie (−Y). */
+const drawerOpen = (p: Params, bi: number, D: DPlan) => -D.pull * Math.min(100, Math.max(0, Number(bi === 0 ? p.drOpen ?? 0 : p.drOpen2 ?? 0))) / 100;
+const markOn = (p: Params) => p.dMark !== 'off';
+/** Znak „f” na spodzie szuflady `bi` (odbity: czytelny po odwróceniu), głębokość 0,6; extra = naddatek na wcięcie. */
+function markSolid(p: Params, bi: number, D: DPlan, groove: boolean): Manifold {
+  const { xa, xb } = D.bays[bi], xc = (xa + xb) / 2, ym = (FP + D.Ld - RW) / 2;
+  const o = markOutline(val(p, 'dMarkH'), true);
+  const m = o.extrude(MARK_DEPTH + (groove ? 0.1 : 0)).translate([xc, ym, groove ? -0.1 : 0]).translate([0, drawerOpen(p, bi, D), 0]);
+  o.delete();
+  return m;
+}
+/** Wkładka znaku „f” (inny kolor) wszystkich szuflad; null gdy znak wyłączony albo wygrawerowany. */
+export function drawerMarks(p: Params): Manifold | null {
+  const L = layout(p), D = drawerPlan(p, L);
+  if (!D.n || p.dMark !== 'inlay') return null;
+  return U(D.bays.map((_, bi) => markSolid(p, bi, D, false)));
+}
+
 /** Szuflady: do dwóch identycznych brył w jednej części, w złożeniu, dnem równo z dołem pudełka. null = brak szuflad. */
 export function drawers(p: Params): Manifold | null {
   const L = layout(p), D = drawerPlan(p, L);
@@ -293,9 +313,9 @@ export function drawers(p: Params): Manifold | null {
       prismY([[xr + EPS, zt + 0.25], [xr - RAIL - 0.25, zt + 0.25], [xr - RAIL - 0.25, zt - 0.104], [xr + EPS, zt - 1.604]], -2.0, Ld + 1),
     ];
     if (D.mag) cuts.push(cylXa(Ld - 7.0, ZM, MAG_R, xl - EPS, xl + MAG_DEPTH), cylXa(Ld - 14.5, ZM, MAG_R, xr - MAG_DEPTH, xr + EPS));
+    if (markOn(p)) { const o = markOutline(val(p, 'dMarkH'), true); cuts.push(o.extrude(MARK_DEPTH + 0.1).translate([xc, (FP + Ld - RW) / 2, -0.1])); o.delete(); }
     // podgląd: wysunięcie w −Y (do pełnego wysuwu = dł. − 21,5 mm, tyle ile pozwalają magnesy przednie)
-    const open = Math.min(100, Math.max(0, Number(bi === 0 ? p.drOpen ?? 0 : p.drOpen2 ?? 0))) / 100;
-    parts.push(d.subtract(U(cuts)).translate([0, -D.pull * open, 0]));
+    parts.push(d.subtract(U(cuts)).translate([0, drawerOpen(p, bi, D), 0]));
   }
   return U(parts);
 }
@@ -434,6 +454,7 @@ export function buildPudelko(p: Params): Manifold {
     case 'pokrywa': return lidInBox(p).lid.translate([lidShift(p), 0, 0]);
     case 'napis': return (lidInBox(p).text ?? Mf().cube([0.01, 0.01, 0.01]).translate([0, 0, layout(p).Z_LID0])).translate([lidShift(p), 0, 0]);
     case 'szuflady': return drawers(p) ?? Mf().cube([0.01, 0.01, 0.01]);
+    case 'znak': return drawerMarks(p) ?? Mf().cube([0.01, 0.01, 0.01]);
     default: return korpus(p);
   }
 }
@@ -467,6 +488,11 @@ export function pudelkoNotes(p: Params): Note[] {
       if (Wd < 30 - E) out.push({ level: 'error', text: `Szuflada za wąska (${fmt(Wd)} mm, min. 30 mm).` });
       if (total > D.Ls + E) out.push({ level: 'error', text: `Szuflady nie mieszczą się w szerokości pudełka (${fmt(total)} mm przy ${fmt(D.Ls)} mm dostępnych).` });
       else if (dXr > D.free + E) out.push({ level: 'error', text: `Przesunięcie szuflad poza zakres (maks. ${fmt(D.free)} mm przy tej szerokości).` });
+      if (markOn(p)) {
+        const h = val(p, 'dMarkH'), wMax = Wd - 2 * SW - 4, hMax = Ldr - FP - RW - 6;
+        if (markWidth(h) > wMax + E) out.push({ level: 'error', text: `Znak „f” jest za szeroki na dno szuflady (${fmt(markWidth(h))} mm, maks. ${fmt(wMax)} mm).` });
+        else if (h > hMax + E) out.push({ level: 'error', text: `Znak „f” jest za wysoki na dno szuflady (${fmt(h)} mm, maks. ${fmt(hMax)} mm).` });
+      }
       if (R > Math.max(0, Hd - FL - 5) + E) out.push({ level: 'error', text: `Skos dna szuflady za wysoki (${fmt(R)} mm, maks. ${fmt(Math.max(0, Hd - FL - 5))} mm przy tej wysokości).` });
       if (R > 0 && RLr > Math.max(0, (Ldr - RW - FP - 5) / 2) + E) out.push({ level: 'error', text: `Skos dna szuflady za długi (${fmt(RLr)} mm, maks. ${fmt(Math.max(0, (Ldr - RW - FP - 5) / 2))} mm).` });
     }
@@ -528,6 +554,8 @@ const PARAMS: ParamDef[] = [
   { ...select('dMag', 'Szuflady: magnesy', 'on', [['on', 'tak (5×2 w ściankach)'], ['off', 'bez magnesów']]), show: (p) => Number(p.nDr ?? 2) > 0 },
   { key: 'dRampH', label: 'Szuflada: skos dna – wysokość', type: 'number', def: DEF.dRampH, min: 0, max: 8, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, more: true, hint: '0 = płaskie dno. Skos przy ściance przedniej i tylnej ułatwia wyjmowanie z szuflady (łagodne zaokrąglenie).' },
   { key: 'dRampL', label: 'Szuflada: skos dna – długość', type: 'number', def: DEF.dRampL, min: 5, max: 60, step: 1, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0 && Number(p.dRampH ?? DEF.dRampH) > 0, more: true },
+  { ...select('dMark', 'Szuflady: znak „f” na spodzie', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['off', 'bez znaku']]), show: (p: Params) => Number(p.nDr ?? 2) > 0 },
+  { key: 'dMarkH', label: 'Znak „f”: wysokość', type: 'number', def: DEF.dMarkH, min: 6, max: 30, step: 1, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0 && p.dMark !== 'off', more: true },
   { key: 'baseExtra', label: 'Dno: dodatkowa wysokość', type: 'number', def: 0, min: 0, max: 20, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) === 0, hint: 'Bez szuflad dno ma minimalną wysokość dla młynka i bibułek; tu można je podnieść.' },
   { key: 'lidT', label: 'Grubość pokrywy', type: 'number', def: DEF.lidT, min: 2.8, max: 6, step: 0.1, unit: 'mm', group: 'Pokrywa', hint: 'Podnosi też wysokość pudełka (H = … + grubość + 0,2). Kąt jaskółczego ogona maleje przy grubszej pokrywie.' },
   { key: 'trayDepth', label: 'Głębokość tacki', type: 'number', def: DEF.trayDepth, min: 0, max: 3, step: 0.1, unit: 'mm', hint: '0 = bez wgłębienia. Wgłębienie jest płynne (bez ścianek), na dolnej stronie pokrywy.' },
@@ -589,6 +617,9 @@ function repairParams(prev: Params, next: Params): Params {
     c.dRampL = Math.min(Number(c.dRampL), Math.max(5, Math.floor((Number(c.dL) - RW - FP - 5) / 2)));
     if (allowed(full(c))) return { ...next, ...Object.fromEntries(['nDr', 'dH', 'dW', 'dL', 'dX', 'dRampH', 'dRampL'].map((k) => [k, c[k]])) };
   }
+  // włączenie znaku „f”: zmniejsz go, aż się zmieści
+  if (changed.includes('dMark') && n.dMark !== 'off')
+    for (let h = Number(n.dMarkH); h >= 6; h -= 1) if (allowed({ ...n, dMarkH: h })) return { ...next, dMarkH: h };
   const nums = changed.filter((k) => PARAMS.find((d) => d.key === k)!.type === 'number');
   if (nums.length)
     for (let t = 0.98; t >= 0; t -= 0.02) {
@@ -616,6 +647,7 @@ export const PUDELKO_DEFS: PartDef[] = [
       { value: 'pokrywa', label: 'pokrywa-tacka', hole: false, body: 'new' },
       { value: 'napis', label: 'napis (inny kolor)', hole: false, body: 'new', printWith: 'pokrywa' },
       { value: 'szuflady', label: 'szuflady', hole: false, body: 'new' },
+      { value: 'znak', label: 'znak f (inny kolor)', hole: false, body: 'new', printWith: 'szuflady' },
     ],
     notes: pudelkoNotes,
     printTurn: (p) => (p.piece === 'pokrywa' || p.piece === 'napis' ? [0, 180] : null),

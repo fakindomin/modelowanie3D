@@ -83,3 +83,11 @@ Kod: `drawerPlan`, `drawers`, `bayMagnetCuts`, `bayRails`, `rampSolid` w `src/pa
 - Zmiana liczby szuflad albo magnesów: `repairParams` sam dopasowuje szerokość, wysokość, długość, położenie i skos.
 - Napis na dole pudełka wraca przy przeróbce dołu (przy szufladach dół jest otwarty).
 - Test: `scripts/check/pudelko.sh` (kolizje szuflad z korpusem i pokrywą, objętość kieszeni magnesów = pełna, mała szuflada, 0/1/2 szuflady, 400 losowych kroków z geometrią co 10 kroków).
+
+## Punkt 4: znak „f” i faktury (gotowe)
+- Znak „f” (`src/lite/mark.ts`, `markOutline`) na spodzie każdej szuflady, na środku dna, odbity (czytelny po odwróceniu), głębokość 0,6 mm. Parametry `dMark` (wkładka / wgłębiony / bez znaku, domyślnie wkładka) i `dMarkH` (6–30 mm, domyślnie 14). Wkładka jest osobną częścią `znak` (`printWith: 'szuflady'`), więc w 3MF to jeden obiekt z dwiema częściami (inny filament w AMS). Znak jedzie razem z szufladą przy podglądzie wysuwania. Reguły w `pudelkoNotes` (szerokość i wysokość znaku względem dna), włączenie znaku zmniejsza go do dozwolonego.
+- Faktury: używa się ogólnej „Faktury powierzchni” projektu (`src/geom/texture.ts`, panel Faktura na każdej części pudełka), nie osobnych parametrów. Sprawdzone: wszystkie 5 wzorów na górze pokrywy w trybie wcięcia (głębokość ≤ 0,6 mm, żeby pod tacką i napisem zostało ≥ 1 mm) – poprawna bryła, bez kolizji z korpusem. Na bocznych ścianach korpusu i frontach szuflad są już żebra japandi, więc faktura prawie nic tam nie zmienia. Na górze pokrywy nie dawać trybu „wypukłe” (wystaje ponad krawędź kanału).
+- Nie zrobione: stoper szuflady (wymaga próby fizycznej luzów, domyślnie i tak miał być wyłączony).
+
+## Konfigurator jako jedna strona (artefakt)
+- `npm run build:pudelko` buduje `dist-pudelko/pudelko.html` (źródła: `pudelko.html`, `src/pudelko-page/main.ts`, `vite.pudelko.config.ts`): te same `PUDELKO_DEFS`, suwaki generowane z `paramsFor` (zakresy na żywo), kontrole `notes`, podgląd 3D z przyciskami „Rozsuń wszystko / Złóż / Spód”. Pliku nie da się z niej pobrać (artefakt blokuje pobieranie); „Kopiuj parametry” daje JSON zmian względem domyślnych. Eksport 3MF robi się w edytorze projektu.

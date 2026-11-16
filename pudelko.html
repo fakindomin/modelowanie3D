@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Pudełko FKNDMN</title>
+<style>
+/* Układ: podgląd 3D po prawej (na telefonie u góry), suwaki w kolumnie po lewej. Paleta: drewno japandi + ciemna zieleń napisu. */
+:root {
+  --bg: #f2efe9; --panel: #fbf9f5; --ink: #26221d; --muted: #766f64; --line: #ddd6ca;
+  --accent: #2f6f5e; --accent-soft: #dcebe5; --warn: #b4531f; --bad: #b33a2b; --view: #e9e4da;
+  --oak: #cfc3b2; --lidc: #b9a58a; --drw: #e2d8c8; --ink3d: #2f6f5e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171512; --panel: #1f1c18; --ink: #ece7de; --muted: #a2998b; --line: #38332c;
+    --accent: #6fb8a2; --accent-soft: #203832; --warn: #e08b55; --bad: #ee7c6a; --view: #14120f;
+    --oak: #a99d8b; --lidc: #8d7b62; --drw: #bdb2a1; --ink3d: #6fb8a2;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171512; --panel: #1f1c18; --ink: #ece7de; --muted: #a2998b; --line: #38332c;
+  --accent: #6fb8a2; --accent-soft: #203832; --warn: #e08b55; --bad: #ee7c6a; --view: #14120f;
+  --oak: #a99d8b; --lidc: #8d7b62; --drw: #bdb2a1; --ink3d: #6fb8a2;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px; }
+.app { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; height: 100%; min-height: 0; }
+@media (max-width: 820px) { .app { grid-template-columns: 1fr; grid-template-rows: 48vh auto; height: auto; } body { height: auto; } .stage { order: -1; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; overflow: auto; min-height: 0; min-width: 0; }
+h1 { font: 600 20px/1.2 "Space Grotesk", "Inter", system-ui, sans-serif; margin: 0 0 2px; letter-spacing: .01em; }
+.lead { color: var(--muted); margin: 0 0 12px; font-size: 12.5px; }
+h2 { font: 600 11px/1 "Inter", system-ui, sans-serif; text-transform: uppercase; letter-spacing: .09em; color: var(--accent); margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 8px; }
+.row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin: 0 0 9px; }
+.row[hidden] { display: none; }
+.row label { font-size: 12.5px; min-width: 0; }
+.row .val { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.row input[type=number] { width: 68px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; text-align: right; }
+.row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 0; }
+.row select { grid-column: 1 / -1; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; width: 100%; }
+.row .unit { color: var(--muted); font-size: 12px; }
+.row .narrow { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+details { margin: 4px 0 8px; } summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+button { font: inherit; font-size: 12.5px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--accent); } button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.main { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.notes { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }
+.notes li { padding: 5px 8px; border-radius: 8px; background: var(--accent-soft); }
+.notes li.warn, .notes li.error { background: transparent; border: 1px solid var(--warn); color: var(--warn); }
+.notes li.error { border-color: var(--bad); color: var(--bad); }
+.stage { position: relative; background: var(--view); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; min-height: 280px; min-width: 0; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud { position: absolute; left: 10px; bottom: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.chip { background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.status { position: absolute; top: 10px; right: 10px; }
+.legend { position: absolute; top: 10px; left: 10px; display: flex; gap: 8px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--line); }
+.err { color: var(--bad); padding: 12px; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Space+Grotesk:wght@600&display=swap">
+</head>
+<body>
+<div class="app">
+  <aside class="panel" id="panel">
+    <h1>Pudełko FKNDMN</h1>
+    <p class="lead">Młynek, bibułki, zapalniczka, ubijak i szuflady na magnesach 5×2. Wymiary dobierasz suwakami; zakresy same się zawężają, więc nie da się wejść w układ, który się nie zmieści.</p>
+    <div class="btns"><button class="main" id="bOpen">Rozsuń wszystko</button><button id="bClose">Złóż</button><button id="bBottom">Spód</button><button id="bCopy">Kopiuj parametry</button><button id="bReset">Domyślne</button></div>
+    <h2>Rozsuwanie (podgląd)</h2>
+    <div id="openBox"></div>
+    <ul class="notes" id="notes"></ul>
+    <div id="ctl"></div>
+  </aside>
+  <section class="stage" id="stage">
+    <div class="legend"><span><i style="background:var(--oak)"></i>korpus</span><span><i style="background:var(--lidc)"></i>pokrywa</span><span><i style="background:var(--drw)"></i>szuflady</span><span><i style="background:var(--ink3d)"></i>napis i znak „f”</span></div>
+    <div class="hud"><span class="chip" id="dims"></span></div>
+    <span class="chip status" id="status">Ładuję…</span>
+  </section>
+</div>
+<script type="module" src="/src/pudelko-page/main.ts"></script>
+</body>
+</html>
