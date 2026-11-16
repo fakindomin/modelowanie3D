@@ -758,8 +758,8 @@ function Bed() {
         args={[BED, BED]}
         cellSize={5}
         sectionSize={50}
-        cellColor="#3a3c3f"
-        sectionColor="#585b60"
+        cellColor="#30342b"
+        sectionColor="#4a4f40"
         cellThickness={0.6}
         sectionThickness={1.1}
         fadeDistance={2000}
@@ -796,7 +796,7 @@ export function Viewport() {
       onPointerMissed={(e) => e.button === 0 && !gizmoBusy() && select(null)}
       gl={{ antialias: true, preserveDrawingBuffer: true, localClippingEnabled: true }}
     >
-      <color attach="background" args={['#1c1d1f']} />
+      <color attach="background" args={['#1a1c19']} />
       {lights}
       <Bed />
       {preview ? <PreviewBodies /> : <Scene />}

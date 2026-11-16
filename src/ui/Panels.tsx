@@ -505,6 +505,7 @@ export function SizeRow({ label, hint, value, min, max, step = 1, unit, onChange
         max={max}
         step={step}
         value={Math.min(max, Math.max(min, value))}
+        style={{ '--p': `${max > min ? ((Math.min(max, Math.max(min, value)) - min) / (max - min)) * 100 : 0}%` } as React.CSSProperties}
         onPointerDown={() => {
           if (onLive && !dragging.current) {
             dragging.current = true;
