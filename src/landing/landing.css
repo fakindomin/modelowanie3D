@@ -232,3 +232,28 @@
 .landing .wrap { width: 100%; }
 .landing main { min-width: 0; }
 .landing .hero .start-go { justify-self: center; font-size: 17px; padding: 15px 26px; }
+
+/* Hero centred in the main column */
+.landing .hero .wrap { justify-items: center; text-align: center; }
+.landing .hero .tape { justify-self: center; }
+.landing .hero .cfg, .landing .hero .doors { width: 100%; text-align: left; }
+
+/* Tiles: picture with a kind badge, then the name, then where it fits; the whole tile opens it */
+.landing .lcard { gap: 8px; padding: 14px 14px 18px; }
+.landing .lcard .thumb { position: relative; overflow: hidden; }
+.landing .lcard .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; animation: lfade .35s ease; }
+.landing .lcard h3 { flex: none; margin-top: 4px; overflow-wrap: anywhere; }
+.landing .lcard .cats { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.landing .lcard:hover h3 { color: var(--orange); }
+.landing .badge { position: absolute; top: 8px; left: 8px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px 5px 7px; font: 700 12px/1 var(--f); letter-spacing: .01em; }
+.landing .badge.w { background: var(--army); color: #f1f2ea; }
+.landing .badge.p { background: var(--sheet); color: var(--ink); border: 1.5px solid var(--ink); }
+.landing .lcard .thumb .badge svg { width: 18px; height: 18px; flex: none; }
+@keyframes lfade { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 640px) {
+  .landing .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing .lcard { padding: 10px 10px 14px; }
+  .landing .lcard h3 { font-size: 15px; }
+  .landing .badge { top: 6px; left: 6px; padding: 4px 6px; font-size: 11px; }
+  .landing .lcard .thumb .badge svg { width: 14px; height: 14px; }
+}

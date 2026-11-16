@@ -3,6 +3,7 @@ import { PROJECT_ITEMS, USE_CATS, type ProjectItem, type UseCat } from '../proje
 import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
 import { mountDemo } from './demo';
+import { thumb, type ThumbKey } from './thumbs';
 import './landing.css';
 
 /** What the start page asks the app to do when the visitor leaves it for the editor. */
@@ -73,7 +74,7 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
     };
   }, [menu]);
 
-  const projects = PROJECT_ITEMS.filter((i) => i.kind !== 'figurines');
+  const projects = PROJECT_ITEMS.filter((i) => i.kind !== 'figurines' && i.kind !== 'wizard');
   const wizardCount = Object.keys(WIZARDS).length;
 
   return (
@@ -255,7 +256,7 @@ function Projects({ items, onOpen }: { items: ProjectItem[]; onOpen: (a: StartAc
       <div className="sec-head">
         <span className="mono">Gotowe projekty</span>
         <h2>Wybierz według miejsca, w którym go użyjesz</h2>
-        <p className="lead">Każdy projekt otwiera się w aplikacji z wymiarami do zmiany. Kreatory mają zieloną etykietę.</p>
+        <p className="lead">Każdy projekt otwiera się w aplikacji z wymiarami do zmiany.</p>
       </div>
       <div className="lchips" role="toolbar" aria-label="Miejsce użycia">
         <button className="lchip" type="button" aria-pressed={cat === 'all'} onClick={() => pick('all')}>
@@ -270,18 +271,7 @@ function Projects({ items, onOpen }: { items: ProjectItem[]; onOpen: (a: StartAc
       </div>
       <div className="grid">
         {list.map((i) => (
-          <button key={i.label} type="button" className="lcard" onClick={() => onOpen({ kind: 'item', item: i })}>
-            <span className="thumb">
-              <Icon type={i.icon} hole={false} />
-            </span>
-            <h3>{i.label}</h3>
-            <span className="meta">
-              <span>
-                <span className={i.kind === 'wizard' ? 'kind w' : 'kind'}>{i.kind === 'wizard' ? 'Kreator' : 'Projekt'}</span> {i.tags.map(catLabel).join(', ')}
-              </span>
-              <span className="open">Otwórz →</span>
-            </span>
-          </button>
+          <Tile key={i.label} k={{ item: i }} icon={i.icon} label={i.label} kind="p" sub={i.tags.map(catLabel).join(' · ')} onClick={() => onOpen({ kind: 'item', item: i })} />
         ))}
       </div>
       <div className="more-row">
@@ -297,6 +287,52 @@ const WIZ_ICON: Record<string, string> = Object.fromEntries(
   PROJECT_ITEMS.flatMap((i) => (i.kind === 'wizard' ? [[i.wizard, i.icon]] : [])),
 );
 
+/** Badge marks: a wand for a wizard, a finished cube for a ready project. */
+function KindBadge({ kind }: { kind: 'p' | 'w' }) {
+  return (
+    <span className={'badge ' + kind}>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
+        {kind === 'w' ? (
+          <>
+            <path d="M4 20 15 9" />
+            <path d="m13 7 4 4" />
+            <path d="M18 2.5v3M16.5 4h3M21 8v2M20 9h2M9.5 3v2M8.5 4h2" />
+          </>
+        ) : (
+          <>
+            <path d="M12 2.8 20 7v10l-8 4.2L4 17V7z" />
+            <path d="M4 7l8 4.2L20 7M12 11.2v10" />
+          </>
+        )}
+      </svg>
+      {kind === 'w' ? 'Kreator' : 'Gotowy projekt'}
+    </span>
+  );
+}
+
+/** One tile: the model's picture (its icon until the picture is ready), the badge, the name and where it fits. */
+function Tile({ k, icon, label, kind, sub, onClick }: { k: ThumbKey; icon: string; label: string; kind: 'p' | 'w'; sub: string; onClick: () => void }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void thumb(k).then((u) => live && setSrc(u));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [label]);
+  return (
+    <button type="button" className={'lcard ' + kind} onClick={onClick}>
+      <span className="thumb">
+        {src ? <img src={src} alt="" loading="lazy" /> : <Icon type={icon} hole={false} />}
+        <KindBadge kind={kind} />
+      </span>
+      <h3>{label}</h3>
+      <span className="cats">{sub}</span>
+    </button>
+  );
+}
+
 function Wizards({ onOpen }: { onOpen: (a: StartAction) => void }) {
   const all = WIZARD_GROUPS.flatMap((g) => g.items.map((w) => ({ ...w, group: g.label })));
   const ready = all.filter((w) => w.ready);
@@ -310,18 +346,7 @@ function Wizards({ onOpen }: { onOpen: (a: StartAction) => void }) {
       </div>
       <div className="grid">
         {ready.map((w) => (
-          <button key={w.id} type="button" className="lcard" onClick={() => onOpen({ kind: 'wizard', id: w.id })}>
-            <span className="thumb">
-              <Icon type={WIZ_ICON[w.id] ?? 'box'} hole={false} />
-            </span>
-            <h3>{w.label}</h3>
-            <span className="meta">
-              <span>
-                <span className="kind w">Kreator</span> {w.group}
-              </span>
-              <span className="open">Otwórz →</span>
-            </span>
-          </button>
+          <Tile key={w.id} k={{ wizard: w.id }} icon={WIZ_ICON[w.id] ?? 'box'} label={w.label} kind="w" sub={w.group} onClick={() => onOpen({ kind: 'wizard', id: w.id })} />
         ))}
       </div>
       {soon.length > 0 && <p className="soon">Wkrótce: {soon.map((w) => w.label.toLowerCase()).join(', ')}.</p>}
