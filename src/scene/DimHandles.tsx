@@ -161,7 +161,6 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
       if (!d.moved) {
         d.moved = true;
         st.beginGesture();
-        if (controls) (controls as unknown as { enabled: boolean }).enabled = false;
       }
       const t = along(ev, d);
       if (t === null) return;
@@ -215,16 +214,19 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
     };
   });
 
-  const press = (e: ThreeEvent<PointerEvent>, h: HandleDef) => {
+  const press = (e: ThreeEvent<PointerEvent>, h: HandleDef, knob: THREE.Vector3) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     const m = partMatrix(part.position, part.rotation);
     const q = new THREE.Quaternion().setFromRotationMatrix(m);
     const axisWorld = new THREE.Vector3().setComponent(h.axis, h.sign).applyQuaternion(q).normalize();
-    const origin = facePoint(h).applyMatrix4(m);
-    drag.current = { h, start: part, value: Number(part.params[h.dim.key]), axisWorld, origin, t0: e.point.clone().sub(origin).dot(axisWorld), moved: false, x0: e.nativeEvent.clientX, y0: e.nativeEvent.clientY };
+    // Measure along a line through the knob's centre, so the first move does not jump by the knob's offset from the face.
+    const origin = knob.clone().applyMatrix4(m);
+    drag.current = { h, start: part, value: Number(part.params[h.dim.key]), axisWorld, origin, t0: 0, moved: false, x0: e.nativeEvent.clientX, y0: e.nativeEvent.clientY };
     setEdit(null);
     onHold(true);
+    // The view must not turn while a size is held: the camera would grab the very first move.
+    if (controls) (controls as unknown as { enabled: boolean }).enabled = false;
   };
 
   const off = Math.max(4, 0.09 * Math.max(...box.getSize(new THREE.Vector3()).toArray()));
@@ -244,7 +246,7 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
               position={h.sign > 0 ? p2 : p1}
               visible
               active={active}
-              onPointerDown={(e) => press(e, h)}
+              onPointerDown={(e) => press(e, h, h.sign > 0 ? p2 : p1)}
               onPointerOver={(e) => (e.stopPropagation(), setHot(i))}
               onPointerOut={() => setHot((x) => (x === i ? null : x))}
             />
