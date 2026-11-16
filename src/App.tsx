@@ -9,6 +9,7 @@ import { buildBodies, built } from './geom/parts';
 import * as THREE from 'three';
 import { export3MF, exportSTL, saveJSON } from './export';
 import { bestPose, keepsPose, turnManifold } from './geom/orient';
+import { DEFS } from './catalog';
 import { makeManual } from './manual';
 import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
@@ -44,6 +45,16 @@ export function printBodies(parts: Part[]) {
   // Each body in the pose that needs the least support (kept as designed unless another pose clearly saves supports).
   let turnedN = 0;
   for (const b of bodies) {
+    // A piece can name its own print pose (a lid printed top-down); that beats the automatic one.
+    const own = parts.find((p) => p.body === b.body && !p.hole && DEFS[p.type]?.printTurn?.(p.params));
+    const turn = own && DEFS[own.type].printTurn!(own.params);
+    if (turn) {
+      const t = turnManifold(b.manifold, turn);
+      b.manifold.delete();
+      b.manifold = t;
+      turnedN++;
+      continue;
+    }
     if (keepsPose(parts.filter((p) => p.body === b.body && !p.hole))) continue;
     const pose = bestPose(b.manifold);
     if (!pose) continue;

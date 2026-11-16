@@ -317,18 +317,22 @@ export function lidInBox(p: Params): LidParts {
   return { lid, text: mode === 'inlay' ? ext(letters, z1l - td, z1l) : null };
 }
 
-/** Pokrywa/napis do druku: górą do stołu (obrót o 180° wokół X, dół na z = 0), wspólny układ XY. */
-function flip(m: Manifold, L: Lay): Manifold {
-  return m.rotate([180, 0, 0]).translate([0, 2 * L.yc, L.Z_LID0 + L.lidT]);
+/**
+ * Części wychodzą w złożeniu (pokrywa zasunięta, napis w jej wybraniu), a edytor i eksport same układają je do druku
+ * (src/geom/orient.ts: pokrywa z tacką obraca się górą do stołu, bo wtedy tacka nie wymaga podpór).
+ */
+/** Przesunięcie pokrywy w X w edytorze (0 = zasunięta, 100 % = zaparkowana na magnesach lewej ścianki, jak w v11). */
+function lidShift(p: Params): number {
+  const L = layout(p);
+  const lxb = L.X - WALL_X - 0.3;
+  const park = lxb - (WALL_L / 2 - 0.3) - WALL_L / 2;
+  return (-park * Math.min(100, Math.max(0, Number(p.lidOpen ?? 0)))) / 100;   // pokrywa wysuwa się w stronę −X (kanał otwarty z lewej)
 }
 
 export function buildPudelko(p: Params): Manifold {
   switch (p.piece) {
-    case 'pokrywa': return flip(lidInBox(p).lid, layout(p));
-    case 'napis': {
-      const t = lidInBox(p).text;
-      return t ? flip(t, layout(p)) : Mf().cube([0.01, 0.01, 0.01]);
-    }
+    case 'pokrywa': return lidInBox(p).lid.translate([lidShift(p), 0, 0]);
+    case 'napis': return (lidInBox(p).text ?? Mf().cube([0.01, 0.01, 0.01]).translate([0, 0, layout(p).Z_LID0])).translate([lidShift(p), 0, 0]);
     default: return korpus(p);
   }
 }
@@ -402,6 +406,7 @@ const PARAMS: ParamDef[] = [
   { key: 'traySlope', label: 'Szerokość skosu tacki', type: 'number', def: DEF.traySlope, min: 8, max: 30, step: 1, unit: 'mm', more: true, hint: 'Im szerszy skos, tym łagodniejsze nachylenie (maks. nachylenie ≈ 1,5·głębokość / szerokość).' },
   select('textMode', 'Napis FKNDMN', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['none', 'bez napisu']]),
   { key: 'textDepth', label: 'Głębokość wkładki napisu', type: 'number', def: DEF.textDepth, min: 0.4, max: 1.6, step: 0.2, unit: 'mm', show: (p) => p.textMode === 'inlay' },
+  { key: 'lidOpen', label: 'Pokrywa: wysunięcie (podgląd)', type: 'number', def: 0, min: 0, max: 100, step: 5, unit: '%', hint: '0 = zasunięta, 100 = wysunięta na magnesach. Tylko podgląd w edytorze, nie zmienia wydruku.' },
   { key: 'garby', label: 'Garby (v11, tylko do testów)', type: 'bool', def: false, show: () => false },
 ];
 
@@ -466,6 +471,7 @@ export const PUDELKO_DEFS: PartDef[] = [
       { value: 'napis', label: 'napis (inny kolor)', hole: false, body: 'new' },
     ],
     notes: pudelkoNotes,
+    printTurn: (p) => (p.piece === 'pokrywa' || p.piece === 'napis' ? [0, 180] : null),
     params: PARAMS,
     paramsFor: dynamicParams,
     normalize: repairParams,

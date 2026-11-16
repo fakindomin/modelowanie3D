@@ -64,3 +64,10 @@ Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 - Czerwone/żółte kontrole zostają tylko jako zabezpieczenie dla danych spoza suwaków. Test: 400 losowych przeciągnięć suwaków z wartości domyślnych nie daje ani jednej uwagi (`scripts/check/pudelko.sh`).
 - Każda nowa reguła (np. magnesy szuflady w punkcie 3) trafia do `pudelkoNotes`, więc zakresy suwaków uwzględnią ją automatycznie.
 - Progi: wysoka szuflada ≥ 10 mm, materiał nad szufladą ≥ 2 mm, skos 3–10° i uniesienie ≥ 3 mm, tacka max 10° i ≥ 1,2 mm pod nią (≥ 0,8 mm do napisu).
+
+## Ułożenie w edytorze i do druku
+- `build()` zwraca części w złożeniu (korpus, pokrywa zasunięta, napis w jej wybraniu); wspólny układ współrzędnych, każda część w swoim kolorze.
+- Suwak „Pokrywa: wysunięcie (podgląd)” 0–100 % przesuwa pokrywę i napis w −X (kanał otwarty z lewej), 100 % = zaparkowana na magnesach jak w v11. Nie zmienia wydruku.
+- Pozycja do druku: `PartDef.printTurn` (nowe pole, `src/parts/def.ts`, użyte w `printBodies` w `src/App.tsx`): pokrywa i napis obracają się o 180° wokół X (górą do stołu; nawisy 6406 → 144 mm²). Automatyczny `bestPose` układał pokrywę pionowo na krótkim brzegu, więc dla pudełka jest pomijany (`pudelko` w `KEEP` w `src/geom/orient.ts`).
+- Otwarte: wkładka napisu jest osobną bryłą, więc eksport rozkłada ją osobno na stole. Do druku wielokolorowego trzeba ją połączyć z pokrywą w jeden obiekt z częściami (`ColoredBody` w `src/export.ts` to już obsługuje, ale edytor jeszcze nie wypełnia pola `parts`).
+- Szuflady jako części: punkt 3 (na razie w korpusie są tylko wnęki v11).

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { initManifold } from '../../src/geom/manifold';
 import { korpus, lidInBox, layout, bowlCutter, pudelkoNotes } from '../../src/parts/pudelko';
 import { DEFS } from '../../src/catalog';
+import { poseScores } from '../../src/geom/orient';
 
 const ref = JSON.parse(readFileSync(new URL('../../tools/pudelko/ref.json', import.meta.url), 'utf8'));
 const def: any = (DEFS as any).pudelko;
@@ -110,5 +111,26 @@ const cmp = (name: string, got: any, want: { bounds: number[][]; vol: number }, 
   expect('niedozwolone wartości z JSON są korygowane', allOk(fixed), JSON.stringify({ bookH: fixed.bookH, gH: fixed.gH }));
   const r0 = def.paramsFor(base); const rg = (k: string) => { const d = r0.find((x: any) => x.key === k); return `${k}: ${d.min}–${d.max}`; };
   console.log('zakresy przy wartościach domyślnych:', ['gH', 'bookH', 'lT', 'rampDepth', 'rampLen', 'trayDepth', 'traySlope', 'lidT', 'gD', 'bookT'].map(rg).join(', '));
+
+  // ---- ułożenie w edytorze i do druku ----
+  const pk = def.build({ ...base, piece: 'korpus' }), pl = def.build({ ...base, piece: 'pokrywa' }), pn = def.build({ ...base, piece: 'napis' });
+  const bk = pk.boundingBox(), bl = pl.boundingBox(), bn = pn.boundingBox();
+  expect('pokrywa w złożeniu leży w kanale korpusu (z)', bl.min[2] >= Ld.Z_CH0 - 1e-6 && bl.max[2] <= Ld.H, `(z ${bl.min[2].toFixed(2)}–${bl.max[2].toFixed(2)}, kanał od ${Ld.Z_CH0.toFixed(2)}, H ${Ld.H})`);
+  expect('napis w złożeniu leży w pokrywie', bn.min[2] >= bl.min[2] && bn.max[2] <= bl.max[2] + 1e-6 && bn.min[0] >= bl.min[0] && bn.max[0] <= bl.max[0]);
+  expect('korpus i pokrywa w złożeniu nie nachodzą', pk.intersect(pl).volume() < 0.5);
+  const tl = def.printTurn({ ...base, piece: 'pokrywa' }), tn = def.printTurn({ ...base, piece: 'napis' }), tk = def.printTurn({ ...base, piece: 'korpus' });
+  expect('pokrywa i napis mają pozycję drukową (obrót 180° wokół X), korpus nie', JSON.stringify(tl) === '[0,180]' && JSON.stringify(tn) === '[0,180]' && tk === null);
+  const { turnManifold } = await import('../../src/geom/orient');
+  const fl = turnManifold(pl, tl), fn = turnManifold(pn, tn);
+  const bfl = fl.boundingBox(), bfn = fn.boundingBox();
+  const ov = poseScores(fl)[0].overhang;
+  console.log(`pokrywa do druku: nawisy ${ov.toFixed(0)} mm² (w złożeniu ${poseScores(pl)[0].overhang.toFixed(0)} mm²), napis z min ${bfn.min[2].toFixed(2)} vs pokrywa z min ${bfl.min[2].toFixed(2)}`);
+  expect('pokrywa górą do stołu: mało nawisów (tacka z góry)', ov < 300);
+  expect('napis leży równo z górną ścianką pokrywy przy stole', Math.abs(bfn.min[2] - bfl.min[2]) < 1e-6 && Math.abs(bfn.max[2] - bfn.min[2] - 0.8) < 1e-6);
+  // podgląd: wysunięta pokrywa nie koliduje z korpusem i leży dalej w X
+  const open = def.build({ ...base, piece: 'pokrywa', lidOpen: 100 }), bo = open.boundingBox();
+  expect('pokrywa wysunięta na 100% nie koliduje i jest przesunięta', pk.intersect(open).volume() < 0.5 && bo.max[0] < 20, `(x do ${bo.max[0].toFixed(1)}, od ${bo.min[0].toFixed(1)})`);
+  const oc = lidInBox(base).lid.volume(), od = open.volume();
+  expect('wysunięcie nie zmienia bryły pokrywy', Math.abs(oc - od) < 1e-3);
   console.log(bad ? `\n${bad} błędów` : '\nwszystko OK'); process.exit(bad ? 1 : 0);
 })();
