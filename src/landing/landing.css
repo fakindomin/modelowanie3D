@@ -231,3 +231,4 @@
 .landing .nav .bottom .btn { border: 2px solid var(--orange); }
 .landing .wrap { width: 100%; }
 .landing main { min-width: 0; }
+.landing .hero .start-go { justify-self: start; font-size: 17px; padding: 15px 26px; }

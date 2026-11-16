@@ -165,8 +165,11 @@ function Start({ projects, wizards }: { projects: number; wizards: number }) {
           Wybierz gotowy przedmiot, <em>ustaw wymiary</em> i drukuj.
         </h1>
         <p className="lede">
-          <strong>Nic nie projektujesz od zera.</strong> Bierzesz gotowy projekt albo odpowiadasz na pytania kreatora, a potem przesuwasz suwaki i wybierasz opcje. Tak to wygląda:
+          <strong>Nic nie projektujesz od zera.</strong> Bierzesz gotowy projekt albo odpowiadasz na pytania kreatora, a potem przesuwasz suwaki i wybierasz opcje.
         </p>
+        <a className="btn primary start-go" href="#projekty">
+          Zaczynamy →
+        </a>
 
         <div className="cfg" ref={cfg} role="img" aria-label="Pokaz: zmiana wymiarów i opcji pudełka z pokrywką" inert>
           <div className="cfg-head">
