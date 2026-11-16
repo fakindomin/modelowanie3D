@@ -110,7 +110,9 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   const handles: HandleDef[] = [];
   dims.forEach((d, a) => {
     if (!d) return;
-    handles.push({ axis: a as 0 | 1 | 2, sign: a === 2 ? 1 : side[a], dim: d });
+    // Width and depth grow from either end (a knob on each); height only upwards, the part stands on the bed.
+    if (a === 2) handles.push({ axis: 2, sign: 1, dim: d });
+    else handles.push({ axis: a as 0 | 1, sign: 1, dim: d }, { axis: a as 0 | 1, sign: -1, dim: d });
   });
   const [hot, setHot] = useState<number | null>(null);
   const [edit, setEdit] = useState<number | null>(null);
@@ -233,31 +235,42 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   const geo = built(part).geometry;
   return (
     <group position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
-      {handles.map((h, i) => {
+      {[0, 1, 2].map((axis) => {
+        const own = handles.map((h, i) => [h, i] as const).filter(([h]) => h.axis === axis);
+        if (!own.length) return null;
+        const h = own[0][0];
+        const mine = (x: number | null | undefined) => x != null && own.some(([, i]) => i === x);
         const { p1, p2, out, ticks } = dimLine(box, h.axis, side, off, geo);
         const mid = p1.clone().add(p2).multiplyScalar(0.5);
-        const active = hot === i || live?.i === i || edit === i || (!live && h.dim.key === dimHover);
-        const value = live?.i === i ? live.to : Number(part.params[h.dim.key]);
+        const active = mine(hot) || mine(live?.i) || mine(edit) || (!live && h.dim.key === dimHover);
+        const value = mine(live?.i) ? live!.to : Number(part.params[h.dim.key]);
+        const editing = own.find(([, i]) => i === edit);
         return (
-          <group key={i}>
+          <group key={axis}>
             <DimLine pts={[p1, p2, ...ticks]} active={active} />
-            {/* The knob sits on the end of the arrow at the side it moves, so it stays under the cursor while dragging. */}
-            <Dot
-              position={h.sign > 0 ? p2 : p1}
-              visible
-              active={active}
-              onPointerDown={(e) => press(e, h, h.sign > 0 ? p2 : p1)}
-              onPointerOver={(e) => (e.stopPropagation(), setHot(i))}
-              onPointerOut={() => setHot((x) => (x === i ? null : x))}
-            />
-            <Html position={mid.clone().addScaledVector(out, off * 1.5)} center zIndexRange={[25, 0]} style={{ pointerEvents: edit === i ? 'auto' : 'none' }}>
-              {edit === i ? (
+            {/* A knob on each end that can move: it sits on the side it moves, so it stays under the cursor. */}
+            {own.map(([k, i]) => {
+              const at = k.sign > 0 ? p2 : p1;
+              return (
+                <Dot
+                  key={i}
+                  position={at}
+                  visible
+                  active={hot === i || live?.i === i}
+                  onPointerDown={(e) => press(e, k, at)}
+                  onPointerOver={(e) => (e.stopPropagation(), setHot(i))}
+                  onPointerOut={() => setHot((x) => (x === i ? null : x))}
+                />
+              );
+            })}
+            <Html position={mid.clone().addScaledVector(out, off * 1.5)} center zIndexRange={[25, 0]} style={{ pointerEvents: editing ? 'auto' : 'none' }}>
+              {editing ? (
                 <DimInput
                   label={h.dim.label}
                   value={Number(part.params[h.dim.key])}
                   onDone={(v) => {
                     setEdit(null);
-                    if (v !== null) useStore.getState().update(part.id, patchFor(part, h, v));
+                    if (v !== null) useStore.getState().update(part.id, patchFor(part, editing[0], v));
                     if (v !== null && (v > h.dim.max || v < h.dim.min)) useStore.getState().notify(`${h.dim.label}: ${v > h.dim.max ? 'maks.' : 'min.'} ${fmt(v > h.dim.max ? h.dim.max : h.dim.min)} mm.`);
                   }}
                 />
@@ -265,7 +278,7 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
                 <span className={active ? 'dim-tag on' : 'dim-tag'}>
                   {active && <i>{h.dim.label} </i>}
                   {fmt(value)} mm
-                  {live?.i === i && live.limit && <b className="dim-limit"> {live.limit}</b>}
+                  {mine(live?.i) && live!.limit && <b className="dim-limit"> {live!.limit}</b>}
                 </span>
               )}
             </Html>
