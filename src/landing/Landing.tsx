@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PROJECT_ITEMS, USE_CATS, type ProjectItem, type UseCat } from '../projects';
 import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
-import { MenuIcon, ReadyIcon, WizardIcon } from '../ui/KindIcons';
+import { CatIcon, MenuIcon, ReadyIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
 import { thumb, type ThumbKey } from './thumbs';
 import './landing.css';
@@ -266,6 +266,7 @@ function Projects({ items, onOpen }: { items: ProjectItem[]; onOpen: (a: StartAc
         </button>
         {USE_CATS.map((c) => (
           <button key={c.id} className="lchip" type="button" aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
+            <CatIcon id={c.id} size={16} />
             {c.label}
             <span className="n">{items.filter((i) => i.tags.includes(c.id)).length}</span>
           </button>

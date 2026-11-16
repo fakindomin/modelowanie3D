@@ -260,3 +260,5 @@
 
 /* Kind icons next to menu entries and section labels */
 .landing .mono .kicon, .landing nav a .kicon { margin-right: 6px; }
+.landing .lchip { display: inline-flex; align-items: center; gap: 7px; }
+.landing .lchip .n { margin-left: 0; }

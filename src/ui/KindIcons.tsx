@@ -96,3 +96,29 @@ export function ToolIcon({ id, size = 16, className }: { id: ToolIconId; size?: 
     </svg>
   );
 }
+
+/** Use-place category icons (filters on the start page, category headers in the editor library). */
+const CAT_ICONS: Record<string, { line: string; block?: string }> = {
+  home: { line: 'M3 11 12 3l9 8v10H3zM16 6.5V3h3v6.2', block: 'M10.5 13h3v3h-3z' },
+  kitchen: { line: 'M4 10h16v8l-2 2H6l-2-2zM2 10h20', block: 'M10.5 6h3v3h-3z' },
+  bath: { line: 'M2 11h20v4l-3 4H5l-3-4zM5 11V5l2-2h3v2', block: 'M9 7h2v2H9z' },
+  garden: { line: 'M12 14V8M12 11 7 8V4l5 3M12 9l5-3V3l-5 3', block: 'M6 14h12l-1.5 7h-9z' },
+  workshop: { line: 'M11 11l10 10', block: 'M2.5 8.5 8.5 2.5l6 6-6 6z' },
+  desk: { line: 'M2 8h20M4 8v13M20 8v13M12 8v7h8', block: 'M14.5 10.5h3v2h-3z' },
+  electronics: { line: 'M6 6h12v12H6zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4', block: 'M10 10h4v4h-4z' },
+  kids: { line: 'M8 2h8l6 6v8l-6 6H8l-6-6V8zM12 2v7M12 14v8M2 11.5h6.5M15.5 11.5H22', block: 'M10 9h4l1.5 2.5L14 14h-4l-1.5-2.5z' },
+  printer: { line: 'M12 2v5M8 7h8v5l-4 4-4-4zM3 21h18', block: 'M10.5 18h3v3h-3z' },
+  pets: { line: 'M7 15l2.5-2.5h5L17 15v4l-2 2H9l-2-2z', block: 'M3 9h3v3H3zM8 4.5h3v3H8zM13 4.5h3v3h-3zM18 9h3v3h-3z' },
+  vehicle: { line: 'M2 15l2-2h2l2 2v2l-2 2H4l-2-2zM16 15l2-2h2l2 2v2l-2 2h-2l-2-2zM5 16l4-7h7l3 7M9 9l3 7M8 6h3', block: 'M10.5 14.5h3v3h-3z' },
+};
+
+export function CatIcon({ id, size = 18, className }: { id: string; size?: number; className?: string }) {
+  const ic = CAT_ICONS[id];
+  if (!ic) return null;
+  return (
+    <svg {...base(size, className)} aria-hidden>
+      {ic.line && <path d={ic.line} />}
+      {ic.block && <path d={ic.block} fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}

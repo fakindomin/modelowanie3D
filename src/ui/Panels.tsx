@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { ReadyIcon, ToolIcon, WizardIcon } from './KindIcons';
+import { CatIcon, ReadyIcon, ToolIcon, WizardIcon } from './KindIcons';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
 import { bodyRisk, opOff, type Op } from './ops';
@@ -272,7 +272,7 @@ export function Library() {
         USE_CATS.map((c) => {
           const items = itemsIn(c.id).filter((i) => i.kind !== 'wizard');
           if (!items.length) return null;
-          return category(`proj:${c.id}`, c.label, c.icon, items.length, items.length, items.map((i) => itemTile(i, `${c.id}:${i.label}`)));
+          return category(`proj:${c.id}`, c.label, <CatIcon id={c.id} size={24} />, items.length, items.length, items.map((i) => itemTile(i, `${c.id}:${i.label}`)));
         })}
       {partsOn && tab === 'tech' && query && <div className="lib-head">Części</div>}
       {partsOn &&
