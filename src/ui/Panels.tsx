@@ -165,16 +165,18 @@ export function Library() {
   // Projects: by use (only the technical tab); while searching, every match once.
   const projectsOn = tab === 'tech' && (mode === 'projects' || !!query);
   const partsOn = tab === 'tech' && (mode === 'parts' || !!query);
-  const projHits = projectsOn && query ? PROJECT_ITEMS.filter((i) => hit(i.label, i.desc, ...i.tags.map((t) => USE_CATS.find((c) => c.id === t)!.label))) : [];
-  const nothing = !!query && !figs.length && !xmas.length && !projHits.length && (!partsOn || sections.every((x) => !x.fams.length && !x.tiles.length));
+  // Wizards have their own place above Projekty / Części; the project lists hold ready-made things only.
+  const wizItems = tab === 'tech' ? PROJECT_ITEMS.filter((i) => i.kind === 'wizard' && (!query || hit(i.label, i.desc))) : [];
+  const projHits = projectsOn && query ? PROJECT_ITEMS.filter((i) => i.kind !== 'wizard' && hit(i.label, i.desc, ...i.tags.map((t) => USE_CATS.find((c) => c.id === t)!.label))) : [];
+  const nothing = !!query && !figs.length && !xmas.length && !projHits.length && !wizItems.length && (!partsOn || sections.every((x) => !x.fams.length && !x.tiles.length));
   // Main part groups start open; project categories start shut (the set lists the ones flipped).
   const shown = (id: string) => !!query || (id.startsWith('proj:') ? closed.has(id) : !closed.has(id));
   const runItem = runProjectItem;
-  const itemTile = (i: ProjectItem, key: string) => (
+  const itemTile = (i: ProjectItem, key: string, badge = true) => (
     <button key={key} className={i.kind === 'wizard' ? 'tile project by-wizard' : 'tile project'} onMouseEnter={(e) => showCard(i, e.currentTarget)} onMouseLeave={hideCard} onFocus={(e) => showCard(i, e.currentTarget)} onBlur={hideCard} onClick={() => { hideCard(); runItem(i); }}>
       <Icon type={i.icon} hole={false} />
       <span>{i.label}</span>
-      {i.kind === 'wizard' && <span className="badge" title="Kreator"><WizardIcon size={11} /></span>}
+      {badge && i.kind === 'wizard' && <span className="badge" title="Kreator"><WizardIcon size={11} /></span>}
     </button>
   );
   const groups = sections.filter((x) => x.fams.length || x.tiles.length);
@@ -192,7 +194,7 @@ export function Library() {
     </Fragment>
   );
   /** A main category: a tile with its icon, name and number of elements, opening smoothly. */
-  const category = (id: string, label: string, icon: string, count: number, groups: number, body: React.ReactNode) => {
+  const category = (id: string, label: string, icon: string | React.ReactNode, count: number, groups: number, body: React.ReactNode) => {
     const isOpen = shown(id);
     return (
       <section key={id} className="cat">
@@ -202,7 +204,7 @@ export function Library() {
           aria-expanded={isOpen}
           title={`${label}: ${count} ${elements(count)}${groups > 1 && groups !== count ? ` w ${groups} grupach` : ''}. Kliknij, żeby ${isOpen ? 'zwinąć' : 'rozwinąć'}.`}
         >
-          <Icon type={icon} hole={false} />
+          {typeof icon === 'string' ? <Icon type={icon} hole={false} /> : icon}
           <span className="cat-name">{label}</span>
           <span className="count">{count}</span>
           <span className="chev">▾</span>
@@ -216,6 +218,15 @@ export function Library() {
   return (
     <aside className="library" ref={ref}>
       <input className="lib-search" placeholder={tab === 'tech' ? 'Szukaj projektu albo części…' : 'Szukaj elementu…'} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} />
+      {wizItems.length > 0 &&
+        category(
+          'proj:wizards',
+          'Kreatory',
+          <span className="cat-ico"><WizardIcon size={22} /></span>,
+          wizItems.length,
+          wizItems.length,
+          wizItems.map((i) => itemTile(i, `wiz:${i.label}`, false)),
+        )}
       {tab === 'tech' && (
         <div className="lib-mode" role="tablist">
           <button role="tab" aria-selected={mode === 'projects'} className={mode === 'projects' ? 'on' : ''} onClick={() => setMode('projects')} title="Gotowe rzeczy według miejsca: dom, kuchnia, ogród, warsztat…">
@@ -259,7 +270,8 @@ export function Library() {
       {projectsOn &&
         !query &&
         USE_CATS.map((c) => {
-          const items = itemsIn(c.id);
+          const items = itemsIn(c.id).filter((i) => i.kind !== 'wizard');
+          if (!items.length) return null;
           return category(`proj:${c.id}`, c.label, c.icon, items.length, items.length, items.map((i) => itemTile(i, `${c.id}:${i.label}`)));
         })}
       {partsOn && tab === 'tech' && query && <div className="lib-head">Części</div>}

@@ -186,12 +186,6 @@ function Toolbar() {
       <PrinterPicker />
       <span className="sep" />
       <div className="group">
-        <button className="wiz-open" onClick={() => st.openWizard({ id: null })} title="Kreatory projektów: rama, regał… krok po kroku, z modelem na żywo i instrukcją">
-          <WizardIcon size={16} /> Kreatory
-        </button>
-      </div>
-      <span className="sep" />
-      <div className="group">
         <button onClick={st.fit} title="Pokaż cały model (F)"><ToolIcon id="fit" /> Całość</button>
         <button onClick={st.layoutOnBed} title="Ułóż na stole: obraca każdą bryłę tak, żeby potrzebowała jak najmniej podpór (przy remisie największą ścianką w dół), i rozkłada wszystkie obok siebie na stole drukarki">
           <ToolIcon id="layout" /> Ułóż
