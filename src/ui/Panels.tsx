@@ -22,7 +22,8 @@ import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, se
 import { fittingGeo } from '../parts/couplings';
 import { PROJECT_ITEMS, USE_CATS, itemsIn, type ProjectItem } from '../projects';
 import { cardInfo, fmtMin, type CardInfo } from './modelCard';
-import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf } from '../simple';
+import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../simple';
+import { PRINTERS } from '../wizards/frame';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 /** The „Części” tab: the building blocks in a few groups, each holding one or more of the old categories. */
@@ -1489,6 +1490,7 @@ function PartProperties({ part }: { part: Part }) {
         </details>
       )}
       {ends.length > 0 && <EndsSection part={part} fields={ends} />}
+      <PrinterFit body={part.body} />
       {part.type === 'figurine' && (
         <div className="row">
           <NumberInput value={height} min={30} max={300} unit="mm" onChange={setHeight} />
@@ -2050,6 +2052,71 @@ function badgeOf(members: Part[]) {
   return out.length ? out.join(', ') : 'złączona';
 }
 
+/** Size of a printed body and whether it fits the bed (turned flat by 90° if that helps). */
+export function bodyFit(parts: Part[], body: number, bed: Vec3) {
+  const b = bodyBox(parts, body);
+  const size = b.isEmpty() ? [0, 0, 0] : b.getSize(new THREE.Vector3()).toArray().map((v) => Math.round(v * 10) / 10);
+  const [x, y, z] = size;
+  const fits = z <= bed[2] + 0.01 && ((x <= bed[0] + 0.01 && y <= bed[1] + 0.01) || (x <= bed[1] + 0.01 && y <= bed[0] + 0.01));
+  return { size, fits };
+}
+
+const mmTxt = (v: number[]) => v.map((x) => String(Math.round(x)).replace('.', ',')).join(' × ');
+
+/** The printer used for the whole project, and whether the picked part fits its bed (live while sizing). */
+function PrinterFit({ body }: { body: number }) {
+  const printer = useStore((s) => s.printer);
+  const bed = useStore((s) => s.bed);
+  const setPrinter = useStore((s) => s.setPrinter);
+  const parts = useStore((s) => s.parts);
+  const own = !PRINTERS[printer];
+  const name = own ? 'własnej drukarki' : PRINTERS[printer].label;
+  const mine = bodyFit(parts, body, bed);
+  const others = [...new Set(printable(parts).map((p) => p.body))].filter((b) => b !== body && !bodyFit(parts, b, bed).fits).map((b) => mainOf(parts, b)?.name).filter(Boolean);
+  return (
+    <div className="printer-fit">
+      <h4>
+        Drukarka <Info text="Wymiary stołu sprawdzane na bieżąco przy każdej zmianie wymiaru. Ten sam wybór obowiązuje w kreatorach i przy eksporcie 3MF." />
+      </h4>
+      <label className="field">
+        <span>Stół</span>
+        <select value={own ? 'own' : printer} onChange={(e) => (e.target.value === 'own' ? setPrinter('own', bed) : setPrinter(e.target.value, PRINTERS[e.target.value].bed))}>
+          {Object.entries(PRINTERS).map(([k, pr]) => (
+            <option key={k} value={k}>
+              {pr.label} ({mmTxt(pr.bed)})
+            </option>
+          ))}
+          <option value="own">Własna…</option>
+        </select>
+      </label>
+      {own && (
+        <div className="xyz bed-own">
+          {(['Szer.', 'Gł.', 'Wys.'] as const).map((l, i) => (
+            <label key={l}>
+              <b>{l}</b>
+              <NumberInput
+                value={bed[i]}
+                min={50}
+                max={1000}
+                unit="mm"
+                onChange={(v) => {
+                  const next = [...bed] as Vec3;
+                  next[i] = v;
+                  setPrinter('own', next);
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      <div className={mine.fits ? 'fit ok' : 'fit bad'}>
+        {mine.fits ? `✓ Mieści się na stole ${name}: ${mmTxt(mine.size)} mm.` : `⚠ Nie mieści się na stole ${name}: część ma ${mmTxt(mine.size)} mm, a stół ${mmTxt(bed)} mm. Zmniejsz wymiary albo wybierz większą drukarkę.`}
+      </div>
+      {others.length > 0 && <div className="fit bad">⚠ Nie mieści się też: {others.join(', ')}.</div>}
+    </div>
+  );
+}
+
 /** Always-visible list of the printed parts of the model, each with its „drukuj” switch. */
 function Outliner() {
   const parts = useStore((s) => s.parts);
@@ -2058,6 +2125,7 @@ function Outliner() {
   const select = useStore((s) => s.select);
   const setHover = useStore((s) => s.setHover);
   const setFlags = useStore((s) => s.setFlags);
+  const bed = useStore((s) => s.bed);
   const bodies = [...new Set(parts.map((p) => p.body))].sort((a, b) => a - b);
   if (!parts.length) return null;
   const selBody = parts.find((p) => p.id === selectedId)?.body ?? groupBody(selectedId);
@@ -2087,6 +2155,11 @@ function Outliner() {
               />
               <span className="dot" style={{ background: main.color }} />
               <span className="label">{main.name}</span>
+              {on && !bodyFit(parts, b, bed).fits && (
+                <span className="nofit" title="Nie mieści się na stole drukarki">
+                  ⚠
+                </span>
+              )}
             </li>
           );
         })}

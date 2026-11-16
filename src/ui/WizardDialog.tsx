@@ -8,6 +8,7 @@ import { WIZARDS, WIZARD_GROUPS } from '../wizards';
 import { estimate, fmtH, fmtKg, type Estimate } from '../wizards/estimate';
 import type { Field, Plan, Wizard } from '../wizards/types';
 import { SizeRow } from './Panels';
+import { PRINTERS } from '../wizards/frame';
 
 /** Tiles that offer sizes in millimetres (wall 1,6 / 2 / 3 mm): the tiles stay as quick picks, and the exact value has its field and slider. */
 function sizeOf(f: Field): { label: string; min: number; max: number; step: number } | null {
@@ -55,7 +56,7 @@ export function WizardDialog() {
           Anuluj
         </button>
       </header>
-      {wz ? <Steps key={wz.id + (w.run ?? '')} wz={wz} initial={{ ...wz.defaults, ...(w.values ?? {}) }} run={w.run} /> : <Gallery />}
+      {wz ? <Steps key={wz.id + (w.run ?? '')} wz={wz} initial={{ ...wz.defaults, ...('printer' in wz.defaults && PRINTERS[useStore.getState().printer] ? { printer: useStore.getState().printer } : {}), ...(w.values ?? {}) }} run={w.run} /> : <Gallery />}
     </div>
   );
 }
@@ -110,7 +111,11 @@ function Steps({ wz, initial, run }: { wz: Wizard; initial: WizValues; run?: str
     return () => clearTimeout(t);
   }, [values, wz]);
 
-  const set = (key: string, v: string | number | boolean) => setValues((cur) => wz.set(cur, key, v));
+  const set = (key: string, v: string | number | boolean) => {
+    // The printer picked in a wizard becomes the printer of the whole app.
+    if (key === 'printer' && PRINTERS[String(v)]) useStore.getState().setPrinter(String(v), PRINTERS[String(v)].bed);
+    setValues((cur) => wz.set(cur, key, v));
+  };
   const s = wz.steps[step];
   const last = step === wz.steps.length - 1;
   const plan = result?.plan ?? null;

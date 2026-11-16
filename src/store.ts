@@ -73,6 +73,10 @@ interface State {
   hoveredId: string | null;
   /** Size parameter under the cursor (its row in the panel or its handle on the model). */
   dimHover: string | null;
+  /** The user's printer (key of PRINTERS, or 'own') and its bed in mm; shared by the editor and the wizards. */
+  printer: string;
+  bed: Vec3;
+  setPrinter(printer: string, bed: Vec3): void;
   setDimHover(key: string | null): void;
   past: Part[][];
   future: Part[][];
@@ -878,6 +882,17 @@ export const useStore = create<State>((set, get) => {
 
     select: (id) => set((s) => ({ selectedId: id, multi: [], faceSel: s.faceSel && s.faceSel.id === id ? s.faceSel : null, sketchSel: s.sketchSel && s.sketchSel.id === id ? s.sketchSel : null, suggest: s.suggest && s.suggest.id === id ? s.suggest : null })),
     dimHover: null,
+    printer: loadPrinter(),
+    bed: loadBed(),
+    setPrinter(printer, bed) {
+      try {
+        localStorage.setItem('m3d-printer', printer);
+        localStorage.setItem('m3d-bed', JSON.stringify(bed));
+      } catch {
+        /* storage unavailable */
+      }
+      set({ printer, bed });
+    },
     setDimHover: (key) => {
       if (get().dimHover !== key) set({ dimHover: key });
     },
@@ -2534,14 +2549,21 @@ function movedBy(parts: Part[], shift: Map<string, number>, axis: 0 | 1 | 2): Pa
 }
 
 export const BED_KEY = 'm3d-bed';
+function loadPrinter(): string {
+  try {
+    return localStorage.getItem('m3d-printer') ?? (localStorage.getItem('m3d-bed') ? 'own' : 'p1s');
+  } catch {
+    return 'p1s';
+  }
+}
 export function loadBed(): Vec3 {
   try {
-    const v = JSON.parse(localStorage.getItem(BED_KEY) ?? '');
+    const v = JSON.parse(localStorage.getItem('m3d-bed') ?? '');
     if (Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x > 0)) return v as Vec3;
   } catch {
     /* default below */
   }
-  return [220, 220, 250];
+  return [256, 256, 256];
 }
 
 function fixHolesIn(parts: Part[]): Part[] {
