@@ -2,10 +2,11 @@
 // Uruchom: sh scripts/check/pudelko.sh
 import { readFileSync } from 'node:fs';
 import { initManifold } from '../../src/geom/manifold';
-import { korpus, lidInBox, layout, bowlCutter, pudelkoNotes, drawers, drawerPlan } from '../../src/parts/pudelko';
+import { korpus, lidInBox, layout, bowlCutter, pudelkoNotes, drawers, drawerPlan, drawerMarks } from '../../src/parts/pudelko';
 import { DEFS } from '../../src/catalog';
 import { poseScores } from '../../src/geom/orient';
 import { groupPrintWith } from '../../src/export';
+import { applyTexture } from '../../src/geom/texture';
 
 const ref = JSON.parse(readFileSync(new URL('../../tools/pudelko/ref.json', import.meta.url), 'utf8'));
 const def: any = (DEFS as any).pudelko;
@@ -45,7 +46,7 @@ const cmp = (name: string, got: any, want: { bounds: number[][]; vol: number }, 
   const noBowl = lidInBox({ ...base, trayDepth: 0 });
   console.log(`objętość wybrana tacką: ${(noBowl.lid.volume() - pr.lid.volume()).toFixed(0)} mm3`);
   // wszystkie części przez PartDef
-  for (const piece of ['korpus', 'pokrywa', 'napis', 'szuflady']) { const m = def.build({ ...base, piece }); const i = info(m); console.log(piece, JSON.stringify(i)); if (i.st !== 'NoError' || i.vol <= 0) bad++; }
+  for (const piece of ['korpus', 'pokrywa', 'napis', 'szuflady', 'znak']) { const m = def.build({ ...base, piece }); const i = info(m); console.log(piece, JSON.stringify(i)); if (i.st !== 'NoError' || i.vol <= 0) bad++; }
   // profil tacki: max nachylenie
   const c = bowlCutter(0, 100, 0, 50, 0, 2, 18);
   console.log('bowlCutter', JSON.stringify(info(c)));
@@ -113,12 +114,37 @@ const cmp = (name: string, got: any, want: { bounds: number[][]; vol: number }, 
     expect('szuflada wysunięta na 100% jedzie w −Y o dł. − 21,5 i nie koliduje', Math.abs(bo.min[1] - (bd.min[1] - p0)) < 1e-6 && o.intersect(korpus(base)).volume() < 0.5, `(pull ${p0}, y min ${bo.min[1].toFixed(1)})`);
     expect('wysuwanie niezależne (prawa 50% ≠ lewa) i nie zmienia objętości', Math.abs(o2.volume() - dr0!.volume()) < 1e-3 && Math.abs(o2.boundingBox().min[1] - (bd.min[1] - p0 / 2)) < 1e-6 && Math.abs(o.volume() - dr0!.volume()) < 1e-3);
   }
+  { // znak „f” na spodzie szuflad
+    const mk = drawerMarks(base)!, mb = mk.boundingBox();
+    expect('znak f: wkładka 0,6 mm przy dnie, w obrysie szuflady', Math.abs(mb.min[2]) < 1e-6 && Math.abs(mb.max[2] - 0.6) < 1e-6 && mb.min[0] >= bd.min[0] && mb.max[0] <= bd.max[0] && mb.min[1] >= bd.min[1] && mb.max[1] <= bd.max[1], JSON.stringify(info(mk)));
+    expect('znak f: wkładka nie nachodzi na szuflady (wgłębienie pasuje)', mk.intersect(dr0!).volume() < 0.5, `(${mk.intersect(dr0!).volume().toFixed(3)} mm³)`);
+    const dOff = dv({ dMark: 'off' })!, dEng = dv({ dMark: 'engrave' })!;
+    expect('znak f: wgłębienie usuwa objętość znaku (2 szuflady)', Math.abs((dOff.volume() - dr0!.volume()) - mk.volume()) < 0.05 * mk.volume(), `(${(dOff.volume() - dr0!.volume()).toFixed(1)} vs ${mk.volume().toFixed(1)})`);
+    expect('znak f: grawer = wkładka (ta sama bryła szuflady), brak wkładki', Math.abs(dEng.volume() - dr0!.volume()) < 1e-6 && drawerMarks({ ...base, dMark: 'engrave' }) === null && drawerMarks({ ...base, dMark: 'off' }) === null);
+    const mo = drawerMarks({ ...base, drOpen: 100, drOpen2: 100 })!.boundingBox();
+    expect('znak f jedzie z szufladą przy wysuwaniu', Math.abs(mo.min[1] - (mb.min[1] - drawerPlan(base, d0).pull)) < 1e-6 && Math.abs(mo.max[1] - (mb.max[1] - drawerPlan(base, d0).pull)) < 1e-6);
+    expect('znak f za duży na wąską szufladę → błąd', pudelkoNotes({ ...base, nDr: 1, dMag: 'off', dH: 8, dL: 30, dRampH: 1.5, dRampL: 10, dMarkH: 30 }).some((n) => n.level === 'error' && /Znak/.test(n.text)));
+    expect('mała szuflada ze znakiem domyślnym jest dozwolona', pudelkoNotes({ ...base, ...small }).every((n) => n.level === 'ok'));
+    const fx = def.normalize({ ...base, nDr: 1, dMag: 'off', dH: 8, dL: 30, dRampH: 1.5, dRampL: 10, dMark: 'off' }, { ...base, nDr: 1, dMag: 'off', dH: 8, dL: 30, dRampH: 1.5, dRampL: 10, dMark: 'inlay', dMarkH: 30 });
+    expect('włączenie znaku zmniejsza go do dozwolonego', fx.dMark === 'inlay' && fx.dMarkH < 30 && pudelkoNotes(fx).every((n) => n.level === 'ok'), `(dMarkH ${fx.dMarkH})`);
+  }
+  { // faktury z projektu (ogólna „Faktura powierzchni”) na częściach pudełka
+    const pcs: any = { korpus: korpus(base), pokrywa: def.build({ ...base, piece: 'pokrywa' }), szuflady: dr0 };
+    const cases: [string, string, string, number][] = [['pokrywa', 'top', 'cut', 0.6], ['korpus', 'back', 'add', 0.8], ['korpus', 'left', 'add', 0.8], ['korpus', 'right', 'add', 0.8], ['szuflady', 'front', 'add', 0.6]];
+    for (const pattern of ['ribs', 'grooves', 'knurl', 'dots', 'honeycomb'])
+      for (const [pc, face, mode, depth] of cases.filter((c) => c[0] === 'pokrywa' || pattern === 'ribs')) {
+        const m = pcs[pc], r = applyTexture(m, { pattern, face, mode, depth, spacing: 3, angle: 0, margin: 2 } as any);
+        const dv2 = r.volume() - m.volume(), coll = pc === 'pokrywa' ? r.intersect(pcs.korpus).volume() : pc === 'szuflady' ? r.intersect(pcs.korpus).volume() : 0;
+        expect(`faktura ${pattern} / ${pc} ${face} (${mode})`, r.status() === 'NoError' && (pc !== 'pokrywa' || dv2 < 0) && coll < 0.5, `(Δobj ${dv2.toFixed(0)} mm³${pc === 'pokrywa' ? '' : ', ściany mają już żebra japandi – faktura prawie bez efektu'})`);
+        if (r !== m) r.delete();
+      }
+  }
   // przegroda zależy od magnesów
   expect('przegroda 3,0 z magnesami, 1,6 bez', Math.abs(drawerPlan(base, d0).P - 3.0) < 1e-9 && Math.abs(drawerPlan({ ...base, dMag: 'off' }, d0).P - 1.6) < 1e-9);
   // wariacje: każda budowa poprawna, korpus nie koliduje z pokrywą, magnesy szuflad mieszczą się w kieszeni
   const variants: any[] = [{}, { gD: 25 }, { gD: 60 }, { gH: 20 }, { gH: 60 }, { bookL: 70 }, { bookL: 160 }, { bookT: 8 }, { bookH: 20 }, { bookH: 40 }, { lL: 60 }, { lL: 110 }, { lW: 20 }, { lT: 10 }, { lT: 22 },
     { rampSide: 'left' }, { rampSide: 'off' }, { rampLen: 40, rampDepth: 3 }, { lidT: 3 }, { lidT: 6, trayDepth: 3 }, { gD: 28, bookL: 70, lL: 60, bookT: 8, gH: 25 }, { gD: 70, gH: 60, bookL: 180, lL: 120, bookH: 45 }, { gD: 20, bookL: 60, lL: 50, bookT: 5, gH: 25, bookH: 20, lT: 8, lW: 15 },
-    { nDr: 0 }, { nDr: 1 }, { nDr: 1, dW: 100, dX: 20 }, { nDr: 1, dH: 20, dL: 55 }, { dMag: 'off' }, { dMag: 'off', dH: 8, dL: 30 }, { nDr: 2, dW: 60 }, { nDr: 0, baseExtra: 8 }, { dRampH: 0 }, { dRampH: 5, dRampL: 40 }];
+    { nDr: 0 }, { nDr: 1 }, { nDr: 1, dW: 100, dX: 20 }, { nDr: 1, dH: 20, dL: 55 }, { dMag: 'off' }, { dMag: 'off', dH: 8, dL: 30 }, { nDr: 2, dW: 60 }, { nDr: 0, baseExtra: 8 }, { dRampH: 0 }, { dRampH: 5, dRampL: 40 }, { dMark: 'engrave' }, { dMark: 'off' }, { dMarkH: 24 }];
   for (const q of variants) {
     const pp = { ...base, ...q }; const t0 = Date.now();
     const k = korpus(pp), l = lidInBox(pp), dd = drawers(pp);
@@ -184,5 +210,14 @@ const cmp = (name: string, got: any, want: { bounds: number[][]; vol: number }, 
   expect('obiekt pokrywy = pokrywa + napis w jednej ramce', Math.abs(mh.manifold.volume() - (pl.volume() + pn.volume())) < 1, `(${mh.manifold.volume().toFixed(0)} vs ${(pl.volume() + pn.volume()).toFixed(0)})`);
   expect('części obiektu mają wspólne współrzędne (napis w obrysie pokrywy)', (() => { const a = mh.parts[0].manifold.boundingBox(), c = mh.parts[1].manifold.boundingBox(); return c.min[0] >= a.min[0] && c.max[0] <= a.max[0] && c.min[1] >= a.min[1] && c.max[1] <= a.max[1] && Math.abs(c.min[2] - a.min[2]) < 1e-6; })());
   expect('korpus bez zmian', merged.find((b: any) => b.body === 1) === bodiesT[0]);
+  // szuflady + znak „f”: jeden obiekt z dwiema częściami, znak leży na dnie (z = 0)
+  { const ps = pieces.map((x: any) => x.value), iS = ps.indexOf('szuflady'), iZ = ps.indexOf('znak');
+    const sz = def.build({ ...base, piece: 'szuflady' }), zn = def.build({ ...base, piece: 'znak' });
+    const b2: any[] = [{ body: 10, manifold: sz }, { body: 11, manifold: zn }];
+    const i2 = new Map(b2.map((b, i) => [b.body, { group: 'g1', piece: pieces[[iS, iZ][i]].value, printWith: pieces[[iS, iZ][i]].printWith, name: pieces[[iS, iZ][i]].label }]));
+    const m2 = groupPrintWith(b2, i2 as any) as any[];
+    expect('znak dołączony do szuflad: 1 obiekt z 2 częściami', m2.length === 1 && m2[0].parts?.length === 2, `(${m2.length} obiekt, części: ${m2[0]?.parts?.map((x: any) => x.name).join(' + ')})`);
+    expect('znak f leży w dnie szuflad (z 0–0,6) i nie nachodzi na szuflady', Math.abs(zn.boundingBox().min[2]) < 1e-6 && zn.intersect(sz).volume() < 0.5);
+  }
   console.log(bad ? `\n${bad} błędów` : '\nwszystko OK'); process.exit(bad ? 1 : 0);
 })();
