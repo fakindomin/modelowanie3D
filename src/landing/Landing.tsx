@@ -290,12 +290,11 @@ const WIZ_ICON: Record<string, string> = Object.fromEntries(
   PROJECT_ITEMS.flatMap((i) => (i.kind === 'wizard' ? [[i.wizard, i.icon]] : [])),
 );
 
-/** Badge marks: stage arrows for a wizard, a finished pot on the bed for a ready project. */
+/** Badge marks (icon only; the words live in the menu): stage arrows for a wizard, a finished pot on the bed for a ready project. */
 function KindBadge({ kind }: { kind: 'p' | 'w' }) {
   return (
-    <span className={'badge ' + kind}>
+    <span className={'badge ' + kind} title={kind === 'w' ? 'Kreator' : 'Gotowy projekt'} aria-label={kind === 'w' ? 'Kreator' : 'Gotowy projekt'} role="img">
       {kind === 'w' ? <WizardIcon /> : <ReadyIcon />}
-      {kind === 'w' ? 'Kreator' : 'Gotowy projekt'}
     </span>
   );
 }

@@ -245,16 +245,16 @@
 .landing .lcard h3 { flex: none; margin-top: 4px; overflow-wrap: anywhere; }
 .landing .lcard .cats { color: var(--muted); font-size: 13px; line-height: 1.4; }
 .landing .lcard:hover h3 { color: var(--orange); }
-.landing .badge { position: absolute; top: 8px; left: 8px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px 5px 7px; font: 700 12px/1 var(--f); letter-spacing: .01em; }
+.landing .badge { position: absolute; top: 8px; left: 8px; display: inline-flex; align-items: center; justify-content: center; padding: 6px; }
 .landing .badge.w { background: var(--army); color: #f1f2ea; }
 .landing .badge.p { background: var(--sheet); color: var(--ink); border: 1.5px solid var(--ink); }
-.landing .lcard .thumb .badge svg { width: 18px; height: 18px; flex: none; }
+.landing .lcard .thumb .badge svg { width: 20px; height: 20px; flex: none; }
 @keyframes lfade { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 640px) {
   .landing .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .landing .lcard { padding: 10px 10px 14px; }
   .landing .lcard h3 { font-size: 15px; }
-  .landing .badge { top: 6px; left: 6px; padding: 4px 6px; font-size: 11px; }
+  .landing .badge { top: 6px; left: 6px; padding: 5px; }
   .landing .lcard .thumb .badge svg { width: 14px; height: 14px; }
 }
 
