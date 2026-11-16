@@ -133,7 +133,7 @@ function gearboxPlan(v: WizValues): Plan {
     axes.forEach((p, k) => {
       const out = k === n, inp = k === 0;
       const hub = (crank && inp) || out;
-      const color = k % 2 ? '#e0782b' : '#4f8fd6';
+      const color = k % 2 ? '#f26419' : '#4f8fd6';
       const bore = motor && inp ? { boreT: 'dflat', bore: 5 } : { boreT: 'round', bore: r1(axle + 0.3) };
       let body: number | undefined;
       if (!inp) {

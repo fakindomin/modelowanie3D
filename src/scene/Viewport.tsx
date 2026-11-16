@@ -66,7 +66,7 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
   const { geometry } = built(part);
   const sec = useSection();
   const heavy = geometry.attributes.position.count > EDGE_LIMIT;
-  const edge = heavy ? null : look.selected ? '#ffffff' : look.snap ? '#5bb974' : look.hovered ? '#f3b47e' : look.sibling ? '#c99a6e' : null;
+  const edge = heavy ? null : look.selected ? '#ffffff' : look.snap ? '#8a9440' : look.hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
   const tint = look.selected && heavy ? '#5a3c22' : look.hovered ? '#3e3a36' : '#000000';
   return (
     <group name={part.id} position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
@@ -104,7 +104,7 @@ function MergedMember({ part, look }: { part: Part; look: Look }) {
       {(look.selected || look.hovered) && geometry.attributes.position.count <= EDGE_LIMIT && (
         <mesh geometry={geometry} raycast={noRaycast}>
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-          <Edges threshold={20} color={look.selected ? '#ffffff' : '#f3b47e'} lineWidth={1.5} />
+          <Edges threshold={20} color={look.selected ? '#ffffff' : '#ff9a5c'} lineWidth={1.5} />
         </mesh>
       )}
     </group>
@@ -580,7 +580,7 @@ function FaceSelMark() {
   const sel = useStore((s) => s.selectedId);
   const f = useMemo(() => (fs && fs.tris.length ? ({ kind: 'face', pick: fs.id, label: '', values: [], tris: fs.tris, anchor: [0, 0, 0] } as Feature) : null), [fs]);
   if (!f || fs!.id !== sel) return null;
-  return <FeatureMark f={f} color="#e8873a" />;
+  return <FeatureMark f={f} color="#f26419" />;
 }
 
 /** Letters A and B on the two ends of the selected pipe, matching "Koniec A / Koniec B" in the panel. */
@@ -649,7 +649,7 @@ function FaceHoverMark() {
 }
 
 const HOVER_COLOR = '#ffd54a';
-const PIN_COLOR = '#5bb974';
+const PIN_COLOR = '#8a9440';
 
 /** Highlight of one measured feature: its faces, or its edge line. */
 function FeatureMark({ f, color }: { f: Feature; color: string }) {
@@ -722,7 +722,7 @@ function CutPlane() {
   return (
     <mesh position={c.toArray()} rotation={rot} raycast={noRaycast} renderOrder={5}>
       <planeGeometry args={size} />
-      <meshBasicMaterial color="#e8873a" transparent opacity={0.28} side={THREE.DoubleSide} depthWrite={false} />
+      <meshBasicMaterial color="#f26419" transparent opacity={0.28} side={THREE.DoubleSide} depthWrite={false} />
     </mesh>
   );
 }

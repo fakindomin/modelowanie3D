@@ -149,7 +149,7 @@ function plan(v: WizValues): Plan {
   if (lamp) for (const y of ys) nodes.push({ c: new THREE.Vector3(W / 2, y, zTop), dirs: [X.clone(), X.clone().negate(), inward(y, ys[0], new THREE.Vector3(0, 1, 0))], kind: 'tee' });
 
   const FIT: Record<string, { name: string; where: string; color: string }> = {
-    corner3: { name: 'Narożnik 3D (3 ramiona)', where: 'Narożniki na dole i na górze ramy', color: '#e8873a' },
+    corner3: { name: 'Narożnik 3D (3 ramiona)', where: 'Narożniki na dole i na górze ramy', color: '#f26419' },
     corner4: { name: 'Łącznik 4-ramienny', where: 'Słupki na wysokości poziomów usztywniających', color: '#d4692b' },
     tee: { name: 'Trójnik T', where: 'Środek dwóch górnych krawędzi, trzyma drążek pod lampę', color: '#c9772f' },
   };
@@ -323,7 +323,7 @@ function plan(v: WizValues): Plan {
         params: cp,
         qty: 0,
         group: 'clip',
-        color: '#5bb974',
+        color: '#8a9440',
         material: 'PETG',
         where: 'W każdym końcu rury przy łączniku (warto dodrukować 4 zapasowe)',
         how: 'Leży płasko, bez podpór. Tylko PETG albo nylon, z PLA pęka.',

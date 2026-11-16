@@ -52,7 +52,7 @@ function organizer(v: WizValues): Plan {
           name: bins ? 'Pojemnik' : 'Wkład',
           params: { ...base, W: r1(W - GAP), D: r1(D - GAP), nx: cx, ny: cy, div: '' },
           position: [r1(x + W / 2), r1(y + D / 2), 0],
-          color: '#c9b48a',
+          color: '#d2d4cb',
           textures: faceTextures(v, ['front', 'back', 'left', 'right']),
         });
         const box = t.parts().find((p) => p.id === id)!;
@@ -213,7 +213,7 @@ function boxPlan(v: WizValues): Plan {
     let id: string;
     if (close === 'hinge') id = t.addHinged(params);
     else {
-      id = t.add('box', { name: 'Pudełko', params, color: '#a9aeb3' });
+      id = t.add('box', { name: 'Pudełko', params, color: '#b3b6aa' });
       if (close === 'magnet') t.addMagnets(id, { size: String(v.mag), layout: shape === 'hex' ? '6' : '4', hidden: false, lid: 'flat' });
       else t.addLid(id);
       if (params.ends === 'both') {
@@ -237,8 +237,8 @@ function boxPlan(v: WizValues): Plan {
       const away = lidFace(lid) === 'bottom';
       const cx = away ? r1(b.max.x + 20) : r1((b.min.x + b.max.x) / 2), cy = r1((b.min.y + b.max.y) / 2);
       const z = away ? 0 : r1(b.max.z);
-      if (knob === 'knob') t.add('cylinder', { name: 'Gałka', params: { D: 16, H: 10 }, position: [cx, cy, z], color: '#e8873a', edges: { kind: 'round', r: 2, vertical: false, top: true, bottom: false } });
-      else t.add('cube', { name: 'Uchwyt', params: { W: r1(Math.min(40, (b.max.x - b.min.x) * 0.4)), D: 8, H: 6 }, position: [away ? r1(b.max.x + 10 + Math.min(20, (b.max.x - b.min.x) * 0.2)) : cx, r1(b.min.y + 8), z], color: '#e8873a', edges: { kind: 'round', r: 1.5, vertical: true, top: true, bottom: false } });
+      if (knob === 'knob') t.add('cylinder', { name: 'Gałka', params: { D: 16, H: 10 }, position: [cx, cy, z], color: '#f26419', edges: { kind: 'round', r: 2, vertical: false, top: true, bottom: false } });
+      else t.add('cube', { name: 'Uchwyt', params: { W: r1(Math.min(40, (b.max.x - b.min.x) * 0.4)), D: 8, H: 6 }, position: [away ? r1(b.max.x + 10 + Math.min(20, (b.max.x - b.min.x) * 0.2)) : cx, r1(b.min.y + 8), z], color: '#f26419', edges: { kind: 'round', r: 1.5, vertical: true, top: true, bottom: false } });
     }
     if (label) {
       if (v.textOn === 'lid' && lid) {

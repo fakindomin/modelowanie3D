@@ -243,7 +243,7 @@ function panelPlan(v: WizValues): Plan {
   const knobs = Number(v.knobs) ? Number(v.pots) || 0 : 0;
 
   const built = host.simulate((t) => {
-    const id = t.add('box', { name: 'Panel', params: { shape: 'rect', W, D, H, T: wall, B: 2, nx: 1, ny: 1, rad: Number(v.rad), divMode: 'grid', div: '' }, color: '#a9aeb3' });
+    const id = t.add('box', { name: 'Panel', params: { shape: 'rect', W, D, H, T: wall, B: 2, nx: 1, ny: 1, rad: Number(v.rad), divMode: 'grid', div: '' }, color: '#b3b6aa' });
     t.addLid(id);
     const box = t.parts().find((p) => p.id === id)!;
     const lid = t.parts().find((p) => p.type === 'lid')!;
@@ -272,7 +272,7 @@ function panelPlan(v: WizValues): Plan {
     // Printed knobs for the pots, beside the lid.
     for (let i = 0; i < knobs; i++) {
       const kx = r1(lb.max.x + 20 + i * 26), ky = r1(lb.min.y + 12);
-      const kid = t.add('cylinder', { name: 'Gałka potencjometru', params: { D: 20, H: 14 }, position: [kx, ky, 0], color: '#e8873a', edges: { kind: 'round', r: 1.5, vertical: false, top: true, bottom: false }, texture: { ...texture('knurl', 'around'), depth: 0.6, margin: 2 } });
+      const kid = t.add('cylinder', { name: 'Gałka potencjometru', params: { D: 20, H: 14 }, position: [kx, ky, 0], color: '#f26419', edges: { kind: 'round', r: 1.5, vertical: false, top: true, bottom: false }, texture: { ...texture('knurl', 'around'), depth: 0.6, margin: 2 } });
       const knob = t.parts().find((p) => p.id === kid)!;
       t.add('hole', { name: 'Otwór na oś 6 mm', params: { D: 6, H: 11, luz: 0.1 }, position: [kx, ky, -0.01], body: knob.body });
     }
@@ -394,7 +394,7 @@ function junctionPlan(v: WizValues): Plan {
   const posts: [number, number][] = [-1, 1].flatMap((sx) => [-1, 1].map((sy) => [sx * (W / 2 - wall - 3.5), sy * (D / 2 - wall - 3.5)] as [number, number]));
   const dropped: string[] = [];
   const built = host.simulate((t) => {
-    const id = t.add('box', { name: 'Puszka', params: { shape: 'rect', W, D, H, T: wall, B, nx: 1, ny: 1, rad: Number(v.rad), divMode: 'grid', div: '' }, color: '#a9aeb3' });
+    const id = t.add('box', { name: 'Puszka', params: { shape: 'rect', W, D, H, T: wall, B, nx: 1, ny: 1, rad: Number(v.rad), divMode: 'grid', div: '' }, color: '#b3b6aa' });
     let box = t.parts().find((p) => p.id === id)!;
     const [cx, cy] = box.position;
     // Corner posts for the lid screws, merged with both walls.
@@ -425,7 +425,7 @@ function junctionPlan(v: WizValues): Plan {
       for (const sx of [-1, 1]) t.add('hole', { name: 'Otwór na wkręt do ściany', params: { D: 4.5, H: B + 2, luz: 0 }, position: [r1(cx + sx * Math.min(W / 4, W / 2 - wall - 15)), r1(cy), -1], body: box.body });
     // Flat lid with screw holes, and a TPU gasket as wide as the posts.
     const lx = r1(b.max.x + 20 + W / 2 + (v.mount === 'ears' ? 20 : 0));
-    const lidId = t.add('lid', { name: 'Pokrywka puszki', params: { shape: 'rect', W, D, T: 3, wall, R: 0, luz: 0.3, rad: Number(v.rad), nx: 1, ny: 1 }, fitTo: id, position: [lx, r1(cy), 0], color: '#e8873a' });
+    const lidId = t.add('lid', { name: 'Pokrywka puszki', params: { shape: 'rect', W, D, T: 3, wall, R: 0, luz: 0.3, rad: Number(v.rad), nx: 1, ny: 1 }, fitTo: id, position: [lx, r1(cy), 0], color: '#f26419' });
     const lid = t.parts().find((p) => p.id === lidId)!;
     for (const [x, y] of posts) t.add('hole', { name: 'Otwór na wkręt', params: { D: 3.4, H: 5, luz: 0 }, position: [r1(lx + x), r1(cy + y), -1], body: lid.body });
     if (v.gasket) {

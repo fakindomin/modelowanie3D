@@ -375,7 +375,7 @@ function DimLine({ pts, active }: { pts: THREE.Vector3[]; active: boolean }) {
   useEffect(() => () => geo.dispose(), [geo]);
   return (
     <lineSegments geometry={geo} renderOrder={6}>
-      <lineBasicMaterial color={active ? '#f3b47e' : '#dfe6e0'} transparent opacity={active ? 1 : 0.8} depthTest={false} depthWrite={false} />
+      <lineBasicMaterial color={active ? '#ff9a5c' : '#dfe6e0'} transparent opacity={active ? 1 : 0.8} depthTest={false} depthWrite={false} />
     </lineSegments>
   );
 }
@@ -402,7 +402,7 @@ function Dot({ position, visible, active, ...ev }: { position: THREE.Vector3; vi
   return (
     <mesh ref={ref} position={position} userData={{ handle: true }} renderOrder={7} raycast={visible ? THREE.Mesh.prototype.raycast : noHit} {...ev}>
       <sphereGeometry args={[active ? 1.8 : 1.3, 16, 12]} />
-      <meshBasicMaterial color={active ? '#f3b47e' : '#ffffff'} transparent opacity={visible ? 1 : 0} depthTest={false} depthWrite={false} />
+      <meshBasicMaterial color={active ? '#ff9a5c' : '#ffffff'} transparent opacity={visible ? 1 : 0} depthTest={false} depthWrite={false} />
     </mesh>
   );
 }
@@ -427,7 +427,7 @@ function FaceOutline({ box, axis, sign, strong }: { box: THREE.Box3; axis: 0 | 1
   return (
     // @ts-expect-error three's <line> clashes with the SVG one in JSX types
     <line geometry={geo} renderOrder={6}>
-      <lineBasicMaterial color={strong ? '#f3b47e' : '#c99a6e'} transparent opacity={strong ? 1 : 0.55} depthTest={!strong} />
+      <lineBasicMaterial color={strong ? '#ff9a5c' : '#c94f10'} transparent opacity={strong ? 1 : 0.55} depthTest={!strong} />
     </line>
   );
 }

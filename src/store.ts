@@ -25,7 +25,8 @@ import { gridSegments, layoutOf } from './geom/dividers';
 import { DOWEL_LUZ, dowelSpots } from './geom/split';
 import { decodeMeshes, loadStoredMeshes, parseSTL, persistMeshes, registerMesh, toSolid } from './geom/meshes';
 
-export const PALETTE = ['#a9aeb3', '#e8873a', '#5bb974', '#c9b48a', '#7f8c99', '#d97757', '#8fbf9f', '#b8a07a'];
+/** Base colours of the brand first: gray, army green, orange, then their lighter and darker shades. */
+export const PALETTE = ['#b3b6aa', '#6b7530', '#f26419', '#d2d4cb', '#8a9440', '#9a9d91', '#ff9a5c', '#4b5320'];
 const FIG_PALETTE = ['#e9d8c4', '#f0b6a8', '#b9d7a8', '#a8c8e8', '#f2d68a', '#d8b8e8'];
 export const HOLE_COLOR = '#8b939e';
 const STORAGE_KEY = 'modelowanie3d.project';

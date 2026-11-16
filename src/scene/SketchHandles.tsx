@@ -179,11 +179,11 @@ function Handles({ part }: { part: Part }) {
 
   return (
     <group position={part.position} rotation={part.rotation.map((v) => v * DEG) as [number, number, number]} renderOrder={5}>
-      <Line points={[...outline, outline[0]].map((v) => v.clone().add(lift))} color="#5bb974" lineWidth={2} depthTest={false} />
-      {walls && <Line points={[...outline, outline[0]].map(up)} color="#5bb974" lineWidth={1.5} transparent opacity={0.8} />}
+      <Line points={[...outline, outline[0]].map((v) => v.clone().add(lift))} color="#8a9440" lineWidth={2} depthTest={false} />
+      {walls && <Line points={[...outline, outline[0]].map(up)} color="#8a9440" lineWidth={1.5} transparent opacity={0.8} />}
       {walls && nodes.map((q, i) => {
         const a = to3(q.x, q.y);
-        return <Line key={'v' + i} points={[a, up(a)]} color="#5bb974" lineWidth={1} transparent opacity={0.6} />;
+        return <Line key={'v' + i} points={[a, up(a)]} color="#8a9440" lineWidth={1} transparent opacity={0.6} />;
       })}
       {nodes.map((_, i) => {
         const path = edgePath(nodes, i).map(([x, y]) => to3(x, y).add(lift));
@@ -193,8 +193,8 @@ function Handles({ part }: { part: Part }) {
         const top = path.map(up);
         return (
           <group key={'e' + i}>
-            {on && <Line points={path} color="#f3b47e" lineWidth={4} depthTest={false} />}
-            {on && walls && <Line points={[...top].reverse().concat([path[0]]).concat(path).concat([top[top.length - 1]])} color="#f3b47e" lineWidth={3} depthTest={false} />}
+            {on && <Line points={path} color="#ff9a5c" lineWidth={4} depthTest={false} />}
+            {on && walls && <Line points={[...top].reverse().concat([path[0]]).concat(path).concat([top[top.length - 1]])} color="#ff9a5c" lineWidth={3} depthTest={false} />}
             {path.slice(1).map((b, s) => {
               const a = path[s];
               const len = a.distanceTo(b);
@@ -224,7 +224,7 @@ function Handles({ part }: { part: Part }) {
           key={'p' + i}
           position={to3(q.x, q.y).add(lift)}
           visible={near.includes(i) || (mine?.kind === 'pt' && mine.i === i) || bad.pts.has(i)}
-          color={mine?.kind === 'pt' && mine.i === i ? '#f3b47e' : bad.pts.has(i) ? '#ff6b6b' : '#e9e9e7'}
+          color={mine?.kind === 'pt' && mine.i === i ? '#ff9a5c' : bad.pts.has(i) ? '#ff6b6b' : '#e9e9e7'}
           onPointerDown={(e) => press(e, 'pt', i)}
         />
       ))}
@@ -281,7 +281,7 @@ function Wall({ hot, side, bottom, top, onPointerDown, onOver }: { hot: boolean;
       }}
       onPointerOut={() => onOver(false)}
     >
-      <meshBasicMaterial color="#f3b47e" transparent opacity={hot ? 0.28 : 0} depthWrite={false} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} />
+      <meshBasicMaterial color="#ff9a5c" transparent opacity={hot ? 0.28 : 0} depthWrite={false} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} />
     </mesh>
   );
 }

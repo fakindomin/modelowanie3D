@@ -57,7 +57,7 @@ function domePlan(v: WizValues): Plan {
     params: { d: st.d, luz, depth, wall, core, sockets: socketsToString(kind.sockets), label: roleOf.get(k)! },
     qty: kind.n,
     group: 'hub',
-    color: '#e0782b',
+    color: '#f26419',
     material: 'PETG',
     where: `Gniazda: ${kind.sockets.map((s) => s.cls).join('-')}`,
     how: 'Płaską stroną (z literami) do stołu, bez podpór.',
