@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { ReadyIcon, WizardIcon } from './KindIcons';
+import { ReadyIcon, ToolIcon, WizardIcon } from './KindIcons';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
 import { bodyRisk, opOff, type Op } from './ops';
@@ -2086,7 +2086,7 @@ export function PrinterPicker() {
   return (
     <div className="printer-pick">
       <label title="Drukarka dla całej strony: wymiary zatrzymują się na granicy jej stołu, kreatory i eksport 3MF też z niej korzystają. „Bez limitu” wyłącza ograniczenie.">
-        🖨
+        <ToolIcon id="printer" />
         <select value={own ? 'own' : printer} onChange={(e) => (e.target.value === 'own' || e.target.value === 'none' ? setPrinter(e.target.value, bed) : setPrinter(e.target.value, PRINTERS[e.target.value].bed))}>
           {Object.entries(PRINTERS).map(([k, pr]) => (
             <option key={k} value={k} title={`Stół ${mmTxt(pr.bed)} mm`}>

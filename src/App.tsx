@@ -2,7 +2,7 @@ import { printable } from './simple';
 import { swietaFileName } from './figurines/swieta';
 import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
-import { WizardIcon } from './ui/KindIcons';
+import { ToolIcon, WizardIcon } from './ui/KindIcons';
 import { Library, PrinterPicker, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
 import { WizardDialog } from './ui/WizardDialog';
@@ -170,16 +170,16 @@ function Toolbar() {
       </div>
       <span className="sep" />
       <div className="group">
-        <button onClick={st.undo} disabled={!st.past.length} title="Cofnij (Ctrl+Z)">↶</button>
-        <button onClick={st.redo} disabled={!st.future.length} title="Ponów (Ctrl+Y)">↷</button>
+        <button onClick={st.undo} disabled={!st.past.length} title="Cofnij (Ctrl+Z)" aria-label="Cofnij"><ToolIcon id="undo" /></button>
+        <button onClick={st.redo} disabled={!st.future.length} title="Ponów (Ctrl+Y)" aria-label="Ponów"><ToolIcon id="redo" /></button>
       </div>
       <span className="sep" />
       <div className="group">
-        <button onClick={act.fresh}>Nowy</button>
+        <button onClick={act.fresh}><ToolIcon id="new" /> Nowy</button>
         <button onClick={act.open} title="Otwiera zapisany projekt (.json)">
-          Otwórz
+          <ToolIcon id="open" /> Otwórz
         </button>
-        <button onClick={act.save}>Zapisz</button>
+        <button onClick={act.save}><ToolIcon id="save" /> Zapisz</button>
         {act.input}
       </div>
       <span className="sep" />
@@ -192,20 +192,20 @@ function Toolbar() {
       </div>
       <span className="sep" />
       <div className="group">
-        <button onClick={st.fit} title="Pokaż cały model (F)">⤢ Całość</button>
+        <button onClick={st.fit} title="Pokaż cały model (F)"><ToolIcon id="fit" /> Całość</button>
         <button onClick={st.layoutOnBed} title="Ułóż na stole: obraca każdą bryłę tak, żeby potrzebowała jak najmniej podpór (przy remisie największą ścianką w dół), i rozkłada wszystkie obok siebie na stole drukarki">
-          ⊞ Ułóż
+          <ToolIcon id="layout" /> Ułóż
         </button>
         <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">
-          📏 Wymiary
+          <ToolIcon id="measure" /> Wymiary
         </button>
         <button className={st.section ? 'toggle on' : 'toggle'} onClick={() => st.setSection(!st.section)} title="Przekrój: ucina przednią połowę zaznaczonej części pionową płaszczyzną przez jej środek, żeby zobaczyć wnętrze (np. pustą kulę czubka choinkowego). To tylko widok, wydruk i eksport się nie zmieniają.">
-          {st.section ? '✓ Przekrój' : '◧ Przekrój'}
+          <ToolIcon id="section" /> Przekrój
         </button>
       </div>
       <div className="group right">
         <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Podgląd wydruku: wynik po wycięciu otworów i sklejeniu brył">
-          {st.preview ? '✓ Podgląd' : 'Podgląd'}
+          <ToolIcon id="preview" /> Podgląd
         </button>
         {/* Model review (internal): opened with ?przeglad in the address. */}
         {REVIEW_ON && (
@@ -213,12 +213,12 @@ function Toolbar() {
             🔍 Przegląd
           </button>
         )}
-        <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają">Sprawdź model</button>
+        <button onClick={() => st.runCheck()} title="Szuka nachodzących brył, za cienkich ścianek i otworów, które nic nie wycinają"><ToolIcon id="check" /> Sprawdź model</button>
         <button onClick={act.manual} title="Co wydrukować, co kupić, co do czego pasuje i jak złożyć. Do wydruku albo PDF">
-          📖 Instrukcja
+          <ToolIcon id="manual" /> Instrukcja
         </button>
-        <button className="primary" onClick={() => act.exportAs('stl')}>Eksport STL</button>
-        <button className="primary" onClick={() => act.exportAs('3mf')}>Eksport 3MF</button>
+        <button className="primary" onClick={() => act.exportAs('stl')}><ToolIcon id="export" /> Eksport STL</button>
+        <button className="primary" onClick={() => act.exportAs('3mf')}><ToolIcon id="export" /> Eksport 3MF</button>
       </div>
     </header>
   );
