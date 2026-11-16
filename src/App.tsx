@@ -1,4 +1,5 @@
 import { printable } from './simple';
+import { swietaFileName } from './figurines/swieta';
 import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
 import { Library, PrinterPicker, Properties } from './ui/Panels';
@@ -83,6 +84,8 @@ export function useProjectActions() {
   const exportAs = (fmt: 'stl' | '3mf', fileName?: string) => {
     const { bodies, names, turnedN } = printBodies(printable(st.parts));
     if (!bodies.length) return st.notify('Brak brył do eksportu. Dodaj jakiś element.');
+    // Jeden świąteczny element (etykieta, czubek, foremka): plik nazwany od niego, np. „Dla Ania.stl”.
+    const base = fileName ?? (st.tab === 'fig' ? swietaFileName(printable(st.parts)) : null) ?? (st.tab === 'fig' ? 'figurki' : 'model');
     // STL: one file per kind of print (as in the manual: number, name, how many to print), not one per copy.
     let out = bodies;
     let plateN = 0;
@@ -92,7 +95,7 @@ export function useProjectActions() {
       const groups = new Map<number, string>();
       for (const it of items) for (const b of it.bodies) groups.set(b, it.material);
       const bed = loadBed();
-      plateN = export3MF(bodies, fileName ?? (st.tab === 'fig' ? 'figurki' : 'model'), names, false, [bed[0], bed[1]], new Set(groups.values()).size > 1 ? groups : new Map());
+      plateN = export3MF(bodies, base, names, false, [bed[0], bed[1]], new Set(groups.values()).size > 1 ? groups : new Map());
     } else {
       out = items.flatMap((it) => {
         const b = bodies.find((x) => x.body === it.bodies[0]);
@@ -100,7 +103,7 @@ export function useProjectActions() {
         names.set(b.body, `${/^\d+$/.test(it.no) ? it.no.padStart(2, '0') : it.no} ${it.name}${it.qty > 1 ? ` x${it.qty}` : ''}`);
         return [b];
       });
-      exportSTL(out, fileName ?? (st.tab === 'fig' ? 'figurki' : 'model'), names, true);
+      exportSTL(out, base, names, true);
     }
     bodies.forEach((b) => {
       b.geometry.dispose();
@@ -194,6 +197,9 @@ function Toolbar() {
         </button>
         <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">
           📏 Wymiary
+        </button>
+        <button className={st.section ? 'toggle on' : 'toggle'} onClick={() => st.setSection(!st.section)} title="Przekrój: ucina przednią połowę zaznaczonej części pionową płaszczyzną przez jej środek, żeby zobaczyć wnętrze (np. pustą kulę czubka choinkowego). To tylko widok, wydruk i eksport się nie zmieniają.">
+          {st.section ? '✓ Przekrój' : '◧ Przekrój'}
         </button>
       </div>
       <div className="group right">

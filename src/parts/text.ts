@@ -6,6 +6,7 @@ import sansBold from './fonts/sans-bold.json';
 import sans from './fonts/sans.json';
 import serifBold from './fonts/serif-bold.json';
 import monoBold from './fonts/mono-bold.json';
+import poppinsBold from './fonts/poppins-bold.json';
 
 /** Glyph outlines exported from the DejaVu fonts by tools/font2json.py (font units, y up). */
 interface FontData {
@@ -14,7 +15,8 @@ interface FontData {
   glyphs: Record<string, [number, string]>;
 }
 
-const FONTS = { 'sans-bold': sansBold, sans, 'serif-bold': serifBold, 'mono-bold': monoBold } as unknown as Record<string, FontData>;
+/** Poppins Bold (SIL OFL, subset) is used by the Christmas label (src/figurines/swieta.ts), not offered in the text tool's font list. */
+const FONTS = { 'sans-bold': sansBold, sans, 'serif-bold': serifBold, 'mono-bold': monoBold, 'poppins-bold': poppinsBold } as unknown as Record<string, FontData>;
 
 const outlines = new Map<string, [number, number][][]>();
 
@@ -49,6 +51,24 @@ function glyphPolys(fontKey: string, path: string, steps: number): [number, numb
   if (cur.length > 2) out.push(cur);
   outlines.set(k, out);
   return out;
+}
+
+/**
+ * One line of text as polygons standing on the baseline (x from 0, y up), capitals `cap` mm tall, curves cut into `steps` pieces.
+ * `width` is the sum of the advance widths plus `tracking` between letters (none after the last one), as a layout needs it.
+ */
+export function textLine(text: string, fontKey: string, cap: number, tracking: number, steps: number): { polys: [number, number][][]; width: number } {
+  const font = FONTS[fontKey] ?? FONTS['sans-bold'];
+  const s = cap / font.cap;
+  const polys: [number, number][][] = [];
+  let x = 0;
+  for (const ch of text) {
+    const g = font.glyphs[ch] ?? font.glyphs['?'];
+    if (!g) continue;
+    for (const poly of glyphPolys(fontKey, g[1], steps)) polys.push(poly.map(([px, py]) => [x + px * s, py * s]));
+    x += g[0] * s + tracking;
+  }
+  return { polys, width: x - tracking };
 }
 
 /** Outline of a line of text, letters `size` mm tall (capital letters), centred on the origin. */
