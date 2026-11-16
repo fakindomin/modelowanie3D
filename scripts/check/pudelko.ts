@@ -108,6 +108,11 @@ const cmp = (name: string, got: any, want: { bounds: number[][]; vol: number }, 
   expect('bez szuflad: dodatek podnosi dno', Math.abs(Lx({ nDr: 0, baseExtra: 6 }).H - L0d.H - 6) < 0.11);
   expect('bez szuflad: korpus z dołem pełnym i napisem, poprawny', (() => { const k0 = korpus({ ...base, nDr: 0 }); return k0.status() === 'NoError' && k0.volume() > 0 && k0.intersect(lidInBox({ ...base, nDr: 0 }).lid).volume() < 0.5; })());
   { const gm = layout({ ...base, nDr: 0, bookH: 60, gH: 20 }); expect('bez szuflad: wysokie bibułki podnoszą minimum', pudelkoNotes({ ...base, nDr: 0, bookH: 60, gH: 20 }).every((n) => n.level === 'ok') && gm.gFloor > 30, `(gFloor ${gm.gFloor})`); }
+  { // wysuwanie szuflad (podgląd): niezależnie, bez kolizji, bryła bez zmian
+    const o = dv({ drOpen: 100 })!, bo = o.boundingBox(), o2 = dv({ drOpen2: 50 })!, p0 = drawerPlan(base, d0).pull;
+    expect('szuflada wysunięta na 100% jedzie w −Y o dł. − 21,5 i nie koliduje', Math.abs(bo.min[1] - (bd.min[1] - p0)) < 1e-6 && o.intersect(korpus(base)).volume() < 0.5, `(pull ${p0}, y min ${bo.min[1].toFixed(1)})`);
+    expect('wysuwanie niezależne (prawa 50% ≠ lewa) i nie zmienia objętości', Math.abs(o2.volume() - dr0!.volume()) < 1e-3 && Math.abs(o2.boundingBox().min[1] - (bd.min[1] - p0 / 2)) < 1e-6 && Math.abs(o.volume() - dr0!.volume()) < 1e-3);
+  }
   // przegroda zależy od magnesów
   expect('przegroda 3,0 z magnesami, 1,6 bez', Math.abs(drawerPlan(base, d0).P - 3.0) < 1e-9 && Math.abs(drawerPlan({ ...base, dMag: 'off' }, d0).P - 1.6) < 1e-9);
   // wariacje: każda budowa poprawna, korpus nie koliduje z pokrywą, magnesy szuflad mieszczą się w kieszeni

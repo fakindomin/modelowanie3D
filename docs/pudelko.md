@@ -70,6 +70,7 @@ Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 - Suwak „Pokrywa: wysunięcie (podgląd)” 0–100 % przesuwa pokrywę i napis w −X (kanał otwarty z lewej), 100 % = zaparkowana na magnesach jak w v11. Nie zmienia wydruku.
 - Pozycja do druku: `PartDef.printTurn` (nowe pole, `src/parts/def.ts`, użyte w `printBodies` w `src/App.tsx`): pokrywa i napis obracają się o 180° wokół X (górą do stołu; nawisy 6406 → 144 mm²). Automatyczny `bestPose` układał pokrywę pionowo na krótkim brzegu, więc dla pudełka jest pomijany (`pudelko` w `KEEP` w `src/geom/orient.ts`).
 - Napis dołącza do pokrywy w eksporcie: `PieceDef.printWith` (`src/parts/def.ts`) + `groupPrintWith` (`src/export.ts`, wywołane w `printBodies` w `src/App.tsx`) robią z pokrywy i wkładki jeden obiekt 3MF z dwiema częściami (`ColoredBody.parts`) we wspólnych współrzędnych; w slicerze każda część dostaje własny filament. Test: `scripts/check/pudelko.sh`.
+- Suwaki „Szuflada (lewa/prawa): wysunięcie (podgląd)” 0–100 % wysuwają szuflady w −Y niezależnie od siebie (100 % = dł. − 21,5 mm, do magnesów przednich); jak przy pokrywie tylko podgląd.
 - Szuflady są osobną częścią `szuflady` (do dwóch brył w jednej części), w złożeniu dnem równo z dołem pudełka; w druku leżą dnem do stołu.
 
 ## Punkt 3: szuflady (gotowe)

@@ -281,7 +281,7 @@ export function drawers(p: Params): Manifold | null {
   const R = val(p, 'dRampH'), RL = Math.max(0, Math.min(val(p, 'dRampL'), (Ld - RW - FP - 5) / 2));
   const zt = RAIL_Z;
   const parts: Manifold[] = [];
-  for (const { xa, xb } of D.bays) {
+  for (const [bi, { xa, xb }] of D.bays.entries()) {
     const xl = xa + DR_CLR, xr = xb - DR_CLR, xc = (xl + xr) / 2;
     let d = U([bb(xl, xr, FP - 1.0, Ld, 0, Hd), ext(outl, 0, Hd).intersect(bb(xl, xr, -2.0, FP, -1.0, Hd + 1))]);   // tacka + front z żebrami jak korpus
     d = d.subtract(bb(xl + SW, xr - SW, FP, Ld - RW, FL, Hd + 1));
@@ -293,7 +293,9 @@ export function drawers(p: Params): Manifold | null {
       prismY([[xr + EPS, zt + 0.25], [xr - RAIL - 0.25, zt + 0.25], [xr - RAIL - 0.25, zt - 0.104], [xr + EPS, zt - 1.604]], -2.0, Ld + 1),
     ];
     if (D.mag) cuts.push(cylXa(Ld - 7.0, ZM, MAG_R, xl - EPS, xl + MAG_DEPTH), cylXa(Ld - 14.5, ZM, MAG_R, xr - MAG_DEPTH, xr + EPS));
-    parts.push(d.subtract(U(cuts)));
+    // podgląd: wysunięcie w −Y (do pełnego wysuwu = dł. − 21,5 mm, tyle ile pozwalają magnesy przednie)
+    const open = Math.min(100, Math.max(0, Number(bi === 0 ? p.drOpen ?? 0 : p.drOpen2 ?? 0))) / 100;
+    parts.push(d.subtract(U(cuts)).translate([0, -D.pull * open, 0]));
   }
   return U(parts);
 }
@@ -532,6 +534,8 @@ const PARAMS: ParamDef[] = [
   { key: 'traySlope', label: 'Szerokość skosu tacki', type: 'number', def: DEF.traySlope, min: 8, max: 30, step: 1, unit: 'mm', more: true, hint: 'Im szerszy skos, tym łagodniejsze nachylenie (maks. nachylenie ≈ 1,5·głębokość / szerokość).' },
   select('textMode', 'Napis FKNDMN', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['none', 'bez napisu']]),
   { key: 'textDepth', label: 'Głębokość wkładki napisu', type: 'number', def: DEF.textDepth, min: 0.4, max: 1.6, step: 0.2, unit: 'mm', show: (p) => p.textMode === 'inlay' },
+  { key: 'drOpen', label: 'Szuflada (lewa): wysunięcie (podgląd)', type: 'number', def: 0, min: 0, max: 100, step: 5, unit: '%', show: (p) => Number(p.nDr ?? 2) > 0, hint: '0 = zasunięta, 100 = wysunięta do magnesów przednich. Tylko podgląd w edytorze, nie zmienia wydruku.' },
+  { key: 'drOpen2', label: 'Szuflada (prawa): wysunięcie (podgląd)', type: 'number', def: 0, min: 0, max: 100, step: 5, unit: '%', show: (p) => Number(p.nDr ?? 2) > 1, hint: 'Jak wyżej, niezależnie od lewej szuflady.' },
   { key: 'lidOpen', label: 'Pokrywa: wysunięcie (podgląd)', type: 'number', def: 0, min: 0, max: 100, step: 5, unit: '%', hint: '0 = zasunięta, 100 = wysunięta na magnesach. Tylko podgląd w edytorze, nie zmienia wydruku.' },
   { key: 'legacyDrawers', label: 'Szuflady v11 (tylko do testów)', type: 'bool', def: false, show: () => false },
   { key: 'garby', label: 'Garby (v11, tylko do testów)', type: 'bool', def: false, show: () => false },
