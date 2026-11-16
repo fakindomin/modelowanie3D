@@ -293,6 +293,10 @@ function Projects({ items, onOpen }: { items: ProjectItem[]; onOpen: (a: StartAc
   );
 }
 
+const WIZ_ICON: Record<string, string> = Object.fromEntries(
+  PROJECT_ITEMS.flatMap((i) => (i.kind === 'wizard' ? [[i.wizard, i.icon]] : [])),
+);
+
 function Wizards({ onOpen }: { onOpen: (a: StartAction) => void }) {
   const all = WIZARD_GROUPS.flatMap((g) => g.items.map((w) => ({ ...w, group: g.label })));
   const ready = all.filter((w) => w.ready);
@@ -304,15 +308,19 @@ function Wizards({ onOpen }: { onOpen: (a: StartAction) => void }) {
         <h2>Nie wiesz, od czego zacząć? Odpowiedz na kilka pytań</h2>
         <p className="lead">Kreator pyta o wymiary i sposób użycia, składa model, a potem możesz go dalej zmieniać jak każdy gotowy projekt.</p>
       </div>
-      <div className="lwiz">
+      <div className="grid">
         {ready.map((w) => (
-          <button key={w.id} type="button" className="wz-card" onClick={() => onOpen({ kind: 'wizard', id: w.id })}>
-            <span className="grp">{w.group}</span>
-            <span>
-              <h3>{w.label}</h3>
-              <p>{w.desc}</p>
+          <button key={w.id} type="button" className="lcard" onClick={() => onOpen({ kind: 'wizard', id: w.id })}>
+            <span className="thumb">
+              <Icon type={WIZ_ICON[w.id] ?? 'box'} hole={false} />
             </span>
-            <span className="go">Otwórz →</span>
+            <h3>{w.label}</h3>
+            <span className="meta">
+              <span>
+                <span className="kind w">Kreator</span> {w.group}
+              </span>
+              <span className="open">Otwórz →</span>
+            </span>
           </button>
         ))}
       </div>

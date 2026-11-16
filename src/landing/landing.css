@@ -158,7 +158,7 @@
 .landing .sec-head .mono { color: var(--army-text); }
 .landing .sec-head h2 { font: 800 clamp(28px, 4vw, 44px)/1.04 var(--f); letter-spacing: -.025em; margin: 0; text-wrap: balance; }
 .landing .lead { color: var(--muted); max-width: 62ch; }
-.landing .lchips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 24px; scrollbar-width: thin; }
+.landing .lchips { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 6px; margin-bottom: 24px; scrollbar-width: thin; }
 .landing .lchip { flex: none; border: 1px solid var(--line); background: transparent; padding: 8px 12px; font: 600 14px var(--f); cursor: pointer; white-space: nowrap; color: var(--muted); }
 .landing .lchip .n { margin-left: 6px; font-weight: 500; opacity: .8; }
 .landing .lchip:hover { color: var(--ink); }
