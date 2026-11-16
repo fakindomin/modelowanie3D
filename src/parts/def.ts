@@ -34,6 +34,8 @@ export interface PieceDef {
   hole: boolean;
   /** Which body the piece joins: the selected part's, the one resting on it, or a new one. */
   body: 'sel' | 'above' | 'new';
+  /** Printed together with the piece of this value (an inlay with its lid): one object made of coloured parts. */
+  printWith?: string;
 }
 
 export interface PartDef {
@@ -54,6 +56,10 @@ export interface PartDef {
   normalize?: (prev: Params, next: Params) => Params;
   /** Not shown in the library (made by helper buttons). */
   hidden?: boolean;
+  /** Print pose of this piece as a turn about X or Y (degrees), e.g. a lid printed top-down; null = as built. Skips the automatic pose. */
+  printTurn?: (p: Params) => [0 | 1, number] | null;
+  /** Live checks shown under the part's fields (derived sizes, warnings, errors). */
+  notes?: (p: Params) => { level: 'ok' | 'warn' | 'error'; text: string }[];
   /** Where the letters of the ends (A, B…) stand on the built part, in its own frame (bb = built box). */
   endMarks?: (p: Params, bb: THREE.Box3) => { l: string; at: Vec3 }[];
 }

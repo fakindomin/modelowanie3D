@@ -181,6 +181,25 @@ type Mesh3 = ReturnType<BodyResult['manifold']['getMesh']>;
 /** A body printed in several filaments: one object made of named parts (the slicer lets each part take its own filament). */
 export type ColoredBody = BodyResult & { parts?: { manifold: BodyResult['manifold']; name: string }[] };
 
+/**
+ * Pieces that print together (an inlay with its lid) become one object made of named parts, in one frame,
+ * so the slicer lets each part take its own filament. `info`: per body its fitting group, piece and the piece it prints with.
+ */
+export function groupPrintWith<T extends ColoredBody>(bodies: T[], info: Map<number, { group: string; piece: string; printWith?: string; name: string }>): T[] {
+  const gone = new Set<T>();
+  for (const b of bodies) {
+    const i = info.get(b.body);
+    if (!i?.printWith) continue;
+    const host = bodies.find((h) => h !== b && !gone.has(h) && info.get(h.body)?.group === i.group && info.get(h.body)?.piece === i.printWith);
+    if (!host) continue;
+    const hi = info.get(host.body)!;
+    host.parts = [...(host.parts ?? [{ manifold: host.manifold, name: hi.name }]), { manifold: b.manifold, name: i.name }];
+    host.manifold = host.manifold.add(b.manifold);
+    gone.add(b);
+  }
+  return bodies.filter((b) => !gone.has(b));
+}
+
 function make3MF(objs: { mesh: Mesh3; name: string; dx: number; dy: number; dz: number; parts?: { mesh: Mesh3; name: string }[] }[], title: string) {
   const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const fmt = (n: number) => (Math.round(n * 1e4) / 1e4).toString();

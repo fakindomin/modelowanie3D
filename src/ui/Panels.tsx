@@ -1393,6 +1393,13 @@ function PartProperties({ part }: { part: Part }) {
     );
   if (pieces > 1) status.push(<div key="set" className="linkbar">🧩 Część zestawu ({pieces} elementy): przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</div>);
   if (wiz) status.push(<div key="wiz" className="linkbar">✨ Z kreatora „{wiz.label}”{part.wiz!.role ? `, część ${part.wiz!.role}` : ''}.</div>);
+  def.notes?.(part.params).forEach((n, i) =>
+    status.push(
+      <div key={`note${i}`} className={n.level === 'ok' ? 'linkbar' : 'warn-line'}>
+        {n.level === 'error' ? '⛔' : n.level === 'warn' ? '⚠' : '✓'} {n.text}
+      </div>,
+    ),
+  );
   const setPos = (i: number, v: number) => {
     const position = [...part.position] as Vec3;
     position[i] = v;

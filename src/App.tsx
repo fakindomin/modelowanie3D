@@ -7,8 +7,9 @@ import { Manual } from './ui/Manual';
 import { isLocked, loadBed, useStore } from './store';
 import { buildBodies, built } from './geom/parts';
 import * as THREE from 'three';
-import { export3MF, exportSTL, saveJSON } from './export';
+import { type ColoredBody, export3MF, exportSTL, groupPrintWith, saveJSON } from './export';
 import { bestPose, keepsPose, turnManifold } from './geom/orient';
+import { DEFS } from './catalog';
 import { makeManual } from './manual';
 import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
@@ -25,14 +26,16 @@ function projectOf(): Project {
 
 /** Bodies of the parts ready to print: each in its own print frame and in the pose needing the least support. */
 export function printBodies(parts: Part[]) {
-  const bodies = buildBodies(parts);
+  let bodies: ColoredBody[] = buildBodies(parts);
   // Each body is named after its biggest solid part (the one the user knows it by).
   const names = new Map<number, string>();
+  const mains = new Map<number, Part>();
   for (const b of bodies) {
     const solids = parts.filter((p) => p.body === b.body && !p.hole);
     const main = solids.reduce<(typeof solids)[number] | undefined>((a, p) => (!a || built(p).box.getSize(new THREE.Vector3()).length() > built(a).box.getSize(new THREE.Vector3()).length() ? p : a), undefined);
     if (!main) continue;
     names.set(b.body, main.name);
+    mains.set(b.body, main);
     // Printed as designed: the part's own frame (pipes standing, fittings on an arm, clips flat), not as turned in the assembly.
     if (main.rotation.some((r) => r)) {
       const inv = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...(main.rotation.map((r) => (r * Math.PI) / 180) as [number, number, number]))).invert();
@@ -44,6 +47,16 @@ export function printBodies(parts: Part[]) {
   // Each body in the pose that needs the least support (kept as designed unless another pose clearly saves supports).
   let turnedN = 0;
   for (const b of bodies) {
+    // A piece can name its own print pose (a lid printed top-down); that beats the automatic one.
+    const own = parts.find((p) => p.body === b.body && !p.hole && DEFS[p.type]?.printTurn?.(p.params));
+    const turn = own && DEFS[own.type].printTurn!(own.params);
+    if (turn) {
+      const t = turnManifold(b.manifold, turn);
+      b.manifold.delete();
+      b.manifold = t;
+      turnedN++;
+      continue;
+    }
     if (keepsPose(parts.filter((p) => p.body === b.body && !p.hole))) continue;
     const pose = bestPose(b.manifold);
     if (!pose) continue;
@@ -52,6 +65,13 @@ export function printBodies(parts: Part[]) {
     b.manifold = t;
     turnedN++;
   }
+  // A piece that prints with another (the lid's inlay) joins that body as a second coloured part.
+  const info = new Map<number, { group: string; piece: string; printWith?: string; name: string }>();
+  for (const [body, m] of mains) {
+    const pd = DEFS[m.type]?.pieces?.find((x) => x.value === m.params.piece);
+    info.set(body, { group: m.rigid ?? '', piece: String(m.params.piece ?? ''), printWith: pd?.printWith, name: pd?.label ?? m.name });
+  }
+  bodies = groupPrintWith(bodies, info);
   return { bodies, names, turnedN };
 }
 
