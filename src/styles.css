@@ -763,14 +763,20 @@ button.variant.pick:hover .chip { border-color: var(--accent); }
 .outliner h4 .muted { font-weight: 400; opacity: 0.7; }
 .dim-tag .dim-limit { color: #ffb070; font-weight: 600; }
 
-/* Drukarka i stół w panelu */
-.printer-fit { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
-.printer-fit select { width: 100%; }
-.printer-fit .bed-own { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-.printer-fit .fit { font-size: 12px; line-height: 1.35; }
-.printer-fit .fit.ok { color: #7fc98b; }
-.printer-fit .fit.bad { color: #ff9a6b; }
+/* Drukarka dla całej strony (górny pasek) */
+.printer-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.printer-pick label { display: flex; align-items: center; gap: 4px; }
+.printer-pick select { flex: none; width: auto; max-width: 150px; background: var(--panel-2); color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+.printer-pick .bed-own { display: flex; gap: 3px; }
+.printer-pick .bed-own .num { width: 54px; min-width: 0; }
+.printer-pick .bed-own .num em { display: none; }
+.printer-pick .bed-own .num input { padding: 4px; text-align: center; }
+.printer-pick .bed-own input { width: 100%; min-width: 0; }
+.printer-pick .fit { font-size: 12px; white-space: nowrap; padding: 2px 6px; border-radius: 6px; cursor: help; }
+.printer-pick .fit.ok { color: #7fc98b; }
+.printer-pick .fit.bad { color: #ff9a6b; border: 1px solid #ff9a6b; }
+.mmenu .printer-pick { padding: 4px 0 8px; }
+.mmenu .printer-pick select { max-width: none; flex: 1; width: 100%; padding: 8px; }
+.mmenu .printer-pick .bed-own .num { width: 80px; }
+.mmenu .printer-pick label { flex: 1; }
 .nofit { color: #ff9a6b; margin-left: 4px; }
-.printer-fit .bed-own label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.printer-fit .bed-own label b { font-size: 11px; font-weight: 500; opacity: .75; }
-.printer-fit .bed-own .num, .printer-fit .bed-own input { width: 100%; min-width: 0; }

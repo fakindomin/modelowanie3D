@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Viewport } from '../scene/Viewport';
-import { Library, Properties } from './Panels';
+import { Library, PrinterPicker, Properties } from './Panels';
 import { MeasurePanel } from './MeasurePanel';
 import { WizardDialog } from './WizardDialog';
 import { Manual } from './Manual';
@@ -135,6 +135,7 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
       {act.input}
       {menu && (
         <div className="mmenu">
+          <PrinterPicker />
           <div className="mmenu-grid">
             {item('Nowy', act.fresh)}
             {item('Otwórz', act.open)}

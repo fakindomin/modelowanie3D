@@ -1,7 +1,7 @@
 import { printable } from './simple';
 import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
-import { Library, Properties } from './ui/Panels';
+import { Library, PrinterPicker, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
 import { WizardDialog } from './ui/WizardDialog';
 import { Manual } from './ui/Manual';
@@ -178,6 +178,8 @@ function Toolbar() {
         <button onClick={act.save}>Zapisz</button>
         {act.input}
       </div>
+      <span className="sep" />
+      <PrinterPicker />
       <span className="sep" />
       <div className="group">
         <button className="wiz-open" onClick={() => st.openWizard({ id: null })} title="Kreatory projektów: rama, regał… krok po kroku, z modelem na żywo i instrukcją">

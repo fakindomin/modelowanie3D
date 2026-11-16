@@ -1490,7 +1490,6 @@ function PartProperties({ part }: { part: Part }) {
         </details>
       )}
       {ends.length > 0 && <EndsSection part={part} fields={ends} />}
-      <PrinterFit body={part.body} />
       {part.type === 'figurine' && (
         <div className="row">
           <NumberInput value={height} min={30} max={300} unit="mm" onChange={setHeight} />
@@ -2063,56 +2062,56 @@ export function bodyFit(parts: Part[], body: number, bed: Vec3) {
 
 const mmTxt = (v: number[]) => v.map((x) => String(Math.round(x)).replace('.', ',')).join(' × ');
 
-/** The printer used for the whole project, and whether the picked part fits its bed (live while sizing). */
-function PrinterFit({ body }: { body: number }) {
+/** The printer of the whole page (top bar): its bed, and live whether every printed part fits it. */
+export function PrinterPicker() {
   const printer = useStore((s) => s.printer);
   const bed = useStore((s) => s.bed);
   const setPrinter = useStore((s) => s.setPrinter);
   const parts = useStore((s) => s.parts);
   const own = !PRINTERS[printer];
-  const name = own ? 'własnej drukarki' : PRINTERS[printer].label;
-  const mine = bodyFit(parts, body, bed);
-  const others = [...new Set(printable(parts).map((p) => p.body))].filter((b) => b !== body && !bodyFit(parts, b, bed).fits).map((b) => mainOf(parts, b)?.name).filter(Boolean);
+  const bad = [...new Set(printable(parts).map((p) => p.body))]
+    .map((b) => ({ b, fit: bodyFit(parts, b, bed) }))
+    .filter((x) => !x.fit.fits)
+    .map((x) => `${mainOf(parts, x.b)?.name ?? 'część'} (${mmTxt(x.fit.size)} mm)`);
   return (
-    <div className="printer-fit">
-      <h4>
-        Drukarka <Info text="Wymiary stołu sprawdzane na bieżąco przy każdej zmianie wymiaru. Ten sam wybór obowiązuje w kreatorach i przy eksporcie 3MF." />
-      </h4>
-      <label className="field">
-        <span>Stół</span>
+    <div className="printer-pick">
+      <label title="Drukarka dla całej strony: modele, kreatory i eksport 3MF sprawdzają jej stół">
+        🖨
         <select value={own ? 'own' : printer} onChange={(e) => (e.target.value === 'own' ? setPrinter('own', bed) : setPrinter(e.target.value, PRINTERS[e.target.value].bed))}>
           {Object.entries(PRINTERS).map(([k, pr]) => (
-            <option key={k} value={k}>
-              {pr.label} ({mmTxt(pr.bed)})
+            <option key={k} value={k} title={`Stół ${mmTxt(pr.bed)} mm`}>
+              {pr.label}
             </option>
           ))}
           <option value="own">Własna…</option>
         </select>
       </label>
       {own && (
-        <div className="xyz bed-own">
-          {(['Szer.', 'Gł.', 'Wys.'] as const).map((l, i) => (
-            <label key={l}>
-              <b>{l}</b>
-              <NumberInput
-                value={bed[i]}
-                min={50}
-                max={1000}
-                unit="mm"
-                onChange={(v) => {
-                  const next = [...bed] as Vec3;
-                  next[i] = v;
-                  setPrinter('own', next);
-                }}
-              />
-            </label>
+        <span className="bed-own" title="Stół własnej drukarki: szerokość, głębokość, wysokość">
+          {(['szer.', 'gł.', 'wys.'] as const).map((l, i) => (
+            <NumberInput
+              key={l}
+              value={bed[i]}
+              min={50}
+              max={1000}
+              unit="mm"
+              onChange={(v) => {
+                const next = [...bed] as Vec3;
+                next[i] = v;
+                setPrinter('own', next);
+              }}
+            />
           ))}
-        </div>
+        </span>
       )}
-      <div className={mine.fits ? 'fit ok' : 'fit bad'}>
-        {mine.fits ? `✓ Mieści się na stole ${name}: ${mmTxt(mine.size)} mm.` : `⚠ Nie mieści się na stole ${name}: część ma ${mmTxt(mine.size)} mm, a stół ${mmTxt(bed)} mm. Zmniejsz wymiary albo wybierz większą drukarkę.`}
-      </div>
-      {others.length > 0 && <div className="fit bad">⚠ Nie mieści się też: {others.join(', ')}.</div>}
+      {parts.length > 0 && (
+        <span
+          className={bad.length ? 'fit bad' : 'fit ok'}
+          title={bad.length ? `Większe niż stół ${mmTxt(bed)} mm: ${bad.join(', ')}. Zmniejsz wymiary albo wybierz większą drukarkę.` : `Wszystkie części mieszczą się na stole ${mmTxt(bed)} mm`}
+        >
+          {bad.length ? `⚠ Nie mieści się: ${bad.length}` : '✓ Mieści się'}
+        </span>
+      )}
     </div>
   );
 }
