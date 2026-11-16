@@ -2,6 +2,7 @@ import type { Params } from '../catalog';
 import { worldBox } from '../geom/parts';
 import type { Texture, TextureFace, Vec3, WizValues } from '../types';
 import { addLabel, bedOf, mm, printerField, r1, texField, texture, tiles } from './common';
+import { phoneStandProfile } from '../parts/useful4';
 import { host } from './host';
 import { rawPlan } from './raw';
 import type { Plan, Wizard } from './types';
@@ -133,20 +134,10 @@ function standPlan(v: WizValues): Plan {
   const bed = bedOf(v);
   const W = Number(v.W), t = Number(v.t), L = Number(v.L), a = Number(v.angle), T = Number(v.T);
   const lipH = Number(v.lip), baseT = 5;
-  const tilt = 90 - a; // the back leans back by this much from upright
-  const rad = (tilt * Math.PI) / 180;
-  const yLip = 0, yDev = yLip + T + t + 0.5; // front of the base at y = 0
-  const reach = L * Math.sin(rad);
-  const Db = r1(yDev + T * Math.cos(rad) + reach + 8);
+  const Db = r1(phoneStandProfile({ W, t, L, T, angle: a, lip: lipH }).Db);
   const label = String(v.text ?? '').trim();
   const built = host.simulate((tt) => {
-    const id = tt.add('cube', { name: 'Podstawa', params: { W, D: Db, H: baseT }, position: [0, r1(Db / 2), 0], color: '#5b8fb9', edges: { kind: 'round', r: 2, vertical: true, top: true, bottom: false } });
-    const base = tt.parts().find((p) => p.id === id)!;
-    tt.add('cube', { name: 'Rant', params: { W, D: T, H: baseT + lipH }, position: [0, r1(yLip + T / 2), 0], body: base.body, color: base.color });
-    // The back rests on the base, its front bottom edge where the device's back stands.
-    const y0 = yDev + (T / 2) * Math.cos(rad);
-    tt.add('cube', { name: 'Oparcie', params: { W, D: T, H: L }, position: [0, r1(y0), baseT - 0.6], rotation: [-tilt, 0, 0], body: base.body, color: base.color });
-    if (v.slot) tt.add('holeBox', { name: 'Wycięcie na kabel', params: { W: 14, D: T + 2, H: baseT + lipH + 2, luz: 0 }, position: [0, r1(yLip + T / 2), r1(baseT - 1)], body: base.body });
+    const id = tt.add('phoneStand', { name: 'Stojak', params: { W, t, L, T, angle: a, lip: lipH, slot: !!v.slot }, position: [0, r1(Db / 2), 0], color: '#6b7530' });
     if (label) {
       // On the lip, not halfway up the back; beside the cable slot when there is one.
       addLabel(tt, tt.parts().find((p) => p.id === id)!, label, 'front', true, v.slot ? W / 2 - 14 : W * 0.8, baseT + lipH);
@@ -154,11 +145,11 @@ function standPlan(v: WizValues): Plan {
       if (txt) tt.update(txt.id, { position: [v.slot ? r1(txt.position[0] - W / 4 - 3.5) : txt.position[0], txt.position[1], r1((baseT + lipH) / 2)] });
     }
   });
-  const { parts, items, size } = rawPlan(built, () => ({ role: 'S', name: `Stojak (${DEVICES[String(v.device)]?.label ?? 'własny'})`, group: 'box', material: 'PLA', where: '', how: 'Bokiem do stołu: oparcie i podstawa drukują się bez podpór, a warstwy biegną wzdłuż oparcia.' }));
+  const { parts, items, size } = rawPlan(built, () => ({ role: 'S', name: `Stojak (${DEVICES[String(v.device)]?.label ?? 'własny'})`, group: 'box', material: 'PLA', where: '', how: 'Tak, jak stoi: podstawą do stołu, bez podpór. Żebro za oparciem wzmacnia jego połączenie z podstawą.' }));
   const notes: Plan['notes'] = [{ text: `Kąt ${a}° od poziomu, szczelina ${mm(t + 0.5)} mm na urządzenie z etui.` }];
   if (W > bed[2] && W > bed[0]) notes.push({ warn: true, text: 'Stojak jest szerszy niż stół drukarki.' });
   if (a < 55) notes.push({ warn: true, text: 'Przy małym kącie urządzenie może się zsuwać: podnieś rant.' });
-  return { items, placements: [], parts, buy: [], steps: ['Wydrukuj stojak bokiem do stołu (obróć go w edytorze o 90° wokół osi Y).', 'Postaw urządzenie dolną krawędzią za rantem.'], notes, bed, longest: Math.max(...size), size: size as Vec3 };
+  return { items, placements: [], parts, buy: [], steps: ['Wydrukuj stojak podstawą do stołu, bez podpór.', 'Postaw urządzenie dolną krawędzią za rantem.'], notes, bed, longest: Math.max(...size), size: size as Vec3 };
 }
 
 export const STAND_WIZARD: Wizard = {
@@ -208,6 +199,6 @@ export const STAND_WIZARD: Wizard = {
       ],
     },
     { title: 'Drukarka', desc: 'Sprawdzam, czy stojak mieści się na stole.', focus: [], focusLabel: 'wielkość', fields: () => [printerField] },
-    { title: 'Podsumowanie', desc: '„Utwórz projekt” wstawia stojak jako jedną bryłę z trzech części.', focus: [], focusLabel: 'całość', fields: () => [] },
+    { title: 'Podsumowanie', desc: '„Utwórz projekt” wstawia stojak jako jedną bryłę: podstawa, rant, oparcie i żebro za nim są złączone.', focus: [], focusLabel: 'całość', fields: () => [] },
   ],
 };

@@ -751,7 +751,57 @@ function sandMolds(p: Params) {
 
 // ================================================================== definitions
 const fontP = FONT;
+/**
+ * Phone / tablet stand as one solid: the side profile (base, front lip, leaning back and a gusset behind it)
+ * drawn in (y, z) and stretched along X, so the pieces meet as one body and not as boxes stuck together.
+ * The device stands on the base between the lip and the back; y = 0 is the front.
+ */
+export function phoneStandProfile(p: Params) {
+  const T = num(p, 'T'), t = num(p, 't'), L = num(p, 'L'), lipH = num(p, 'lip');
+  const a = Math.min(85, Math.max(45, num(p, 'angle')));
+  const baseT = 5;
+  const rad = ((90 - a) * Math.PI) / 180, sn = Math.sin(rad), cs = Math.cos(rad), tn = Math.tan(rad);
+  const yDev = T + t + 0.5;
+  const Db = yDev + T * cs + L * sn + 8;
+  return { T, t, L, lipH, baseT, rad, sn, cs, tn, yDev, Db };
+}
+
+function phoneStand(p: Params): Manifold {
+  const W = num(p, 'W');
+  const { T, L, lipH, baseT, sn, cs, tn, yDev, Db } = phoneStandProfile(p);
+  const x0 = -W / 2, x1 = W / 2;
+  const base: P2[] = [[0, 0], [Db, 0], [Db, baseT], [0, baseT]];
+  const lip: P2[] = [[0, 0], [T, 0], [T, baseT + lipH], [0, baseT + lipH]];
+  // The back: its front face starts where the device's back stands on the base, and it runs down into the base.
+  const down = (baseT + 2) / cs;
+  const f0: P2 = [yDev - down * sn, baseT - down * cs];
+  const f1: P2 = [yDev + L * sn, baseT + L * cs];
+  const back: P2[] = [f0, [f0[0] + T * cs, f0[1] - T * sn], [f1[0] + T * cs, f1[1] - T * sn], f1];
+  // A gusset behind the back, so it doesn't snap off at the base.
+  const g = Math.min(2 * T, L * 0.3);
+  const yR = yDev + T * cs + T * tn * sn; // rear face at the base top
+  const gusset: P2[] = [[yR - tn - 1, baseT - 1], [yR + g * tn + g + 1, baseT - 1], [yR + g * tn - 1, baseT + g]];
+  let m = union([base, lip, back, gusset].map((pts) => yzPrism(pts, x0, x1)));
+  m = m.intersect(box(x0, 0, 0, x1, Db, baseT + L + lipH + 10));
+  if (p.slot) m = m.subtract(box(-7, -1, baseT - 1, 7, T + 1, baseT + lipH + 1));
+  return settle(m);
+}
+
 export const USEFUL4_DEFS: PartDef[] = [
+  {
+    type: 'phoneStand', label: 'Stojak na telefon lub tablet', category: 'useful', hole: false,
+    description: 'Podstawa z rantem i pochylonym oparciem w jednej bryle, z żebrem za oparciem i wycięciem na kabel. Drukuje się tak, jak stoi, bez podpór (oparcie pochyla się najwyżej o 45°).',
+    params: [
+      n('W', 'Szerokość', 70, 40, 250),
+      n('t', 'Grubość urządzenia z etui', 12, 6, 45, 0.5),
+      n('L', 'Wysokość oparcia', 80, 40, 220),
+      { key: 'angle', label: 'Kąt oparcia', type: 'number', def: 65, min: 45, max: 85, step: 1, unit: '°', hint: '60–70° do oglądania, 75° do rozmów wideo.' },
+      n('lip', 'Wysokość rantu', 8, 3, 25),
+      bool('slot', 'Wycięcie na kabel', true),
+      adv('T', 'Grubość ścianek', 5, 3, 8, 0.5),
+    ],
+    build: phoneStand,
+  },
   // ---- 3D printer
   {
     type: 'spoolHolder', label: 'Uchwyt na szpulę filamentu', category: 'useful', hole: false,

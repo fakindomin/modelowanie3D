@@ -1009,14 +1009,18 @@ function FaceSection({ part }: { part: Part }) {
           ✕
         </button>
       </div>
-      <h5>Faktura</h5>
-      {off ? <p className="desc">{off.why}</p> : fs.face ? <TextureTool part={part} face={fs.face} /> : <p className="desc">Fakturę kładę na płaskich ściankach (także skośnych) i bokach walców, a ta ścianka jest zakrzywiona.</p>}
+      {!off && <h5>Faktura</h5>}
+      {off ? null : fs.face ? <TextureTool part={part} face={fs.face} /> : <p className="desc">Fakturę kładę na płaskich ściankach (także skośnych) i bokach walców, a ta ścianka jest zakrzywiona.</p>}
       {fs.side && !part.hole && (
         <>
           <h5>Napis</h5>
           <LabelTool part={part} side={fs.side} />
-          <h5>Magnesy</h5>
-          <FaceMagnetTool key={fs.side} part={part} face={fs.side} />
+          {!opOff(part, 'magnets') && (
+            <>
+              <h5>Magnesy</h5>
+              <FaceMagnetTool key={fs.side} part={part} face={fs.side} />
+            </>
+          )}
         </>
       )}
     </div>
@@ -1079,30 +1083,13 @@ function Section({ title, children, open = false, info }: { title: string; child
   );
 }
 
-/** An operation's section; greyed out (with the reason and what to use instead) when it makes no sense for the element. */
+/** An operation's section; left out when the operation makes no sense for the element (see ops.ts). */
 function OpSection({ part, op, title, info, open, children }: { part: Part; op: Op; title: string; info?: string; open?: boolean; children?: React.ReactNode }) {
-  const off = opOff(part, op);
-  if (!off)
-    return (
-      <Section title={title} open={open} info={info}>
-        {children}
-      </Section>
-    );
+  if (opOff(part, op)) return null;
   return (
-    <details className="section off">
-      <summary title={`Niedostępne: ${off.why}${off.use ? ` Zamiast: ${off.use}` : ''}`}>
-        {title} <span className="off-tag">niedostępne</span>
-      </summary>
-      <p className="off-why">
-        {off.why}
-        {off.use && (
-          <>
-            {' '}
-            <b>Zamiast:</b> {off.use}
-          </>
-        )}
-      </p>
-    </details>
+    <Section title={title} open={open} info={info}>
+      {children}
+    </Section>
   );
 }
 
@@ -1531,7 +1518,7 @@ function PartProperties({ part }: { part: Part }) {
       )}
       {part.type === 'connector' && <ConnectorWalls part={part} />}
 
-      {/* Every element lists the same operations in the same order; the ones that make no sense for it are greyed out. */}
+      {/* The same operations in the same order; the ones that make no sense for the element are left out. */}
       <OpSection part={part} op="magnets" title="🧲 Miejsca na magnesy" info={INFO.magnets}>
         {part.type === 'box' || part.type === 'lid' ? <MagnetTool target={part.id} body={part.body} /> : <FaceMagnetTool part={part} />}
       </OpSection>

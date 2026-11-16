@@ -1,4 +1,5 @@
 import type { Part } from '../types';
+import { DEFS } from '../catalog';
 
 /** The right panel's operations, always listed in this order. */
 export type Op = 'magnets' | 'bend' | 'shell' | 'infill' | 'xform' | 'split' | 'pattern' | 'edges' | 'texture';
@@ -43,7 +44,10 @@ const OFF: Partial<Record<Group, Partial<Record<Op, OpOff>>>> = {
   },
   plate: { shell: { why: 'Płyta jest cienka i pełna, nie ma czego wydrążyć.', use: 'Wypełnienie (ażur) robi kratownicę.' } },
   profile: { shell: { why: 'Profil jest cienkościenny, nie ma czego wydrążyć.', use: 'Wypełnienie (ażur) albo rura / profil zamknięty.' } },
-  tubeProfile: { shell: { why: 'Rura i profil zamknięty są już puste.', use: 'Grubość ścianki w Wymiarach.' } },
+  tubeProfile: {
+    magnets: { why: 'Ścianka rury jest okrągła i cienka, gniazdo magnesu przebiłoby ją.' },
+    shell: { why: 'Rura i profil zamknięty są już puste.', use: 'Grubość ścianki w Wymiarach.' },
+  },
   text: {
     shell: { why: 'Litery są za cienkie, żeby je wydrążyć.' },
     infill: { why: 'Litery są za wąskie na kratownicę.' },
@@ -78,6 +82,7 @@ const OFF: Partial<Record<Group, Partial<Record<Op, OpOff>>>> = {
     texture: { why: 'Faktura na zębach zablokuje przekładnię.' },
   },
   joint: {
+    magnets: { why: 'Sprężyna, zawias i zatrzask pracują ruchem, magnes by im przeszkadzał.' },
     bend: { why: 'Gięcie rozstroi oczka i czopy.' },
     shell: { why: 'Za cienkie, żeby wydrążyć.' },
     infill: { why: 'Za małe na kratownicę.' },
@@ -109,6 +114,7 @@ const OFF: Partial<Record<Group, Partial<Record<Op, OpOff>>>> = {
     magnets: { why: 'Obejma trzyma się rury, magnes nic nie da.' },
     bend: { why: 'Obejma jest już wygięta na rurę.', use: 'Średnica rury w Wymiarach.' },
     shell: { why: 'Obejma jest cienka, nie ma czego wydrążyć.' },
+    infill: { why: 'Obejma jest za cienka na ażur.' },
     split: { why: 'Obejma jest mała, mieści się na stole.' },
   },
   figurine: {
@@ -123,6 +129,39 @@ const OFF: Partial<Record<Group, Partial<Record<Op, OpOff>>>> = {
   },
 };
 
+/**
+ * Ready models („Projekty”, category useful) have a fixed shape, so an option is shown only where it fits:
+ * magnets where a flat, thick enough face meets a steel surface or a lid (organizers, wall racks, boxes),
+ * the lattice on flat panels and racks, and texture everywhere except where it would spoil a fit or a function.
+ */
+const USEFUL_MAGNETS = new Set([
+  'pudelko', 'linkBin', 'spiceRack', 'cosmeticOrganizer', 'screwTray', 'batteryTray', 'nozzleOrganizer', 'penCup', 'brushStand',
+  'capsuleRack', 'soapDish', 'wallHook', 'hookRail', 'toolRail', 'bitHolder', 'keyShelf', 'leashHook', 'remoteHolder', 'tapeHolder',
+  'paperTowelHolder', 'ventGrille',
+]);
+const USEFUL_INFILL = new Set([
+  'hookRail', 'toolRail', 'keyShelf', 'cornerShelf', 'slotRack', 'spiceRack', 'trivet', 'vesaMount', 'headphoneStand', 'toolStand',
+  'powerStripMount', 'cosmeticOrganizer', 'linkBin', 'phoneStand',
+]);
+const USEFUL_NO_TEXTURE = new Set([
+  'wrench', 'drillGuide', 'clearanceTest', 'clampSquare', 'zipTie', 'flexiSnake', 'linearSlide', 'die', 'stamp', 'namePuzzle', 'marbleMaze',
+  'thumbKnob', 'filamentGuide', 'spoolClip', 'reducer', 'standoff', 'profileCap', 'hoseTee', 'filmClip', 'meshClip', 'plantClip', 'bagClip',
+  'cableLatch', 'cableClip', 'deskEdgeClip', 'baseboardClip', 'deskGrommet', 'cableSleeve', 'drainStrainer', 'whistle', 'seeder',
+  'bottleDripper', 'treatBall', 'magnetCatch',
+]);
+const USEFUL_OFF: Record<'magnets' | 'infill' | 'texture', OpOff> = {
+  magnets: { why: 'Ten model nie ma płaskiej, dość grubej ścianki na gniazdo magnesu.' },
+  infill: { why: 'Ten model jest za mały albo za cienki na ażur.' },
+  texture: { why: 'Faktura zepsułaby pasowanie albo działanie tego modelu.' },
+};
+
+function usefulOff(type: string, op: Op): OpOff | null {
+  if (op === 'magnets' && !USEFUL_MAGNETS.has(type)) return USEFUL_OFF.magnets;
+  if (op === 'infill' && !USEFUL_INFILL.has(type)) return USEFUL_OFF.infill;
+  if (op === 'texture' && USEFUL_NO_TEXTURE.has(type)) return USEFUL_OFF.texture;
+  return null;
+}
+
 const HOLE_OFF: OpOff = { why: 'To otwór: operacja działa na pełną bryłę.', use: 'Zaznacz element pełny albo całą bryłę.' };
 
 /** Null when the operation is active for the part, otherwise why it is greyed out. */
@@ -130,6 +169,7 @@ export function opOff(part: Part, op: Op): OpOff | null {
   if (part.hole) return op === 'pattern' ? null : HOLE_OFF;
   if (op === 'pattern' && part.rigid) return { why: 'To część zestawu: kopia samej części rozbiłaby zestaw.', use: 'Dodaj drugi zestaw z menu.' };
   const g = GROUPS[part.type];
+  if (!g && DEFS[part.type]?.category === 'useful') return usefulOff(part.type, op);
   return (g && OFF[g]?.[op]) || null;
 }
 

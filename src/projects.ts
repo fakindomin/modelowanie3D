@@ -70,6 +70,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   part('batteryTray', ['workshop', 'electronics']),
   part('cableClip', ['desk', 'electronics']),
   part('penCup', ['desk']),
+  part('phoneStand', ['desk', 'electronics']),
   part('spinningTop', ['kids']),
   // Cables and desk.
   part('cableComb', ['electronics', 'desk', 'workshop']),
