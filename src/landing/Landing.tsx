@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PROJECT_ITEMS, USE_CATS, type ProjectItem, type UseCat } from '../projects';
 import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
-import { ReadyIcon, WizardIcon } from '../ui/KindIcons';
+import { MenuIcon, ReadyIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
 import { thumb, type ThumbKey } from './thumbs';
 import './landing.css';
@@ -95,8 +95,7 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
             {MENU.map(([id, label]) => (
               <li key={id}>
                 <a href={'#' + id} aria-current={view === id ? 'page' : undefined}>
-                  {id === 'projekty' && <ReadyIcon size={16} />}
-                  {id === 'kreatory' && <WizardIcon size={16} />}
+                  {id === 'projekty' ? <ReadyIcon size={16} /> : id === 'kreatory' ? <WizardIcon size={16} /> : <MenuIcon id={id} size={16} />}
                   {label}
                 </a>
               </li>

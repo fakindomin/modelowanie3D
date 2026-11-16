@@ -44,3 +44,25 @@ export function WizardIcon({ size = 18, className, title }: P) {
     </svg>
   );
 }
+
+/**
+ * Start-page menu icons, drawn like the question mark: straight strokes with cut corners,
+ * one line, and one small filled block the size of the question mark's dot.
+ */
+const MENU_ICONS = {
+  start: { line: 'M3 11.5 12 4l9 7.5M5 10v11h14V10', block: 'M10.5 15.5h3V21h-3z' },
+  jak: { line: 'M9 16v-2.5l-3-3V6l3-3h6l3 3v4.5l-3 3V16H9z', block: 'M10.5 18.5h3v3h-3z' },
+  sklep: { line: 'M2 4h3l2.5 11h11L21 7H6', block: 'M7.5 18.5h3v3h-3zM15.5 18.5h3v3h-3z' },
+  faq: { line: 'M7 8V5l2-2h6l2 2v4.5l-5 3.5v3', block: 'M10.5 18.5h3v3h-3z' },
+} as const;
+export type MenuIconId = keyof typeof MENU_ICONS;
+
+export function MenuIcon({ id, size = 18, className }: { id: MenuIconId; size?: number; className?: string }) {
+  const ic = MENU_ICONS[id];
+  return (
+    <svg {...base(size, className)} aria-hidden>
+      <path d={ic.line} />
+      <path d={ic.block} fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
