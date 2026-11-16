@@ -2068,22 +2068,23 @@ export function PrinterPicker() {
   const bed = useStore((s) => s.bed);
   const setPrinter = useStore((s) => s.setPrinter);
   const parts = useStore((s) => s.parts);
-  const own = !PRINTERS[printer];
-  const bad = [...new Set(printable(parts).map((p) => p.body))]
+  const own = !PRINTERS[printer] && printer !== 'none';
+  const bad = printer === 'none' ? [] : [...new Set(printable(parts).map((p) => p.body))]
     .map((b) => ({ b, fit: bodyFit(parts, b, bed) }))
     .filter((x) => !x.fit.fits)
     .map((x) => `${mainOf(parts, x.b)?.name ?? 'część'} (${mmTxt(x.fit.size)} mm)`);
   return (
     <div className="printer-pick">
-      <label title="Drukarka dla całej strony: modele, kreatory i eksport 3MF sprawdzają jej stół">
+      <label title="Drukarka dla całej strony: wymiary zatrzymują się na granicy jej stołu, kreatory i eksport 3MF też z niej korzystają. „Bez limitu” wyłącza ograniczenie.">
         🖨
-        <select value={own ? 'own' : printer} onChange={(e) => (e.target.value === 'own' ? setPrinter('own', bed) : setPrinter(e.target.value, PRINTERS[e.target.value].bed))}>
+        <select value={own ? 'own' : printer} onChange={(e) => (e.target.value === 'own' || e.target.value === 'none' ? setPrinter(e.target.value, bed) : setPrinter(e.target.value, PRINTERS[e.target.value].bed))}>
           {Object.entries(PRINTERS).map(([k, pr]) => (
             <option key={k} value={k} title={`Stół ${mmTxt(pr.bed)} mm`}>
               {pr.label}
             </option>
           ))}
           <option value="own">Własna…</option>
+          <option value="none">Bez limitu</option>
         </select>
       </label>
       {own && (
@@ -2104,7 +2105,7 @@ export function PrinterPicker() {
           ))}
         </span>
       )}
-      {parts.length > 0 && (
+      {parts.length > 0 && printer !== 'none' && (
         <span
           className={bad.length ? 'fit bad' : 'fit ok'}
           title={bad.length ? `Większe niż stół ${mmTxt(bed)} mm: ${bad.join(', ')}. Zmniejsz wymiary albo wybierz większą drukarkę.` : `Wszystkie części mieszczą się na stole ${mmTxt(bed)} mm`}

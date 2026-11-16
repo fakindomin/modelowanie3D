@@ -2,7 +2,8 @@ import { bareParts, printable } from './simple';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import { bestPose, keepsPose } from './geom/orient';
-import { DEFS, cabinetOpenings, defaultParams, slideGroove, type Params } from './catalog';
+import { DEFS, cabinetOpenings, defaultParams, paramsOf, slideGroove, type Params } from './catalog';
+import { PRINTERS } from './wizards/frame';
 import { SCALE, SCALED, type Family, type Size, type Variant } from './families';
 import { buildBodies, built, partMatrix, texturesOf, worldBox, worldManifold } from './geom/parts';
 import { finishing } from './geom/modify';
@@ -376,6 +377,60 @@ function applyPatch(parts: Part[], id: string, patch: Partial<Part>): Part[] {
     if (f) q = { ...q, position: f.position, pattern: f.pattern };
     return q;
   })));
+}
+
+/** Whether a printed body fits the bed (a 90° turn on the bed is allowed). */
+function fitsBed(parts: Part[], body: number, bed: Vec3): boolean {
+  const b = bodyBox(parts, body);
+  if (b.isEmpty()) return true;
+  const [x, y, z] = b.getSize(new THREE.Vector3()).toArray();
+  const e = 0.01;
+  return z <= bed[2] + e && ((x <= bed[0] + e && y <= bed[1] + e) || (x <= bed[1] + e && y <= bed[0] + e));
+}
+
+/** How far (0..1) a body may go from box a to box b and still lie on the bed, the size taken as linear. */
+function fitShare(a: THREE.Box3, b: THREE.Box3, bed: Vec3): number {
+  const s0 = a.getSize(new THREE.Vector3()).toArray(), s1 = b.getSize(new THREE.Vector3()).toArray();
+  const share = (lim: Vec3) => Math.min(...[0, 1, 2].map((i) => (s1[i] <= lim[i] + 0.01 ? 1 : s1[i] <= s0[i] ? 0 : Math.max(0, (lim[i] - s0[i]) / (s1[i] - s0[i])))));
+  return Math.max(share(bed), share([bed[1], bed[0], bed[2]]));
+}
+
+/**
+ * The printer's bed is the limit of every printed part: a size change that would make a part that fit too big
+ * stops at the largest value that still fits. Gives the patch to apply and whether it was cut.
+ */
+function clampToBed(before: Part[], id: string, patch: Partial<Part>, printer: string, bed: Vec3): { patch: Partial<Part>; cut: boolean } {
+  if (printer === 'none' || !patch.params) return { patch, cut: false };
+  const src = before.find((p) => p.id === id);
+  if (!src) return { patch, cut: false };
+  const after = (pp: Partial<Part>) => syncLids(before, applyPatch(before, id, pp));
+  const next = after(patch);
+  const bodies = [...new Set(printable(next).map((p) => p.body))];
+  const bad = bodies.filter((b) => !fitsBed(next, b, bed) && fitsBed(before, b, bed));
+  if (!bad.length) return { patch, cut: false };
+  const defs = DEFS[src.type] ? paramsOf(DEFS[src.type], src.params) : [];
+  const keys = Object.keys(patch.params).filter((k) => typeof patch.params![k] === 'number' && typeof src.params[k] === 'number' && patch.params![k] !== src.params[k]);
+  if (!keys.length) return { patch: { ...patch, params: src.params }, cut: true };
+  const at = (t: number): Partial<Part> => {
+    const params = { ...patch.params! };
+    for (const k of keys) {
+      const v0 = src.params[k] as number, v1 = patch.params![k] as number;
+      const d = defs.find((x) => x.key === k);
+      const st = d && d.type === 'number' ? (d.step ?? 1) : 1;
+      const q = Number.isInteger(st) && st >= 1 ? 1 : 10;
+      const v = v0 + (v1 - v0) * t;
+      params[k] = (v1 > v0 ? Math.floor(v * q + 1e-6) : Math.ceil(v * q - 1e-6)) / q;
+    }
+    return { ...patch, params };
+  };
+  let t = Math.min(...bad.map((b) => fitShare(bodyBox(before, b), bodyBox(next, b), bed)));
+  for (let i = 0; i < 6 && t > 0; i++) {
+    const pp = at(t);
+    const n = after(pp);
+    if (bad.every((b) => fitsBed(n, b, bed))) return { patch: pp, cut: true };
+    t = Math.max(0, t - 0.02 * (i + 1));
+  }
+  return { patch: at(0), cut: true };
 }
 
 /**
@@ -951,8 +1006,15 @@ export const useStore = create<State>((set, get) => {
       commit(next, { selectedId: first, fitRequest: get().fitRequest + 1 });
     },
 
-    update(id, patch) {
+    update(id, req) {
       const before = get().parts;
+      const { patch, cut } = clampToBed(before, id, req, get().printer, get().bed);
+      if (cut) {
+        const pr = get().printer;
+        const k = Object.keys(req.params ?? {}).find((x) => patch.params?.[x] !== req.params?.[x]);
+        const v = k ? patch.params?.[k] : undefined;
+        get().notify(`${typeof v === 'number' ? `Zatrzymane na ${String(v).replace('.', ',')}: ` : ''}większa część nie zmieści się na stole ${pr === 'own' ? 'Twojej drukarki' : PRINTERS[pr]?.label ?? 'drukarki'} (${get().bed.join(' × ')} mm). Zmień drukarkę na górnym pasku albo wybierz „Bez limitu”.`);
+      }
       const next = applyPatch(before, id, patch);
       commit(patch.params ? keepApart(before, syncLids(before, next), id) : next);
       // A picked face no longer sits where it was drawn.
@@ -971,8 +1033,9 @@ export const useStore = create<State>((set, get) => {
       }
     },
 
-    updateLive(id, patch) {
+    updateLive(id, req) {
       set((s) => {
+        const { patch } = clampToBed(s.parts, id, req, s.printer, s.bed);
         const next = applyPatch(s.parts, id, patch);
         return { parts: patch.params ? keepApart(s.parts, syncLids(s.parts, next), id) : next };
       });
