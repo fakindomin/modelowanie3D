@@ -228,10 +228,11 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   };
 
   const off = Math.max(4, 0.09 * Math.max(...box.getSize(new THREE.Vector3()).toArray()));
+  const geo = built(part).geometry;
   return (
     <group position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
       {handles.map((h, i) => {
-        const { p1, p2, out, ticks } = dimLine(box, h.axis, side, off);
+        const { p1, p2, out, ticks } = dimLine(box, h.axis, side, off, geo);
         const mid = p1.clone().add(p2).multiplyScalar(0.5);
         const active = hot === i || live?.i === i || edit === i || (!live && h.dim.key === dimHover);
         const value = live?.i === i ? live.to : Number(part.params[h.dim.key]);
@@ -289,7 +290,7 @@ function useViewSide(part: Part, box: THREE.Box3): [1 | -1, 1 | -1] {
  * A drawing's dimension line for one axis, beside the box on the viewer's side: width along the front
  * bottom edge, depth along the side bottom edge, height up the far front corner.
  */
-function dimLine(b: THREE.Box3, axis: 0 | 1 | 2, side: [1 | -1, 1 | -1], off: number) {
+function dimLine(b: THREE.Box3, axis: 0 | 1 | 2, side: [1 | -1, 1 | -1], off: number, geo?: THREE.BufferGeometry) {
   const [sx, sy] = side;
   const fy = sy > 0 ? b.max.y : b.min.y, fx = sx > 0 ? b.max.x : b.min.x;
   const z = b.min.z;
@@ -320,7 +321,36 @@ function dimLine(b: THREE.Box3, axis: 0 | 1 | 2, side: [1 | -1, 1 | -1], off: nu
   const dir = p2.clone().sub(p1).normalize(), a = off * 0.45;
   const head = (p: THREE.Vector3, d: THREE.Vector3) => [p, p.clone().addScaledVector(d, a).addScaledVector(out, a * 0.35), p, p.clone().addScaledVector(d, a).addScaledVector(out, -a * 0.35)];
   const heads = [...head(p1, dir), ...head(p2, dir.clone().negate())];
-  return { p1, p2, out, ticks: [e1, over(p1), e2, over(p2), ...heads] };
+  return { p1, p2, out, ticks: [touch(geo, e1, axis), over(p1), touch(geo, e2, axis), over(p2), ...heads] };
+}
+
+const touchCache = new WeakMap<THREE.BufferGeometry, Map<string, THREE.Vector3>>();
+/**
+ * Where an extension line meets the model: the point of the model on the same end plane (top, side…)
+ * closest to the corner of its box, so the line touches the part and not empty air beside it.
+ */
+function touch(geo: THREE.BufferGeometry | undefined, corner: THREE.Vector3, axis: number): THREE.Vector3 {
+  const pos = geo?.getAttribute('position');
+  if (!geo || !pos) return corner;
+  let m = touchCache.get(geo);
+  if (!m) touchCache.set(geo, (m = new Map()));
+  const k = axis + ':' + corner.toArray().map((v) => v.toFixed(2)).join();
+  const hit = m.get(k);
+  if (hit) return hit;
+  const c = corner.getComponent(axis);
+  let best = corner, bd = Infinity;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    if (Math.abs(v.getComponent(axis) - c) > 0.02) continue;
+    const d = v.distanceToSquared(corner);
+    if (d < bd) {
+      bd = d;
+      best = v.clone();
+    }
+  }
+  m.set(k, best);
+  return best;
 }
 
 /** The dimension line and its two extension lines; orange while its knob is under the cursor or held. */
