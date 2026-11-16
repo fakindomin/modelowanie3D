@@ -237,7 +237,6 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
         const value = live?.i === i ? live.to : Number(part.params[h.dim.key]);
         return (
           <group key={i}>
-            {active && <FaceOutline box={box} axis={h.axis} sign={h.sign} strong />}
             <DimLine pts={[p1, p2, ...ticks]} active={active} />
             <Dot
               position={mid}
@@ -317,7 +316,11 @@ function dimLine(b: THREE.Box3, axis: 0 | 1 | 2, side: [1 | -1, 1 | -1], off: nu
   }
   const over = (p: THREE.Vector3) => p.clone().addScaledVector(out, off * 0.25);
   // Extension lines from the edge to a little past the dimension line, as on a drawing.
-  return { p1, p2, out, ticks: [e1, over(p1), e2, over(p2)] };
+  // Arrowheads at both ends, in the plane of the line and its extension lines, as on a drawing.
+  const dir = p2.clone().sub(p1).normalize(), a = off * 0.45;
+  const head = (p: THREE.Vector3, d: THREE.Vector3) => [p, p.clone().addScaledVector(d, a).addScaledVector(out, a * 0.35), p, p.clone().addScaledVector(d, a).addScaledVector(out, -a * 0.35)];
+  const heads = [...head(p1, dir), ...head(p2, dir.clone().negate())];
+  return { p1, p2, out, ticks: [e1, over(p1), e2, over(p2), ...heads] };
 }
 
 /** The dimension line and its two extension lines; orange while its knob is under the cursor or held. */
