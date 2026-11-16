@@ -1,6 +1,6 @@
 # Pudełko na akcesoria – moduł parametryczny
 
-Stan: punkt 1 gotowy (korpus + pokrywa-tacka + napis jako `PartDef` w `src/parts/pudelko.ts`); wnętrze i szuflady nadal jak w v11. Wzorzec geometrii: `tools/pudelko/pudelko.py` (v11, Python/manifold3d) – służy do porównań (bbox/objętość przy wartościach domyślnych).
+Stan: punkty 1–2 gotowe (korpus + pokrywa-tacka + napis jako `PartDef` w `src/parts/pudelko.ts`, parametry wnętrza, skos pod zapalniczką, kontrole `notes`); szuflady nadal jak w v11 (punkt 3). Wzorzec geometrii: `tools/pudelko/pudelko.py` (v11, Python/manifold3d) – służy do porównań (bbox/objętość przy wartościach domyślnych).
 Docelowo: `PartDef` `pudelko` w `src/parts/` (kategoria `useful`), części przez `pieces`: korpus, pokrywa, napis, szuflada. Jądro: `manifold-3d` (to samo co w Pythonie).
 Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 
@@ -49,3 +49,11 @@ Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 
 ## Test zgodności (punkt 1)
 `sh scripts/check/pudelko.sh` buduje korpus i pokrywę z parametrami „legacy” (pokrywa 2,8, bez tacki, garby, napis grawerowany) i porównuje z `tools/pudelko/ref.json` (wynik `pudelko.py` v11): bbox identyczny, objętość korpusu −0,04%, pokrywy 0,00%. Dla wartości domyślnych sprawdza też: Z_CH0 bez zmian (H = 57,1), brak kolizji korpus/pokrywa, wkładka napisu nie nachodzi na pokrywę.
+
+## Punkt 2: parametry wnętrza (gotowe)
+- Suwaki: młynek Ø/H, bibułki L/T/H/część w szczelinie, zapalniczka L/W/T, skos dna (prawy/lewy/wył., długość 25, głębokość 2,0). Domyślne = v11 (test zgodności nadal przechodzi, skos wyłączony w „legacy”).
+- Zależności: Ø młynka → Y i X; H młynka → H pudełka (H = 11,8 + 2 + 1 + (H młynka + 5) + 0,3 + pokrywa + 0,2); grubość bibułek → Y; L zapalniczki → X; wysokość bibułek zmienia wysoką szufladę.
+- Skos: dno opada liniowo ku wybranemu końcowi; wciśnięty koniec unosi drugi o d·(L−Lr)/Lr (domyślnie 4,6 mm, nachylenie 4,6°).
+- Kontrole w panelu części (`PartDef.notes`, `src/ui/Panels.tsx`): wymiary zewnętrzne i co je wyznacza, wysokości szuflad (błąd < 8,25 mm), materiał pod zapalniczką/skosem (uwaga < 2, błąd < 1,2 mm), nachylenie skosu 3–10°, uniesienie ≥ 3 mm, minimalna głębokość pudełka na ubijak.
+- Tymczasowo: odstęp magnesów szuflad jest przycinany do szerokości kieszeni, a magnesy pokrywy do głębokości pudełka; pełna logika magnesów w punkcie 3.
+- Ubijak i okno pod palec mają nadal stałe wymiary v11.

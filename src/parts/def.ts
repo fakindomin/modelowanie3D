@@ -54,6 +54,8 @@ export interface PartDef {
   normalize?: (prev: Params, next: Params) => Params;
   /** Not shown in the library (made by helper buttons). */
   hidden?: boolean;
+  /** Live checks shown under the part's fields (derived sizes, warnings, errors). */
+  notes?: (p: Params) => { level: 'ok' | 'warn' | 'error'; text: string }[];
   /** Where the letters of the ends (A, B…) stand on the built part, in its own frame (bb = built box). */
   endMarks?: (p: Params, bb: THREE.Box3) => { l: string; at: Vec3 }[];
 }

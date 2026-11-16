@@ -15,11 +15,9 @@ const Mf = () => M().Manifold;
 type P2 = [number, number];
 
 // ---------- stałe v11 (mm) ----------
-const GRINDER_D = 40.0, GRINDER_H = 33.0, ZONE_GR_H = 38.0;
-const LIGHTER_L = 82.0, LIGHTER_W = 26.0, LIGHTER_T = 15.0;
+const SEAT = 5.0;   // materiał pod gniazdem młynka (v11: strefa 38 = młynek 33 + 5)
 const TAMP_PIN_D = 5.0, TAMP_PIN_L = 35.0, TAMP_SQ = 7.0, TAMP_HANDLE_L = 10.0;
 const TAMPER_L = TAMP_PIN_L + TAMP_HANDLE_L;
-const BOOK_L = 120.0, BOOK_H = 30.0, BOOK_T = 13.0, BOOK_IN = 0.5;
 const CL = 0.8, WALL_X = 3.0, WALL_Y = 4.0, SEP = 1.6, FLOOR = 2.0;
 const LID_CLEAR = 0.25, DOVE = 2.0, GAP_PROUD = 6.0, GRIP_GAP = 11.0, RING_H = 14.0;
 const MAG_D = 5.0, MAG_T = 2.0, MAG_CLR = 0.25;
@@ -29,27 +27,34 @@ const TEXT = 'FKNDMN', TEXT_H_LID = 7.0, TEXT_H_BOT = 10.0, TEXT_DEPTH_BOT = 0.6
 const EPS = 0.01;
 const MAG_R = (MAG_D + MAG_CLR) / 2;
 
+// ---------- parametry wnętrza (domyślne = v11) ----------
+export const DEF = { lidT: 3.8, gD: 40, gH: 33, bookL: 120, bookT: 13, bookH: 30, bookIn: 0.5, lL: 82, lW: 26, lT: 15, rampLen: 25, rampDepth: 2.0 } as const;
+const val = (p: Params, k: keyof typeof DEF) => (p[k] === undefined || Number.isNaN(Number(p[k])) ? DEF[k] : Number(p[k]));
+
 // ---------- układ ----------
 export function layout(p: Params) {
-  const lidT = num(p, 'lidT');
-  const A_Y = BOOK_T + CL + 2 * 4.6;
-  const B_Y = GRINDER_D + CL;
-  const lighterLen = LIGHTER_L + CL;
-  const IN_X = Math.max(BOOK_L + CL + SEP, GRIP_GAP + GRINDER_D + CL + GRIP_GAP + SEP + lighterLen);
+  const lidT = val(p, 'lidT');
+  const gD = val(p, 'gD'), gH = val(p, 'gH');
+  const bookL = val(p, 'bookL'), bookT = val(p, 'bookT'), bookH = val(p, 'bookH'), bookIn = val(p, 'bookIn');
+  const lL = val(p, 'lL'), lW = val(p, 'lW'), lT = val(p, 'lT');
+  const A_Y = bookT + CL + 2 * 4.6;
+  const B_Y = gD + CL;
+  const lighterLen = lL + CL;
+  const IN_X = Math.max(bookL + CL + SEP, GRIP_GAP + gD + CL + GRIP_GAP + SEP + lighterLen);
   const X = WALL_L + IN_X + WALL_X;
   const Y = WALL_Y + A_Y + SEP + B_Y + WALL_Y;
   // Nad kanałem jest pokrywa (lidT) + 0,2 luzu; Z_CH0 zostaje tam gdzie było przy pokrywie 2,8.
   const lidTop = lidT + 0.2;
-  const H = Math.round((BASE_H + FLOOR + 1.0 + ZONE_GR_H + GRINDER_GAP + lidTop) * 10) / 10;
+  const H = Math.round((BASE_H + FLOOR + 1.0 + (gH + SEAT) + GRINDER_GAP + lidTop) * 10) / 10;
   const Z_CH0 = H - lidTop;
   const Z_LID0 = Z_CH0;
   const Z_TOP_ITEMS = Z_CH0 - 1.2;
   const Z_BAY0 = Z_TOP_ITEMS - GAP_PROUD;
-  const BOOK_FLOOR = Z_TOP_ITEMS - BOOK_H;
-  const BOOK_SHELF = Z_TOP_ITEMS - BOOK_H * (1 - BOOK_IN);
+  const BOOK_FLOOR = Z_TOP_ITEMS - bookH;
+  const BOOK_SHELF = Z_TOP_ITEMS - bookH * (1 - bookIn);
   const yB0 = WALL_Y + A_Y + SEP;
   const x0 = WALL_L;
-  return { lidT, A_Y, B_Y, lighterLen, X, Y, H, Z_CH0, Z_LID0, Z_TOP_ITEMS, Z_BAY0, BOOK_FLOOR, BOOK_SHELF, yB0, x0, yc: Y / 2 };
+  return { lidT, gD, gH, bookL, bookT, bookH, bookIn, lL, lW, lT, A_Y, B_Y, lighterLen, X, Y, H, IN_X, Z_CH0, Z_LID0, Z_TOP_ITEMS, Z_BAY0, BOOK_FLOOR, BOOK_SHELF, yB0, x0, yc: Y / 2 };
 }
 type Lay = ReturnType<typeof layout>;
 
@@ -68,6 +73,9 @@ const ccw = (pts: P2[]): P2[] => (area(pts) > 0 ? [...pts].reverse() : pts);
 /** Wielokąt w płaszczyźnie YZ wyciągnięty wzdłuż X od xa do xb. */
 const prismX = (pts: P2[], xa: number, xb: number) =>
   C().ofPolygons([ccw(pts)]).extrude(xb - xa).rotate([90, 0, 90]).translate([xa, 0, 0]);
+/** Wielokąt w płaszczyźnie XZ wyciągnięty wzdłuż Y od ya do yb. */
+const prismY = (pts: P2[], ya: number, yb: number) =>
+  C().ofPolygons([ccw(pts)]).extrude(yb - ya).rotate([90, 0, 0]).translate([0, yb, 0]);
 const ext = (cs: CrossSection, z0: number, z1: number) => cs.extrude(z1 - z0).translate([0, 0, z0]);
 const U = (ms: Manifold[]) => Mf().union(ms);
 
@@ -188,10 +196,23 @@ export function bowlCutter(x0: number, x1: number, y0: number, y1: number, z0: n
   return new (Mf())(mesh);
 }
 
+/** Odstęp magnesów pokrywy od osi Y (15, a w wąskim pudełku bliżej środka, żeby gniazdo nie wyszło poza ściankę). */
+const magDy = (Y: number) => Math.min(15.0, (Y - 2 * WALL_Y) / 2 - MAG_R - 2.0);
+
+/** Skos dna zapalniczki: opada liniowo na długości `len` ku końcowi `side`, na głębokość `depth`. */
+export function ramp(p: Params, L: Lay) {
+  const side = String(p.rampSide ?? 'right');
+  const depth = val(p, 'rampDepth');
+  if (side === 'off' || depth <= 0) return null;
+  const lx0 = L.x0 + GRIP_GAP + L.gD + CL + GRIP_GAP + SEP;
+  const len = Math.min(val(p, 'rampLen'), L.lighterLen - 10);
+  return { side, depth, len, lx0, xe: side === 'right' ? lx0 + L.lighterLen : lx0 };
+}
+
 // ---------- korpus ----------
 export function korpus(p: Params): Manifold {
   const L = layout(p);
-  const { X, Y, H, Z_CH0, Z_TOP_ITEMS, Z_BAY0, BOOK_FLOOR, BOOK_SHELF, yB0, x0, yc } = L;
+  const { X, Y, H, Z_CH0, Z_TOP_ITEMS, Z_BAY0, BOOK_FLOOR, BOOK_SHELF, yB0, x0, yc, gD, gH, bookL, bookT, lW, lT } = L;
   const outl = outline(X, Y);
   const body = ext(outl, 0, H);
   const cut: Manifold[] = [];
@@ -200,14 +221,14 @@ export function korpus(p: Params): Manifold {
   const wt = Y - 2 * WALL_Y, wb = wt + 2 * DOVE;
   cut.push(prismX([[yc - wb / 2, Z_CH0], [yc + wb / 2, Z_CH0], [yc + wt / 2, H], [yc + wt / 2, H + 1], [yc - wt / 2, H + 1], [yc - wt / 2, H]], -1, X - WALL_X));
   // młynek
-  const gx = x0 + GRIP_GAP + (GRINDER_D + CL) / 2, gy = yB0 + (GRINDER_D + CL) / 2;
-  const gFloor = Z_CH0 - GRINDER_H - GRINDER_GAP;
-  const gX1 = x0 + GRIP_GAP + GRINDER_D + CL + GRIP_GAP;
+  const gx = x0 + GRIP_GAP + (gD + CL) / 2, gy = yB0 + (gD + CL) / 2;
+  const gFloor = Z_CH0 - gH - GRINDER_GAP;
+  const gX1 = x0 + GRIP_GAP + gD + CL + GRIP_GAP;
   cut.push(bb(x0, gX1, yB0, yB0 + L.B_Y, gFloor + RING_H, Z_CH0 + EPS));
-  cut.push(cylZ(gx, gy, (GRINDER_D + CL) / 2, gFloor, gFloor + RING_H + EPS, 96));
+  cut.push(cylZ(gx, gy, (gD + CL) / 2, gFloor, gFloor + RING_H + EPS, 96));
   // zapalniczka
   const lx0 = gX1 + SEP;
-  cut.push(bb(lx0, lx0 + L.lighterLen, yB0, yB0 + LIGHTER_W + CL, Z_TOP_ITEMS - LIGHTER_T - 0.4, Z_CH0 + EPS));
+  cut.push(bb(lx0, lx0 + L.lighterLen, yB0, yB0 + lW + CL, Z_TOP_ITEMS - lT - 0.4, Z_CH0 + EPS));
   // ubijak (lewy przód)
   const TZ_AX = Z_CH0 - 14.0, TX_AX = 4.2, T_Y0 = 0.2;
   const seatH = TAMP_SQ + 0.4;
@@ -217,10 +238,11 @@ export function korpus(p: Params): Manifold {
   cut.push(cylXa(T_Y0 + TAMP_HANDLE_L / 2, TZ_AX, MAG_R, TX_AX + TAMP_SQ / 2 + 0.2 - EPS, TX_AX + TAMP_SQ / 2 + 0.2 + MAG_T + 0.2));
   // szuflady (v11: dwie kieszenie od frontu; zastąpione w punkcie 3)
   const DR_Z1 = BASE_H + FLOOR + 1.0 - 1.6;
-  const DR_MAG_Y = 7.0, DR_MAG_DX = 19.0, DR_WIN_W = 26.0, DR_FRONT_GAP = 3.3, DR_NOTCH_L = 10.0;
+  const DR_MAG_Y = 7.0, DR_WIN_W = 26.0, DR_FRONT_GAP = 3.3, DR_NOTCH_L = 10.0;
   const DR_YE = Y - DR_REAR;
   const DR_XA = x0, DR_XB = X - WALL_X;
   const DR_W = (DR_XB - DR_XA - SEP) / 2;
+  const DR_MAG_DX = Math.min(19.0, DR_W / 2 - MAG_R - 2.0);   // tymczasowo: magnesy nie wystają przy małej szufladzie (pełna logika w punkcie 3)
   const pockets: [number, number][] = [[DR_XA, DR_XA + DR_W], [DR_XA + DR_W + SEP, DR_XB]];
   const DR_Z1_TALL = BOOK_FLOOR - 1.6;
   const ceil = [DR_Z1, DR_Z1_TALL];
@@ -231,15 +253,20 @@ export function korpus(p: Params): Manifold {
     cut.push(bb((xa + xb) / 2 - DR_WIN_W / 2, (xa + xb) / 2 + DR_WIN_W / 2, -2.0, DR_NOTCH_L, -1.0, DR_Z0 + EPS));
   });
   // zapalniczka: ściana od strony bibułek obniżona do połowy
-  const lFloor = Z_TOP_ITEMS - LIGHTER_T - 0.4;
-  cut.push(bb(lx0, x0 + BOOK_L + CL, yB0 - SEP - EPS, yB0 + EPS, lFloor + LIGHTER_T / 2, Z_CH0 + EPS));
+  const lFloor = Z_TOP_ITEMS - lT - 0.4;
+  if (x0 + bookL + CL - lx0 > 1) cut.push(bb(lx0, x0 + bookL + CL, yB0 - SEP - EPS, yB0 + EPS, lFloor + lT / 2, Z_CH0 + EPS));
+  // skos dna zapalniczki: dno opada liniowo ku wybranemu końcowi – wciśnięty koniec unosi drugi
+  const rs = ramp(p, L);
+  if (rs) cut.push(prismY(rs.side === 'right'
+    ? [[rs.xe - rs.len, lFloor], [rs.xe, lFloor - rs.depth], [rs.xe, lFloor + 0.5], [rs.xe - rs.len, lFloor + 0.5]]
+    : [[rs.xe + rs.len, lFloor], [rs.xe, lFloor - rs.depth], [rs.xe, lFloor + 0.5], [rs.xe + rs.len, lFloor + 0.5]], yB0, yB0 + lW + CL));
   // magnesy w lewej ściance (pod lewym końcem pokrywy)
-  for (const dy of [-15.0, 15.0]) cut.push(cylZ(WALL_L / 2, Y / 2 + dy, MAG_R, Z_CH0 - MAG_T - 0.2, Z_CH0 + EPS));
+  for (const dy of [-magDy(Y), magDy(Y)]) cut.push(cylZ(WALL_L / 2, Y / 2 + dy, MAG_R, Z_CH0 - MAG_T - 0.2, Z_CH0 + EPS));
   // książeczka
-  const by0 = WALL_Y + (L.A_Y - (BOOK_T + CL)) / 2;
-  cut.push(bb(x0, x0 + BOOK_L + CL, by0, by0 + BOOK_T + CL, BOOK_FLOOR, Z_CH0 + EPS));
-  cut.push(bb(x0, x0 + BOOK_L + CL, WALL_Y, WALL_Y + L.A_Y, BOOK_SHELF, Z_CH0 + EPS));
-  cut.push(bb(x0, gX1, by0 + BOOK_T + CL + SEP, yB0 + EPS, gFloor + RING_H, Z_CH0 + EPS));
+  const by0 = WALL_Y + (L.A_Y - (bookT + CL)) / 2;
+  cut.push(bb(x0, x0 + bookL + CL, by0, by0 + bookT + CL, BOOK_FLOOR, Z_CH0 + EPS));
+  cut.push(bb(x0, x0 + bookL + CL, WALL_Y, WALL_Y + L.A_Y, BOOK_SHELF, Z_CH0 + EPS));
+  cut.push(bb(x0, gX1, by0 + bookT + CL + SEP, yB0 + EPS, gFloor + RING_H, Z_CH0 + EPS));
   let m = body.subtract(U(cut));
   // napis na spodzie (grawer, odbity: czytelny po odwróceniu pudełka)
   const bot = centered(textShape(TEXT, TEXT_H_BOT), 0, 0).scale([-1, 1]).translate([X / 2, Y / 2]);
@@ -271,7 +298,7 @@ export function lidInBox(p: Params): LidParts {
   // gniazda magnesów: lewy i prawy koniec (prawe trafiają nad magnesy ściany przy zsunięciu pokrywy)
   const LID_MAG_RX = lxb - (WALL_L / 2 - lxa);
   const cuts: Manifold[] = [];
-  for (const rx of [WALL_L / 2, LID_MAG_RX]) for (const dy of [-15.0, 15.0]) cuts.push(cylZ(rx, Y / 2 + dy, MAG_R, z0l - EPS, z0l + MAG_T + 0.2));
+  for (const rx of [WALL_L / 2, LID_MAG_RX]) for (const dy of [-magDy(Y), magDy(Y)]) cuts.push(cylZ(rx, Y / 2 + dy, MAG_R, z0l - EPS, z0l + MAG_T + 0.2));
   // tacka: płynna miska na dolnej ściance (po odwróceniu pokrywy – na górze)
   const depth = num(p, 'trayDepth'), slope = num(p, 'traySlope');
   if (depth > 0) {
@@ -306,20 +333,73 @@ export function buildPudelko(p: Params): Manifold {
   }
 }
 
+// ---------- kontrole (OK / uwaga / błąd) ----------
+type Note = { level: 'ok' | 'warn' | 'error'; text: string };
+const fmt = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
+
+export function pudelkoNotes(p: Params): Note[] {
+  const L = layout(p);
+  const out: Note[] = [];
+  const bookSide = L.bookL + CL + SEP, grSide = GRIP_GAP + L.gD + CL + GRIP_GAP + SEP + L.lighterLen;
+  out.push({ level: 'ok', text: `Wymiary zewnętrzne ${fmt(L.X)} × ${fmt(L.Y)} × ${fmt(L.H)} mm (bez żeber +2,0). Szerokość wyznaczają ${bookSide >= grSide ? 'bibułki' : 'młynek + zapalniczka'}.` });
+  // szuflady (v11): niska ma stały strop, wysoka kończy się pod dnem szczeliny na bibułki
+  const DR_Z1 = BASE_H + FLOOR + 1.0 - 1.6, DR_Z1_TALL = L.BOOK_FLOOR - 1.6;
+  const lowH = DR_Z1 - DR_Z0, tallH = DR_Z1_TALL - DR_Z0, MIN_DR = (MAG_D + MAG_CLR) + 2 * 1.2 + 0.4;
+  if (tallH < MIN_DR) out.push({ level: 'error', text: `Wysoka szuflada ma tylko ${fmt(tallH)} mm wysokości (min. ${fmt(MIN_DR)} mm na magnes). Zmniejsz wysokość bibułek albo zwiększ młynek.` });
+  else out.push({ level: tallH < 10 ? 'warn' : 'ok', text: `Szuflady: niska ${fmt(lowH)} mm, wysoka ${fmt(tallH)} mm (zależy od wysokości bibułek i młynka).` });
+  // zapalniczka: ile materiału pod dnem (z uwzględnieniem skosu) nad sufitami szuflad
+  const lFloor = L.Z_TOP_ITEMS - L.lT - 0.4;
+  const DR_XA = L.x0, DR_XB = L.X - WALL_X, DR_W = (DR_XB - DR_XA - SEP) / 2;
+  const pockets: [number, number, number][] = [[DR_XA, DR_XA + DR_W, DR_Z1], [DR_XA + DR_W + SEP, DR_XB, DR_Z1_TALL]];
+  const lx0 = L.x0 + GRIP_GAP + L.gD + CL + GRIP_GAP + SEP, lx1 = lx0 + L.lighterLen;
+  const under = (a: number, b: number) => Math.max(...pockets.filter(([xa, xb]) => xb > a && xa < b).map((q) => q[2]));
+  const rs = ramp(p, L);
+  const mat0 = lFloor - under(lx0, lx1);
+  if (mat0 < 1.2) out.push({ level: 'error', text: `Pod dnem zapalniczki zostaje ${fmt(mat0)} mm materiału nad szufladą (min. 1,2). Zmniejsz grubość zapalniczki albo wysokość szuflady.` });
+  if (rs) {
+    const xs = rs.side === 'right' ? rs.xe - rs.len : rs.xe, xe2 = rs.side === 'right' ? rs.xe : rs.xe + rs.len;
+    const mat = lFloor - rs.depth - under(xs, xe2);
+    const lift = (rs.depth * (L.lL - rs.len)) / rs.len, slope = (Math.atan(rs.depth / rs.len) * 180) / Math.PI;
+    if (mat < 1.2) out.push({ level: 'error', text: `Skos zapalniczki zostawia ${fmt(mat)} mm materiału nad szufladą (min. 1,2). Zmniejsz głębokość skosu.` });
+    else if (mat < 2) out.push({ level: 'warn', text: `Pod skosem zapalniczki zostaje ${fmt(mat)} mm materiału (zalecane ≥ 2).` });
+    if (slope > 10) out.push({ level: 'warn', text: `Skos zapalniczki jest stromy (${fmt(slope)}°, zalecane 3–10°).` });
+    else if (slope < 3) out.push({ level: 'warn', text: `Skos zapalniczki jest bardzo łagodny (${fmt(slope)}°, zalecane 3–10°).` });
+    if (lift < 3) out.push({ level: 'warn', text: `Wciśnięty koniec podnosi drugi tylko o ${fmt(lift)} mm (zalecane ≥ 3). Zwiększ głębokość albo skróć skos.` });
+    else if (slope >= 3 && slope <= 10 && mat >= 2) out.push({ level: 'ok', text: `Skos zapalniczki (${rs.side === 'right' ? 'prawy' : 'lewy'}): ${fmt(slope)}°, drugi koniec unosi się o ${fmt(lift)} mm.` });
+  }
+  // ubijak: tuleja i trzonek mają stałe położenie w Y
+  const needY = 0.2 + TAMPER_L + 0.5 + WALL_X;
+  if (L.Y < needY) out.push({ level: 'error', text: `Pudełko jest za płytkie (${fmt(L.Y)} mm) na gniazdo ubijaka (min. ${fmt(needY)} mm). Zwiększ młynek albo grubość bibułek.` });
+  return out;
+}
+
 export const PUDELKO_DEFS: PartDef[] = [
   {
     type: 'pudelko',
     label: 'Pudełko na akcesoria',
     category: 'useful',
     hole: false,
-    description: 'Pudełko na młynek, bibułki, zapalniczkę i ubijak z wsuwaną pokrywą-tacką (jaskółczy ogon) i napisem jako wkładką w innym kolorze. Pokrywę drukuj górą do stołu.',
+    description: 'Pudełko na młynek, bibułki, zapalniczkę i ubijak z wsuwaną pokrywą-tacką (jaskółczy ogon) i napisem jako wkładką w innym kolorze. Wymiary wnętrza dobiera się do Twoich przedmiotów. Pokrywę drukuj górą do stołu.',
     pieces: [
       { value: 'korpus', label: 'korpus', hole: false, body: 'new' },
       { value: 'pokrywa', label: 'pokrywa-tacka', hole: false, body: 'new' },
       { value: 'napis', label: 'napis (inny kolor)', hole: false, body: 'new' },
     ],
+    notes: pudelkoNotes,
     params: [
-      { key: 'lidT', label: 'Grubość pokrywy', type: 'number', def: 3.8, min: 2.8, max: 6, step: 0.1, unit: 'mm', group: 'Pokrywa', hint: 'Podnosi też wysokość pudełka (H = … + grubość + 0,2). Kąt jaskółczego ogona maleje przy grubszej pokrywie.' },
+      { key: 'gD', label: 'Młynek: średnica', type: 'number', def: DEF.gD, min: 20, max: 80, step: 0.5, unit: 'mm', group: 'Młynek', hint: 'Wyznacza szerokość gniazda i głębokość (Y) pudełka.' },
+      { key: 'gH', label: 'Młynek: wysokość', type: 'number', def: DEF.gH, min: 15, max: 80, step: 0.5, unit: 'mm', hint: 'Wyznacza wysokość pudełka (H = warstwa szuflad + wysokość + 5 + luz + pokrywa).' },
+      { key: 'bookL', label: 'Bibułki: długość', type: 'number', def: DEF.bookL, min: 60, max: 200, step: 0.5, unit: 'mm', group: 'Bibułki', hint: 'Największe opakowanie, stoi na krawędzi.' },
+      { key: 'bookT', label: 'Bibułki: grubość', type: 'number', def: DEF.bookT, min: 5, max: 40, step: 0.5, unit: 'mm', hint: 'Wyznacza głębokość (Y) pudełka.' },
+      { key: 'bookH', label: 'Bibułki: wysokość', type: 'number', def: DEF.bookH, min: 15, max: 80, step: 0.5, unit: 'mm', hint: 'Wyższe opakowanie = niższa wysoka szuflada.' },
+      { key: 'bookIn', label: 'Bibułki: część w szczelinie', type: 'number', def: DEF.bookIn, min: 0.2, max: 0.8, step: 0.05, more: true, hint: 'Jaka część wysokości opakowania siedzi w szczelinie (reszta wystaje do chwytu).' },
+      { key: 'lL', label: 'Zapalniczka: długość', type: 'number', def: DEF.lL, min: 50, max: 130, step: 0.5, unit: 'mm', group: 'Zapalniczka', hint: 'Wyznacza szerokość (X) pudełka.' },
+      { key: 'lW', label: 'Zapalniczka: szerokość', type: 'number', def: DEF.lW, min: 15, max: 50, step: 0.5, unit: 'mm' },
+      { key: 'lT', label: 'Zapalniczka: grubość', type: 'number', def: DEF.lT, min: 8, max: 30, step: 0.5, unit: 'mm', hint: 'Leży płasko; grubsza = niższe dno gniazda.' },
+      select('rampSide', 'Skos dna zapalniczki', 'right', [['right', 'prawy'], ['left', 'lewy'], ['off', 'wyłączony']]),
+      { key: 'rampLen', label: 'Skos: długość', type: 'number', def: DEF.rampLen, min: 10, max: 60, step: 1, unit: 'mm', show: (p) => p.rampSide !== 'off', hint: 'Dno opada liniowo na tej długości ku wybranemu końcowi. Wciśnięty koniec unosi drugi.' },
+      { key: 'rampDepth', label: 'Skos: głębokość', type: 'number', def: DEF.rampDepth, min: 0.5, max: 5, step: 0.1, unit: 'mm', show: (p) => p.rampSide !== 'off' },
+      { key: 'lidT', label: 'Grubość pokrywy', type: 'number', def: DEF.lidT, min: 2.8, max: 6, step: 0.1, unit: 'mm', group: 'Pokrywa', hint: 'Podnosi też wysokość pudełka (H = … + grubość + 0,2). Kąt jaskółczego ogona maleje przy grubszej pokrywie.' },
       { key: 'trayDepth', label: 'Głębokość tacki', type: 'number', def: 2.0, min: 0, max: 3, step: 0.1, unit: 'mm', hint: '0 = bez wgłębienia. Wgłębienie jest płynne (bez ścianek), na dolnej stronie pokrywy.' },
       { key: 'traySlope', label: 'Szerokość skosu tacki', type: 'number', def: 18, min: 8, max: 30, step: 1, unit: 'mm', more: true, hint: 'Im szerszy skos, tym łagodniejsze nachylenie (maks. nachylenie ≈ 1,5·głębokość / szerokość).' },
       select('textMode', 'Napis FKNDMN', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['none', 'bez napisu']]),
