@@ -37,9 +37,9 @@ export function WizardDialog() {
   return (
     <div className="wiz" role="dialog" aria-label="Kreator projektu">
       <header className="wiz-bar">
-        <span className="brand">
+        <a className="brand" href="#start" title="Strona startowa" onClick={() => openWizard(null)}>
           <span className="logo">◆</span> Modelowanie 3D
-        </span>
+        </a>
         <span className="wiz-crumb">
           <button className="linklike" onClick={() => openWizard({ id: null })} disabled={!wz || !!w.run}>
             Kreatory

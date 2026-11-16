@@ -115,7 +115,7 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
   );
   return (
     <header className="mbar" ref={ref}>
-      <span className="logo">◆</span>
+      <a className="logo" href="#start" aria-label="Strona startowa">◆</a>
       <div className="tabs" role="tablist">
         {(['tech', 'fig'] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={st.tab === t} className={st.tab === t ? 'on' : ''} onClick={() => st.setTab(t)}>

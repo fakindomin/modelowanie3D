@@ -154,9 +154,9 @@ function Toolbar() {
 
   return (
     <header className="toolbar">
-      <div className="brand">
+      <a className="brand" href="#start" title="Strona startowa: gotowe projekty i kreatory">
         <span className="logo">◆</span> Modelowanie 3D
-      </div>
+      </a>
       <div className="tabs" role="tablist">
         {(['tech', 'fig'] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={st.tab === t} className={st.tab === t ? 'on' : ''} onClick={() => st.setTab(t)}>

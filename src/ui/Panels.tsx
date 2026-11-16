@@ -22,6 +22,7 @@ import { MIN_CELL, addInWidestGap, evenOut, layoutOf, layoutParams, moveLine, se
 import { fittingGeo } from '../parts/couplings';
 import { PROJECT_ITEMS, USE_CATS, itemsIn, type ProjectItem } from '../projects';
 import { cardInfo, fmtMin, type CardInfo } from './modelCard';
+import { runProjectItem } from './runItem';
 import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../simple';
 import { PRINTERS } from '../wizards/frame';
 
@@ -164,15 +165,7 @@ export function Library() {
   const nothing = !!query && !figs.length && !projHits.length && (!partsOn || sections.every((x) => !x.fams.length && !x.tiles.length));
   // Main part groups start open; project categories start shut (the set lists the ones flipped).
   const shown = (id: string) => !!query || (id.startsWith('proj:') ? closed.has(id) : !closed.has(id));
-  const runItem = (i: ProjectItem) => {
-    if (i.kind === 'wizard') openWizard({ id: i.wizard });
-    else if (i.kind === 'part') startWith(i.type);
-    else if (i.kind === 'figurines') setTab('fig');
-    else {
-      const f = FAMILIES.find((x) => x.id === i.family)!;
-      startVariant(f, f.variants.find((v) => v.label === i.variant)!);
-    }
-  };
+  const runItem = runProjectItem;
   const itemTile = (i: ProjectItem, key: string) => (
     <button key={key} className={i.kind === 'wizard' ? 'tile project by-wizard' : 'tile project'} onMouseEnter={(e) => showCard(i, e.currentTarget)} onMouseLeave={hideCard} onFocus={(e) => showCard(i, e.currentTarget)} onBlur={hideCard} onClick={() => { hideCard(); runItem(i); }}>
       <Icon type={i.icon} hole={false} />
