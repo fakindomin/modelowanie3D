@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { ReadyIcon, WizardIcon } from './KindIcons';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
 import { bodyRisk, opOff, type Op } from './ops';
@@ -172,7 +173,7 @@ export function Library() {
     <button key={key} className={i.kind === 'wizard' ? 'tile project by-wizard' : 'tile project'} onMouseEnter={(e) => showCard(i, e.currentTarget)} onMouseLeave={hideCard} onFocus={(e) => showCard(i, e.currentTarget)} onBlur={hideCard} onClick={() => { hideCard(); runItem(i); }}>
       <Icon type={i.icon} hole={false} />
       <span>{i.label}</span>
-      {i.kind === 'wizard' && <span className="badge">✨</span>}
+      {i.kind === 'wizard' && <span className="badge" title="Kreator"><WizardIcon size={11} /></span>}
     </button>
   );
   const groups = sections.filter((x) => x.fams.length || x.tiles.length);
@@ -217,7 +218,7 @@ export function Library() {
       {tab === 'tech' && (
         <div className="lib-mode" role="tablist">
           <button role="tab" aria-selected={mode === 'projects'} className={mode === 'projects' ? 'on' : ''} onClick={() => setMode('projects')} title="Gotowe rzeczy według miejsca: dom, kuchnia, ogród, warsztat…">
-            Projekty
+            <ReadyIcon size={14} /> Projekty
           </button>
           <button role="tab" aria-selected={mode === 'parts'} className={mode === 'parts' ? 'on' : ''} onClick={() => setMode('parts')} title="Części techniczne: pojemniki, listwy i łączniki, śruby, zawiasy, zębatki, sprężyny, uszczelki">
             Części
@@ -1440,7 +1441,7 @@ function PartProperties({ part }: { part: Part }) {
       </div>,
     );
   if (pieces > 1) status.push(<div key="set" className="linkbar">🧩 Część zestawu ({pieces} elementy): przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</div>);
-  if (wiz) status.push(<div key="wiz" className="linkbar">✨ Z kreatora „{wiz.label}”{part.wiz!.role ? `, część ${part.wiz!.role}` : ''}.</div>);
+  if (wiz) status.push(<div key="wiz" className="linkbar"><WizardIcon size={14} /> Z kreatora „{wiz.label}”{part.wiz!.role ? `, część ${part.wiz!.role}` : ''}.</div>);
   def.notes?.(part.params).forEach((n, i) =>
     status.push(
       <div key={`note${i}`} className={n.level === 'ok' ? 'linkbar' : 'warn-line'}>
@@ -2240,7 +2241,7 @@ function Welcome() {
         </ol>
       ) : (
         <ol>
-          <li>Wybierz gotowy model w <b>Projektach</b> albo w <b>Częściach technicznych</b>, albo zacznij od <b>✨ Kreatora</b>.</li>
+          <li>Wybierz gotowy model w <b>Projektach</b> albo w <b>Częściach technicznych</b>, albo zacznij od <b><WizardIcon size={14} /> Kreatora</b>.</li>
           <li>Dopasuj wymiary: wpisz liczbę albo przesuń suwak. Na komputerze możesz też chwycić strzałkę wymiaru na modelu.</li>
           <li>Wybierz opcje: fakturę, napis, magnesy, kolor.</li>
           <li>Odznacz części, których nie chcesz drukować.</li>

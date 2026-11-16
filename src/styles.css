@@ -781,3 +781,10 @@ button.variant.pick:hover .chip { border-color: var(--accent); }
 .mmenu .printer-pick .bed-own .num { width: 80px; }
 .mmenu .printer-pick label { flex: 1; }
 .nofit { color: #ff9a6b; margin-left: 4px; }
+
+/* Shared kind icons (Gotowe projekty / Kreator): sit on the text line next to their label */
+.kicon { flex: none; vertical-align: -0.18em; }
+.wiz-open, .lib-mode button, .linkbar { display: inline-flex; align-items: center; gap: 6px; }
+.lib-mode button { justify-content: center; }
+.tile.project .badge .kicon { display: block; }
+.mt-icon .kicon { display: block; }

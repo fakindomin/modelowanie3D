@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
+import { WizardIcon } from './KindIcons';
 import { CATALOG, CATEGORIES } from '../catalog';
 import { FAMILIES, IN_FAMILY } from '../families';
 import { PROJECT_ITEMS, USE_CATS, type ProjectItem } from '../projects';
@@ -212,7 +213,7 @@ export function ReviewBar() {
       </div>
       <div className="rv-row">
         {cur.item.kind === 'wizard' && (
-          <button className="wiz-open" onClick={() => cur.item.kind === 'wizard' && useStore.getState().openWizard({ id: cur.item.wizard })} title="Kreator buduje model na scenie; potem pobierz 3MF">✨ Otwórz kreator</button>
+          <button className="wiz-open" onClick={() => cur.item.kind === 'wizard' && useStore.getState().openWizard({ id: cur.item.wizard })} title="Kreator buduje model na scenie; potem pobierz 3MF"><WizardIcon size={14} /> Otwórz kreator</button>
         )}
         <button className="primary" onClick={() => act.exportAs('3mf', fileName(cur.label))} title="Ten element (z wymiarami jak teraz na scenie) jako 3MF do Bambu Studio">⬇ 3MF tego elementu</button>
         <button onClick={() => exportGroup(cur.group)} disabled={cur.item.kind === 'wizard'} title="Wszystkie elementy tej grupy z domyślnymi wymiarami, każdy w osobnym pliku 3MF (archiwum .zip)">⬇ 3MF całej grupy</button>

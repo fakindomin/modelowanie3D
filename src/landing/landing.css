@@ -257,3 +257,6 @@
   .landing .badge { top: 6px; left: 6px; padding: 4px 6px; font-size: 11px; }
   .landing .lcard .thumb .badge svg { width: 14px; height: 14px; }
 }
+
+/* Kind icons next to menu entries and section labels */
+.landing .mono .kicon, .landing nav a .kicon { margin-right: 6px; }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PROJECT_ITEMS, USE_CATS, type ProjectItem, type UseCat } from '../projects';
 import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
+import { ReadyIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
 import { thumb, type ThumbKey } from './thumbs';
 import './landing.css';
@@ -94,6 +95,8 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
             {MENU.map(([id, label]) => (
               <li key={id}>
                 <a href={'#' + id} aria-current={view === id ? 'page' : undefined}>
+                  {id === 'projekty' && <ReadyIcon size={16} />}
+                  {id === 'kreatory' && <WizardIcon size={16} />}
                   {label}
                 </a>
               </li>
@@ -254,7 +257,7 @@ function Projects({ items, onOpen }: { items: ProjectItem[]; onOpen: (a: StartAc
   return (
     <section className="view-page wrap">
       <div className="sec-head">
-        <span className="mono">Gotowe projekty</span>
+        <span className="mono"><ReadyIcon size={16} />Gotowe projekty</span>
         <h2>Wybierz według miejsca, w którym go użyjesz</h2>
         <p className="lead">Każdy projekt otwiera się w aplikacji z wymiarami do zmiany.</p>
       </div>
@@ -287,24 +290,11 @@ const WIZ_ICON: Record<string, string> = Object.fromEntries(
   PROJECT_ITEMS.flatMap((i) => (i.kind === 'wizard' ? [[i.wizard, i.icon]] : [])),
 );
 
-/** Badge marks: a wand for a wizard, a finished cube for a ready project. */
+/** Badge marks: stage arrows for a wizard, a finished pot on the bed for a ready project. */
 function KindBadge({ kind }: { kind: 'p' | 'w' }) {
   return (
     <span className={'badge ' + kind}>
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
-        {kind === 'w' ? (
-          <>
-            <path d="M4 20 15 9" />
-            <path d="m13 7 4 4" />
-            <path d="M18 2.5v3M16.5 4h3M21 8v2M20 9h2M9.5 3v2M8.5 4h2" />
-          </>
-        ) : (
-          <>
-            <path d="M12 2.8 20 7v10l-8 4.2L4 17V7z" />
-            <path d="M4 7l8 4.2L20 7M12 11.2v10" />
-          </>
-        )}
-      </svg>
+      {kind === 'w' ? <WizardIcon /> : <ReadyIcon />}
       {kind === 'w' ? 'Kreator' : 'Gotowy projekt'}
     </span>
   );
@@ -340,7 +330,7 @@ function Wizards({ onOpen }: { onOpen: (a: StartAction) => void }) {
   return (
     <section className="view-page wrap">
       <div className="sec-head">
-        <span className="mono">Kreatory</span>
+        <span className="mono"><WizardIcon size={16} />Kreatory</span>
         <h2>Nie wiesz, od czego zacząć? Odpowiedz na kilka pytań</h2>
         <p className="lead">Kreator pyta o wymiary i sposób użycia, składa model, a potem możesz go dalej zmieniać jak każdy gotowy projekt.</p>
       </div>

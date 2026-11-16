@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { WizardIcon } from './KindIcons';
 import { Viewport } from '../scene/Viewport';
 import { Library, PrinterPicker, Properties } from './Panels';
 import { MeasurePanel } from './MeasurePanel';
@@ -25,9 +26,9 @@ export function useMobile() {
 type Sheet = 'add' | 'list' | 'props';
 type Size = 'closed' | 'half' | 'full';
 
-const SHEETS: { id: Sheet | 'wiz'; icon: string; label: string }[] = [
+const SHEETS: { id: Sheet | 'wiz'; icon: ReactNode; label: string }[] = [
   { id: 'add', icon: '➕', label: 'Dodaj' },
-  { id: 'wiz', icon: '✨', label: 'Kreatory' },
+  { id: 'wiz', icon: <WizardIcon size={18} />, label: 'Kreatory' },
   { id: 'list', icon: '☰', label: 'Elementy' },
   { id: 'props', icon: '⚙', label: 'Właściwości' },
 ];
