@@ -468,7 +468,7 @@ export const PUDELKO_DEFS: PartDef[] = [
     pieces: [
       { value: 'korpus', label: 'korpus', hole: false, body: 'new' },
       { value: 'pokrywa', label: 'pokrywa-tacka', hole: false, body: 'new' },
-      { value: 'napis', label: 'napis (inny kolor)', hole: false, body: 'new' },
+      { value: 'napis', label: 'napis (inny kolor)', hole: false, body: 'new', printWith: 'pokrywa' },
     ],
     notes: pudelkoNotes,
     printTurn: (p) => (p.piece === 'pokrywa' || p.piece === 'napis' ? [0, 180] : null),

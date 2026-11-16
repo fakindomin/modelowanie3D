@@ -34,6 +34,8 @@ export interface PieceDef {
   hole: boolean;
   /** Which body the piece joins: the selected part's, the one resting on it, or a new one. */
   body: 'sel' | 'above' | 'new';
+  /** Printed together with the piece of this value (an inlay with its lid): one object made of coloured parts. */
+  printWith?: string;
 }
 
 export interface PartDef {

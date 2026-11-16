@@ -5,6 +5,7 @@ import { initManifold } from '../../src/geom/manifold';
 import { korpus, lidInBox, layout, bowlCutter, pudelkoNotes } from '../../src/parts/pudelko';
 import { DEFS } from '../../src/catalog';
 import { poseScores } from '../../src/geom/orient';
+import { groupPrintWith } from '../../src/export';
 
 const ref = JSON.parse(readFileSync(new URL('../../tools/pudelko/ref.json', import.meta.url), 'utf8'));
 const def: any = (DEFS as any).pudelko;
@@ -132,5 +133,16 @@ const cmp = (name: string, got: any, want: { bounds: number[][]; vol: number }, 
   expect('pokrywa wysunięta na 100% nie koliduje i jest przesunięta', pk.intersect(open).volume() < 0.5 && bo.max[0] < 20, `(x do ${bo.max[0].toFixed(1)}, od ${bo.min[0].toFixed(1)})`);
   const oc = lidInBox(base).lid.volume(), od = open.volume();
   expect('wysunięcie nie zmienia bryły pokrywy', Math.abs(oc - od) < 1e-3);
+  // ---- napis jako druga część obiektu pokrywy (druk wielokolorowy) ----
+  const pieces: any[] = def.pieces;
+  const bodiesT: any[] = [{ body: 1, manifold: fl0(pk) }, { body: 2, manifold: turnManifold(pl, [0, 180]) }, { body: 3, manifold: turnManifold(pn, [0, 180]) }];
+  function fl0(m: any) { return m; }
+  const infoT = new Map(bodiesT.map((b, i) => [b.body, { group: 'g1', piece: pieces[i].value, printWith: pieces[i].printWith, name: pieces[i].label }]));
+  const merged = groupPrintWith(bodiesT, infoT as any);
+  const mh = merged.find((b: any) => b.body === 2) as any;
+  expect('napis dołączony do pokrywy: 2 obiekty zamiast 3', merged.length === 2 && !!mh && mh.parts?.length === 2, `(${merged.length} obiekty, części: ${mh?.parts?.map((x: any) => x.name).join(' + ')})`);
+  expect('obiekt pokrywy = pokrywa + napis w jednej ramce', Math.abs(mh.manifold.volume() - (pl.volume() + pn.volume())) < 1, `(${mh.manifold.volume().toFixed(0)} vs ${(pl.volume() + pn.volume()).toFixed(0)})`);
+  expect('części obiektu mają wspólne współrzędne (napis w obrysie pokrywy)', (() => { const a = mh.parts[0].manifold.boundingBox(), c = mh.parts[1].manifold.boundingBox(); return c.min[0] >= a.min[0] && c.max[0] <= a.max[0] && c.min[1] >= a.min[1] && c.max[1] <= a.max[1] && Math.abs(c.min[2] - a.min[2]) < 1e-6; })());
+  expect('korpus bez zmian', merged.find((b: any) => b.body === 1) === bodiesT[0]);
   console.log(bad ? `\n${bad} błędów` : '\nwszystko OK'); process.exit(bad ? 1 : 0);
 })();
