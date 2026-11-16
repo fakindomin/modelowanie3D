@@ -19,6 +19,25 @@ const DEG = Math.PI / 180;
 const BED = 220;
 const noRaycast = () => null;
 
+/**
+ * Przekrój (tylko widok): pionowa płaszczyzna przez środek zaznaczonej części (bez zaznaczenia: całego modelu) ucina przednią połowę,
+ * żeby było widać wnętrze. Ścianki rysują się z obu stron, więc przekrojona ścianka wygląda na pustą od środka. Wydruku i eksportu nie zmienia.
+ */
+function useSection(): { planes: THREE.Plane[] | undefined; side: THREE.Side } {
+  const on = useStore((s) => s.section);
+  const parts = useStore((s) => s.parts);
+  const selectedId = useStore((s) => s.selectedId);
+  const y = useMemo(() => {
+    if (!on) return null;
+    const shown = parts.filter((p) => !p.hole && !p.hidden);
+    const sel = shown.find((p) => p.id === selectedId);
+    const box = new THREE.Box3();
+    for (const p of sel ? [sel] : shown) box.union(worldBox(p));
+    return box.isEmpty() ? 0 : (box.min.y + box.max.y) / 2;
+  }, [on, parts, selectedId]);
+  return useMemo(() => (y === null ? { planes: undefined, side: THREE.FrontSide } : { planes: [new THREE.Plane(new THREE.Vector3(0, 1, 0), -y)], side: THREE.DoubleSide }), [y]);
+}
+
 /** The arrow gizmo: while one of its handles is under the pointer, clicks belong to it, not to the parts behind. */
 const gizmo: { controls: { axis: string | null; dragging: boolean } | null; pick: { prev: string | null } | null } = { controls: null, pick: null };
 (globalThis as unknown as { __gizmo: typeof gizmo }).__gizmo = gizmo;
@@ -45,6 +64,7 @@ function shownCut(parts: Part[]): Set<number> {
 
 function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolean }) {
   const { geometry } = built(part);
+  const sec = useSection();
   const heavy = geometry.attributes.position.count > EDGE_LIMIT;
   const edge = heavy ? null : look.selected ? '#ffffff' : look.snap ? '#5bb974' : look.hovered ? '#f3b47e' : look.sibling ? '#c99a6e' : null;
   const tint = look.selected && heavy ? '#5a3c22' : look.hovered ? '#3e3a36' : '#000000';
@@ -65,9 +85,11 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
             transparent={!!part.noPrint}
             opacity={part.noPrint ? 0.22 : 1}
             depthWrite={!part.noPrint}
+            clippingPlanes={sec.planes}
+            side={sec.side}
           />
         )}
-        {edge && <Edges threshold={20} color={edge} lineWidth={look.selected ? 2 : 1.5} />}
+        {edge && !sec.planes && <Edges threshold={20} color={edge} lineWidth={look.selected ? 2 : 1.5} />}
         {!edge && ghost && !heavy && <Edges threshold={20} color="#8b939e" lineWidth={1} />}
       </mesh>
     </group>
@@ -136,6 +158,7 @@ function PreviewBodies() {
 
 function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | null; hoveredBody: number | null }) {
   const parts = useStore((s) => s.parts);
+  const sec = useSection();
   const merged = useMemo(() => [...shownCut(parts)].sort((a, b) => a - b), [parts]);
   const bodies = useBodies(parts, merged, merged.join(','));
   const hidden = new Set(merged.filter((b) => parts.filter((p) => p.body === b && !p.hole).every((p) => p.hidden)));
@@ -153,8 +176,10 @@ function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | nu
             transparent={off.has(b.body)}
             opacity={off.has(b.body) ? 0.22 : 1}
             depthWrite={!off.has(b.body)}
+            clippingPlanes={sec.planes}
+            side={sec.side}
           />
-          {selectedBody === b.body && b.geometry.attributes.position.count <= EDGE_LIMIT && <Edges threshold={20} color="#ffffff" lineWidth={2} />}
+          {selectedBody === b.body && !sec.planes && b.geometry.attributes.position.count <= EDGE_LIMIT && <Edges threshold={20} color="#ffffff" lineWidth={2} />}
         </mesh>
       ))}
     </>
@@ -769,7 +794,7 @@ export function Viewport() {
       frameloop="demand"
       camera={{ position: [160, -220, 180], fov: 40, near: 1, far: 10000, up: [0, 0, 1] }}
       onPointerMissed={(e) => e.button === 0 && !gizmoBusy() && select(null)}
-      gl={{ antialias: true, preserveDrawingBuffer: true }}
+      gl={{ antialias: true, preserveDrawingBuffer: true, localClippingEnabled: true }}
     >
       <color attach="background" args={['#1c1d1f']} />
       {lights}

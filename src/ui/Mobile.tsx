@@ -143,6 +143,7 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
             {item('⤢ Całość', st.fit)}
             {item('⊞ Ułóż na stole', st.layoutOnBed)}
             {item(st.measure ? '✓ 📏 Wymiary' : '📏 Wymiary', () => st.setMeasure(!st.measure), st.measure ? 'on' : '')}
+            {item(st.section ? '✓ Przekrój' : '◧ Przekrój', () => st.setSection(!st.section), st.section ? 'on' : '')}
             {item(st.preview ? '✓ Podgląd' : 'Podgląd wydruku', () => st.setPreview(!st.preview), st.preview ? 'on' : '')}
             {item('Sprawdź model', st.runCheck)}
             {item('📖 Instrukcja', act.manual)}

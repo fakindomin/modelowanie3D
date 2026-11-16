@@ -171,6 +171,9 @@ const PATHS: Record<string, string> = {
   die: 'M5 5 H23 V23 H5 Z M9 9 h0.1 M14 14 h0.1 M19 19 h0.1',
   spinningTop: 'M14 3 V8 M6 12 H22 L14 25 Z M6 12 L14 8 L22 12',
   figurine: 'M14 3 C10 3 9 7 11 10 C6 11 6 18 8 22 H20 C22 18 22 11 17 10 C19 7 18 3 14 3 Z M11 14 V21 M14 13 V22 M17 14 V21',
+  xmasLabel: 'M6 8 H22 A3 3 0 0 1 25 11 V17 A3 3 0 0 1 22 20 H6 A3 3 0 0 1 3 17 V11 A3 3 0 0 1 6 8 Z M8 14 a1.4 1.4 0 1 0 0.1 0 M12.5 12 H21 M12.5 16 H18',
+  xmasTopper: 'M14 2 L15.2 8 H12.8 Z M12.8 8 C12.6 10 11 11 9.5 13 C7.5 15.5 7.5 19.5 9.5 21.5 L8.5 26 H19.5 L18.5 21.5 C20.5 19.5 20.5 15.5 18.5 13 C17 11 15.4 10 15.2 8 Z M11 21.5 H17',
+  xmasCutter: 'M14 3 L16.6 10.2 L24 10.6 L18.3 15.4 L20.2 22.7 L14 18.6 L7.8 22.7 L9.7 15.4 L4 10.6 L11.4 10.2 Z',
 };
 
 export function Icon({ type, hole }: { type: string; hole: boolean }) {

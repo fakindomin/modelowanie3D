@@ -9,7 +9,7 @@ import { DEFAULT_TEXTURE, FACE_LABELS, faceLabel, TEXTURE_LABELS } from '../geom
 import { DEFAULT_EDGES } from '../geom/edges';
 import { DEFAULT_BEND } from '../geom/bend';
 import { DEFAULT_INFILL, DEFAULT_SHELL, DEFAULT_XFORM, finishing, xformActive } from '../geom/modify';
-import { FIG_MODELS, FIG_ORDER } from '../parts/figurine';
+import { FIG_MODELS, FIG_ORDER, XMAS_ORDER } from '../parts/figurine';
 import type { Bend, Edges, Infill, Part, PlainFace, Shell, Texture, TextureFace, Vec3, Xform } from '../types';
 import { LATTICE_LABELS } from '../geom/lattice';
 import { buildBodies, texturesOf } from '../geom/parts';
@@ -27,6 +27,7 @@ import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../sim
 import { PRINTERS } from '../wizards/frame';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
+const XMAS_ICON: Record<string, string> = { etykieta: 'xmasLabel', czubek: 'xmasTopper', foremka: 'xmasCutter' };
 /** The „Części” tab: the building blocks in a few groups, each holding one or more of the old categories. */
 const PART_GROUPS: { id: string; label: string; cats: Category[] }[] = [
   { id: 'ready', label: 'Gotowe elementy', cats: ['ready'] },
@@ -149,6 +150,7 @@ export function Library() {
   const query = norm(q.trim());
   const hit = (...texts: string[]) => !query || texts.some((t) => norm(t).includes(query));
   const figs = tab === 'fig' ? FIG_ORDER.filter((id) => hit(FIG_MODELS[id].n)) : [];
+  const xmas = tab === 'fig' ? XMAS_ORDER.filter((id) => hit(FIG_MODELS[id].n, 'święta', 'boże narodzenie', 'christmas')) : [];
   // Ready-made technical parts only: bare blocks and features are gone (see simple.ts).
   const sections = tab !== 'tech' ? [] : TECH_GROUPS.map((g) => {
     const fams = g.fams
@@ -162,7 +164,7 @@ export function Library() {
   const projectsOn = tab === 'tech' && (mode === 'projects' || !!query);
   const partsOn = tab === 'tech' && (mode === 'parts' || !!query);
   const projHits = projectsOn && query ? PROJECT_ITEMS.filter((i) => hit(i.label, i.desc, ...i.tags.map((t) => USE_CATS.find((c) => c.id === t)!.label))) : [];
-  const nothing = !!query && !figs.length && !projHits.length && (!partsOn || sections.every((x) => !x.fams.length && !x.tiles.length));
+  const nothing = !!query && !figs.length && !xmas.length && !projHits.length && (!partsOn || sections.every((x) => !x.fams.length && !x.tiles.length));
   // Main part groups start open; project categories start shut (the set lists the ones flipped).
   const shown = (id: string) => !!query || (id.startsWith('proj:') ? closed.has(id) : !closed.has(id));
   const runItem = runProjectItem;
@@ -233,6 +235,20 @@ export function Library() {
           figs.map((id) => (
             <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => (startNew(), addFigurine(id))}>
               <Icon type="figurine" hole={false} />
+              <span>{FIG_MODELS[id].n}</span>
+            </button>
+          )),
+        )}
+      {xmas.length > 0 &&
+        category(
+          'xmas',
+          'Święta: etykieta, czubek, foremki',
+          'xmasTopper',
+          xmas.length,
+          xmas.length,
+          xmas.map((id) => (
+            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => (startNew(), addFigurine(id))}>
+              <Icon type={XMAS_ICON[id] ?? 'figurine'} hole={false} />
               <span>{FIG_MODELS[id].n}</span>
             </button>
           )),
@@ -1483,7 +1499,7 @@ function PartProperties({ part }: { part: Part }) {
         </details>
       )}
       {ends.length > 0 && <EndsSection part={part} fields={ends} />}
-      {part.type === 'figurine' && (
+      {part.type === 'figurine' && FIG_MODELS[String(part.params.model)]?.tune && (
         <div className="row">
           <NumberInput value={height} min={30} max={300} unit="mm" onChange={setHeight} />
           <button className="small" onClick={() => st.fitFigurine(part.id, height)} title="Dobiera suwak wysokości tak, by cała figurka miała podaną wysokość">

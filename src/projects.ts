@@ -169,7 +169,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   part('hoseBarb', ['garden']),
   part('gland', ['electronics']),
   part('threadTest', ['workshop', 'printer']),
-  { kind: 'figurines', label: 'Figurki (żebrowana kolekcja)', desc: 'Zwierzaki i postacie do druku: osobna zakładka Figurki.', tags: ['kids'], icon: 'figurine' },
+  { kind: 'figurines', label: 'Figurki i święta', desc: 'Zwierzaki i postacie do druku oraz świąteczne dodatki: etykieta „Dla” z imieniem, czubek choinkowy, foremki do piernika. Osobna zakładka Figurki.', tags: ['kids'], icon: 'figurine' },
 ];
 
 export const itemsIn = (c: UseCat) => PROJECT_ITEMS.filter((i) => i.tags.includes(c));

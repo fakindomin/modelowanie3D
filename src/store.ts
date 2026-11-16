@@ -89,9 +89,12 @@ interface State {
   check: CheckResult | null;
   /** "Wymiary" mode: hovering shows sizes, clicks pin features and measure between them. */
   measure: boolean;
+  /** Przekrój: tylko podgląd, ucina przednią połowę wybranej części (nie wpływa na wydruk ani eksport). */
+  section: boolean;
   measureHover: (Feature & { x: number; y: number }) | null;
   pins: Feature[];
   setMeasure(on: boolean): void;
+  setSection(on: boolean): void;
   setMeasureHover(f: (Feature & { x: number; y: number }) | null): void;
   addPin(f: Feature): void;
   removePin(i: number): void;
@@ -832,6 +835,7 @@ export const useStore = create<State>((set, get) => {
     fitRequest: 0,
     check: null,
     measure: false,
+    section: false,
     measureHover: null,
     recent: loadRecent(),
     suggest: null,
@@ -907,6 +911,7 @@ export const useStore = create<State>((set, get) => {
     pins: [],
     fit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),
     setMeasure: (on) => set({ measure: on, measureHover: null, pins: on ? get().pins : [], preview: false }),
+    setSection: (on) => set({ section: on }),
     setMeasureHover: (f) => {
       const cur = get().measureHover;
       if (cur === f || (cur && f && cur.label === f.label && cur.pick === f.pick && cur.x === f.x && cur.y === f.y)) return;
