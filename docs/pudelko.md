@@ -70,4 +70,15 @@ Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 - Suwak „Pokrywa: wysunięcie (podgląd)” 0–100 % przesuwa pokrywę i napis w −X (kanał otwarty z lewej), 100 % = zaparkowana na magnesach jak w v11. Nie zmienia wydruku.
 - Pozycja do druku: `PartDef.printTurn` (nowe pole, `src/parts/def.ts`, użyte w `printBodies` w `src/App.tsx`): pokrywa i napis obracają się o 180° wokół X (górą do stołu; nawisy 6406 → 144 mm²). Automatyczny `bestPose` układał pokrywę pionowo na krótkim brzegu, więc dla pudełka jest pomijany (`pudelko` w `KEEP` w `src/geom/orient.ts`).
 - Napis dołącza do pokrywy w eksporcie: `PieceDef.printWith` (`src/parts/def.ts`) + `groupPrintWith` (`src/export.ts`, wywołane w `printBodies` w `src/App.tsx`) robią z pokrywy i wkładki jeden obiekt 3MF z dwiema częściami (`ColoredBody.parts`) we wspólnych współrzędnych; w slicerze każda część dostaje własny filament. Test: `scripts/check/pudelko.sh`.
-- Szuflady jako części: punkt 3 (na razie w korpusie są tylko wnęki v11).
+- Szuflady są osobną częścią `szuflady` (do dwóch brył w jednej części), w złożeniu dnem równo z dołem pudełka; w druku leżą dnem do stołu.
+
+## Punkt 3: szuflady (gotowe)
+Kod: `drawerPlan`, `drawers`, `bayMagnetCuts`, `bayRails`, `rampSolid` w `src/parts/pudelko.ts`; v11 zostaje pod ukrytym `legacyDrawers` (test zgodności).
+- Parametry (grupa „Szuflady”): `nDr` 0/1/2, `dW` (71,1), `dH` (12,8), `dL` (70), `dX` położenie płynne, `dMag` tak/nie, `dRampH`/`dRampL` skos dna (przód i tył, łagodny), `baseExtra` (tylko przy 0 szufladach). Przy dwóch szufladach obie są identyczne; przy jednej jest dowolna.
+- Wnęki otwarte od dołu (bez podłogi), w ściankach wnęk prowadnice 1,5 mm: górna ścianka pozioma, spód 45° (druk bez podpór). Szuflada ma rowki z luzem 0,25 mm, przegroda między wnękami 3,0 mm z magnesami 5×2 i 1,6 mm bez nich.
+- Magnesy: w ściankach bocznych wnęki i szuflady, tył (zamknięta) i przód (wysunięta o dł. − 21,5 mm); lewa i prawa ścianka mają inne Y (odstęp w przegrodzie). Gniazdo 2,2 mm w ściance 2,8 mm, oś nad prowadnicą (z = 7,6, pasmo 5,0–10,25), więc magnes nie wystaje.
+- Progi (wszystkie w `pudelkoNotes`, więc suwaki same się zawężają): wysokość ≥ 11,3 mm z magnesami (8,0 bez), długość ≥ 41,5 mm z magnesami (30 bez; 20 mm wysuwu) i ≤ Y − 3,4, szerokość ≥ 30 i łącznie ≤ dostępne miejsce, położenie ≤ wolne miejsce, skos ≤ wysokość − 1,2 − 5 oraz ≤ ½ wnętrza, ≥ 1,6 mm materiału pod bibułkami nad wnęką, ≥ 1,2 mm pod zapalniczką.
+- Wysokość pudełka wynika z wysokości szuflady (dno młynka = dH + 7). Bez szuflad dno ma minimum dla młynka, bibułek, zapalniczki ze skosem i ubijaka (+ `baseExtra`); dół jest wtedy zamknięty z napisem.
+- Zmiana liczby szuflad albo magnesów: `repairParams` sam dopasowuje szerokość, wysokość, długość, położenie i skos.
+- Napis na dole pudełka wraca przy przeróbce dołu (przy szufladach dół jest otwarty).
+- Test: `scripts/check/pudelko.sh` (kolizje szuflad z korpusem i pokrywą, objętość kieszeni magnesów = pełna, mała szuflada, 0/1/2 szuflady, 400 losowych kroków z geometrią co 10 kroków).

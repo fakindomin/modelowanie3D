@@ -21,14 +21,18 @@ const TAMPER_L = TAMP_PIN_L + TAMP_HANDLE_L;
 const CL = 0.8, WALL_X = 3.0, WALL_Y = 4.0, SEP = 1.6, FLOOR = 2.0;
 const LID_CLEAR = 0.25, DOVE = 2.0, GAP_PROUD = 6.0, GRIP_GAP = 11.0, RING_H = 14.0;
 const MAG_D = 5.0, MAG_T = 2.0, MAG_CLR = 0.25;
-const WALL_L = 12.0, BASE_H = 11.8, DR_Z0 = 3.0, DR_REAR = 3.0, GRINDER_GAP = 0.3;
+const WALL_L = 12.0, DR_Z0 = 3.0, DR_REAR = 3.0, GRINDER_GAP = 0.3;
+// szuflady (nowy układ): ścianka boczna 2,8 (gniazdo magnesu 2,2 + 0,6), front 3,0, dno 1,2, tył 1,6
+const SW = 2.8, FP = 3.0, FL = 1.2, RW = 1.6, DR_CLR = 0.25;
+const RAIL = 1.5, RAIL_Z = 3.6;                  // prowadnica: wypust 1,5 mm, górna ścianka na z = 3,6, spód 45°
+const MAG_DEPTH = MAG_T + 0.2, ZM = 5.0 + (MAG_D + MAG_CLR) / 2;   // gniazdo 2,2; oś magnesów nad prowadnicą (pasmo 5,0–10,25)
 const RIB_R = 1.0, RIB_PITCH = 4.0, CORNER_R = 3.0;
 const TEXT = 'FKNDMN', TEXT_H_LID = 7.0, TEXT_H_BOT = 10.0, TEXT_DEPTH_BOT = 0.6;
 const EPS = 0.01;
 const MAG_R = (MAG_D + MAG_CLR) / 2;
 
 // ---------- parametry wnętrza (domyślne = v11) ----------
-export const DEF = { lidT: 3.8, gD: 40, gH: 33, bookL: 120, bookT: 13, bookH: 30, bookIn: 0.5, lL: 82, lW: 26, lT: 15, rampLen: 25, rampDepth: 2.0, trayDepth: 2.0, traySlope: 18, textDepth: 0.8 } as const;
+export const DEF = { lidT: 3.8, gD: 40, gH: 33, bookL: 120, bookT: 13, bookH: 30, bookIn: 0.5, lL: 82, lW: 26, lT: 15, rampLen: 25, rampDepth: 2.0, trayDepth: 2.0, traySlope: 18, textDepth: 0.8, dW: 71.1, dH: 12.8, baseExtra: 0, dL: 70.0, dX: 0, dRampH: 3.0, dRampL: 25 } as const;
 const val = (p: Params, k: keyof typeof DEF) => (p[k] === undefined || Number.isNaN(Number(p[k])) ? DEF[k] : Number(p[k]));
 
 // ---------- układ ----------
@@ -45,7 +49,18 @@ export function layout(p: Params) {
   const Y = WALL_Y + A_Y + SEP + B_Y + WALL_Y;
   // Nad kanałem jest pokrywa (lidT) + 0,2 luzu; Z_CH0 zostaje tam gdzie było przy pokrywie 2,8.
   const lidTop = lidT + 0.2;
-  const H = Math.round((BASE_H + FLOOR + 1.0 + (gH + SEAT) + GRINDER_GAP + lidTop) * 10) / 10;
+  // Dno gniazda młynka (gFloor): z szufladami = wysokość szuflady + 7 (strop wnęki + 6,6); bez szuflad = minimum dla młynka,
+  // bibułek, zapalniczki (ze skosem) i ubijaka + dodatek użytkownika.
+  const nDr = p.legacyDrawers ? 2 : Math.max(0, Math.min(2, Math.round(Number(p.nDr ?? 2))));
+  let gFloor: number;
+  if (nDr > 0) gFloor = val(p, 'dH') + 7.0;
+  else {
+    const rampD = p.rampSide === 'off' ? 0 : val(p, 'rampDepth');
+    const need = Math.max(2.0, 2.9 + bookH - gH, 3.3 + lT - gH + rampD, 15.4 + TAMP_SQ / 2 - gH);
+    gFloor = Math.ceil(need * 10 - 1e-9) / 10 + val(p, 'baseExtra');
+  }
+  const BASE_H = gFloor - 8.0;
+  const H = Math.round((gFloor + gH + GRINDER_GAP + lidTop) * 10) / 10;
   const Z_CH0 = H - lidTop;
   const Z_LID0 = Z_CH0;
   const Z_TOP_ITEMS = Z_CH0 - 1.2;
@@ -54,7 +69,7 @@ export function layout(p: Params) {
   const BOOK_SHELF = Z_TOP_ITEMS - bookH * (1 - bookIn);
   const yB0 = WALL_Y + A_Y + SEP;
   const x0 = WALL_L;
-  return { lidT, gD, gH, bookL, bookT, bookH, bookIn, lL, lW, lT, A_Y, B_Y, lighterLen, X, Y, H, IN_X, Z_CH0, Z_LID0, Z_TOP_ITEMS, Z_BAY0, BOOK_FLOOR, BOOK_SHELF, yB0, x0, yc: Y / 2 };
+  return { lidT, BASE_H, gFloor, nDr, gD, gH, bookL, bookT, bookH, bookIn, lL, lW, lT, A_Y, B_Y, lighterLen, X, Y, H, IN_X, Z_CH0, Z_LID0, Z_TOP_ITEMS, Z_BAY0, BOOK_FLOOR, BOOK_SHELF, yB0, x0, yc: Y / 2 };
 }
 type Lay = ReturnType<typeof layout>;
 
@@ -209,6 +224,80 @@ export function ramp(p: Params, L: Lay) {
   return { side, depth, len, lx0, xe: side === 'right' ? lx0 + L.lighterLen : lx0 };
 }
 
+// ---------- szuflady ----------
+const smoothStep = (t: number) => { const u = Math.min(1, Math.max(0, t)); return u * u * (3 - 2 * u); };
+
+/** Plan szuflad: ile, jak szerokie i gdzie (wnęki w osi X), z przegrodą dobraną do magnesów. */
+export function drawerPlan(p: Params, L: Lay) {
+  const n = Math.max(0, Math.min(2, Math.round(Number(p.nDr ?? 2))));
+  const mag = p.dMag !== 'off';
+  const P = mag ? MAG_DEPTH + 0.8 : SEP;                       // przegroda: gniazdo 2,2 + 0,8 krycia (3,0), bez magnesów 1,6
+  const Ls = L.X - WALL_X - L.x0;                               // pas na wnęki
+  const Wd = val(p, 'dW'), Hd = val(p, 'dH');
+  const Ld = Math.min(val(p, 'dL'), L.Y - DR_REAR - 0.4);
+  const Pw = Wd + 2 * DR_CLR;
+  const total = n * Pw + Math.max(0, n - 1) * P;
+  const free = Math.max(0, Ls - total);
+  const dX = Math.min(free, Math.max(0, val(p, 'dX')));
+  const bays = Array.from({ length: n }, (_, i) => { const xa = L.x0 + dX + i * (Pw + P); return { xa, xb: xa + Pw }; });
+  return { n, mag, P, Ls, Wd, Hd, Ld, Pw, total, free, dX, bays, c: Hd + 0.4, yEnd: Ld + 0.4, pull: Ld - 21.5 };
+}
+type DPlan = ReturnType<typeof drawerPlan>;
+
+/** Magnesy w ściankach wnęk: tył (zamknięta) i przód (szuflada wysunięta o `pull`). Lewa ścianka y = Ld−7, prawa Ld−14,5 (odstęp w przegrodzie). */
+function bayMagnetCuts(D: DPlan): Manifold[] {
+  const out: Manifold[] = [];
+  for (const { xa, xb } of D.bays)
+    for (const k of [0, 1]) {
+      const dy = k * D.pull;
+      out.push(cylXa(D.Ld - 7.0 - dy, ZM, MAG_R, xa - MAG_DEPTH, xa + EPS), cylXa(D.Ld - 14.5 - dy, ZM, MAG_R, xb - EPS, xb + MAG_DEPTH));
+    }
+  return out;
+}
+
+/** Prowadnice w ściankach wnęk: wypust 1,5 mm, górna ścianka pozioma (nośna), spód pod 45° (druk bez podpór). */
+function bayRails(D: DPlan): Manifold[] {
+  return D.bays.flatMap(({ xa, xb }) => [
+    prismY([[xa - EPS, RAIL_Z], [xa + RAIL, RAIL_Z], [xa - EPS, RAIL_Z - RAIL]], 0, D.yEnd),
+    prismY([[xb + EPS, RAIL_Z], [xb - RAIL, RAIL_Z], [xb + EPS, RAIL_Z - RAIL]], 0, D.yEnd),
+  ]);
+}
+
+/** Profil skosu dna: od wysokości R przy ściance łagodnie (smoothstep) do dna na długości RL; dir = +1 od przodu, −1 od tyłu. */
+function rampSolid(xa: number, xb: number, yWall: number, dir: 1 | -1, R: number, RL: number): Manifold {
+  const N = 16, pts: P2[] = [[yWall - dir * 0.01, FL - 0.01]];
+  for (let k = 0; k <= N; k++) pts.push([yWall + dir * (RL * k) / N, FL + R * (1 - smoothStep(k / N))]);
+  pts.push([yWall + dir * RL, FL - 0.01]);
+  pts.splice(1, 0, [yWall - dir * 0.01, FL + R]);
+  return prismX(pts, xa, xb);
+}
+
+/** Szuflady: do dwóch identycznych brył w jednej części, w złożeniu, dnem równo z dołem pudełka. null = brak szuflad. */
+export function drawers(p: Params): Manifold | null {
+  const L = layout(p), D = drawerPlan(p, L);
+  if (!D.n) return null;
+  const outl = outline(L.X, L.Y);
+  const { Hd, Ld } = D;
+  const R = val(p, 'dRampH'), RL = Math.max(0, Math.min(val(p, 'dRampL'), (Ld - RW - FP - 5) / 2));
+  const zt = RAIL_Z;
+  const parts: Manifold[] = [];
+  for (const { xa, xb } of D.bays) {
+    const xl = xa + DR_CLR, xr = xb - DR_CLR, xc = (xl + xr) / 2;
+    let d = U([bb(xl, xr, FP - 1.0, Ld, 0, Hd), ext(outl, 0, Hd).intersect(bb(xl, xr, -2.0, FP, -1.0, Hd + 1))]);   // tacka + front z żebrami jak korpus
+    d = d.subtract(bb(xl + SW, xr - SW, FP, Ld - RW, FL, Hd + 1));
+    if (R > 0 && RL > 0) d = d.add(U([rampSolid(xl + SW - EPS, xr - SW + EPS, FP, 1, R, RL), rampSolid(xl + SW - EPS, xr - SW + EPS, Ld - RW, -1, R, RL)]));
+    const cuts: Manifold[] = [
+      cylZ(xc, -7.4, 9.0, -1.0, Hd + 1, 48),                                                                  // pionowy żłobek na palec w froncie
+      // rowki na prowadnice: kształt prowadnicy powiększony o luz 0,25 (górna ścianka pozioma, spód 45°)
+      prismY([[xl - EPS, zt + 0.25], [xl + RAIL + 0.25, zt + 0.25], [xl + RAIL + 0.25, zt - 0.104], [xl - EPS, zt - 1.604]], -2.0, Ld + 1),
+      prismY([[xr + EPS, zt + 0.25], [xr - RAIL - 0.25, zt + 0.25], [xr - RAIL - 0.25, zt - 0.104], [xr + EPS, zt - 1.604]], -2.0, Ld + 1),
+    ];
+    if (D.mag) cuts.push(cylXa(Ld - 7.0, ZM, MAG_R, xl - EPS, xl + MAG_DEPTH), cylXa(Ld - 14.5, ZM, MAG_R, xr - MAG_DEPTH, xr + EPS));
+    parts.push(d.subtract(U(cuts)));
+  }
+  return U(parts);
+}
+
 // ---------- korpus ----------
 export function korpus(p: Params): Manifold {
   const L = layout(p);
@@ -236,22 +325,28 @@ export function korpus(p: Params): Manifold {
   const PIN_Z = TZ_AX - 1.0;
   cut.push(cylYa(TX_AX, PIN_Z, (TAMP_PIN_D + CL + 0.2) / 2, T_Y0 + TAMP_HANDLE_L, T_Y0 + TAMPER_L + 0.5));
   cut.push(cylXa(T_Y0 + TAMP_HANDLE_L / 2, TZ_AX, MAG_R, TX_AX + TAMP_SQ / 2 + 0.2 - EPS, TX_AX + TAMP_SQ / 2 + 0.2 + MAG_T + 0.2));
-  // szuflady (v11: dwie kieszenie od frontu; zastąpione w punkcie 3)
-  const DR_Z1 = BASE_H + FLOOR + 1.0 - 1.6;
-  const DR_MAG_Y = 7.0, DR_WIN_W = 26.0, DR_FRONT_GAP = 3.3, DR_NOTCH_L = 10.0;
-  const DR_YE = Y - DR_REAR;
-  const DR_XA = x0, DR_XB = X - WALL_X;
-  const DR_W = (DR_XB - DR_XA - SEP) / 2;
-  const DR_MAG_DX = Math.min(19.0, DR_W / 2 - MAG_R - 2.0);   // tymczasowo: magnesy nie wystają przy małej szufladzie (pełna logika w punkcie 3)
-  const pockets: [number, number][] = [[DR_XA, DR_XA + DR_W], [DR_XA + DR_W + SEP, DR_XB]];
-  const DR_Z1_TALL = BOOK_FLOOR - 1.6;
-  const ceil = [DR_Z1, DR_Z1_TALL];
-  pockets.forEach(([xa, xb], i) => {
-    cut.push(bb(xa, xb, -2.0, DR_YE, DR_Z0, ceil[i]));
-    for (const dx of [-DR_MAG_DX, DR_MAG_DX]) cut.push(cylZ((xa + xb) / 2 + dx, DR_MAG_Y, MAG_R, DR_Z0 - MAG_T - 0.2, DR_Z0 + EPS));
-    cut.push(bb(xa, xb, -2.0, DR_FRONT_GAP, -1.0, DR_Z0 + EPS));
-    cut.push(bb((xa + xb) / 2 - DR_WIN_W / 2, (xa + xb) / 2 + DR_WIN_W / 2, -2.0, DR_NOTCH_L, -1.0, DR_Z0 + EPS));
-  });
+  // szuflady: wnęki otwarte od dołu (bez podłogi), prowadnice dodawane po wycięciu; v11 zostaje do testu zgodności
+  const D = drawerPlan(p, L);
+  if (p.legacyDrawers) {
+    const DR_Z1 = L.BASE_H + FLOOR + 1.0 - 1.6;
+    const DR_MAG_Y = 7.0, DR_WIN_W = 26.0, DR_FRONT_GAP = 3.3, DR_NOTCH_L = 10.0;
+    const DR_YE = Y - DR_REAR;
+    const DR_XA = x0, DR_XB = X - WALL_X;
+    const DR_W = (DR_XB - DR_XA - SEP) / 2;
+    const DR_MAG_DX = Math.min(19.0, DR_W / 2 - MAG_R - 2.0);   // tymczasowo: magnesy nie wystają przy małej szufladzie (pełna logika w punkcie 3)
+    const pockets: [number, number][] = [[DR_XA, DR_XA + DR_W], [DR_XA + DR_W + SEP, DR_XB]];
+    const DR_Z1_TALL = BOOK_FLOOR - 1.6;
+    const ceil = [DR_Z1, DR_Z1_TALL];
+    pockets.forEach(([xa, xb], i) => {
+      cut.push(bb(xa, xb, -2.0, DR_YE, DR_Z0, ceil[i]));
+      for (const dx of [-DR_MAG_DX, DR_MAG_DX]) cut.push(cylZ((xa + xb) / 2 + dx, DR_MAG_Y, MAG_R, DR_Z0 - MAG_T - 0.2, DR_Z0 + EPS));
+      cut.push(bb(xa, xb, -2.0, DR_FRONT_GAP, -1.0, DR_Z0 + EPS));
+      cut.push(bb((xa + xb) / 2 - DR_WIN_W / 2, (xa + xb) / 2 + DR_WIN_W / 2, -2.0, DR_NOTCH_L, -1.0, DR_Z0 + EPS));
+    });
+  } else {
+    D.bays.forEach(({ xa, xb }) => cut.push(bb(xa, xb, -2.0, D.yEnd, -1.0, D.c)));
+    if (D.mag) cut.push(...bayMagnetCuts(D));
+  }
   // zapalniczka: ściana od strony bibułek obniżona do połowy
   const lFloor = Z_TOP_ITEMS - lT - 0.4;
   if (x0 + bookL + CL - lx0 > 1) cut.push(bb(lx0, x0 + bookL + CL, yB0 - SEP - EPS, yB0 + EPS, lFloor + lT / 2, Z_CH0 + EPS));
@@ -268,9 +363,12 @@ export function korpus(p: Params): Manifold {
   cut.push(bb(x0, x0 + bookL + CL, WALL_Y, WALL_Y + L.A_Y, BOOK_SHELF, Z_CH0 + EPS));
   cut.push(bb(x0, gX1, by0 + bookT + CL + SEP, yB0 + EPS, gFloor + RING_H, Z_CH0 + EPS));
   let m = body.subtract(U(cut));
-  // napis na spodzie (grawer, odbity: czytelny po odwróceniu pudełka)
-  const bot = centered(textShape(TEXT, TEXT_H_BOT), 0, 0).scale([-1, 1]).translate([X / 2, Y / 2]);
-  m = m.subtract(ext(bot, -0.1, TEXT_DEPTH_BOT));
+  if (!p.legacyDrawers && D.n) m = m.add(U(bayRails(D)));
+  // napis na spodzie (grawer, odbity: czytelny po odwróceniu pudełka); przy szufladach dół jest otwarty, więc napis wraca przy przeróbce dołu
+  if (p.legacyDrawers || !D.n) {
+    const bot = centered(textShape(TEXT, TEXT_H_BOT), 0, 0).scale([-1, 1]).translate([X / 2, Y / 2]);
+    m = m.subtract(ext(bot, -0.1, TEXT_DEPTH_BOT));
+  }
   return m;
 }
 
@@ -333,6 +431,7 @@ export function buildPudelko(p: Params): Manifold {
   switch (p.piece) {
     case 'pokrywa': return lidInBox(p).lid.translate([lidShift(p), 0, 0]);
     case 'napis': return (lidInBox(p).text ?? Mf().cube([0.01, 0.01, 0.01]).translate([0, 0, layout(p).Z_LID0])).translate([lidShift(p), 0, 0]);
+    case 'szuflady': return drawers(p) ?? Mf().cube([0.01, 0.01, 0.01]);
     default: return korpus(p);
   }
 }
@@ -347,20 +446,38 @@ export function pudelkoNotes(p: Params): Note[] {
   const out: Note[] = [];
   const bookSide = L.bookL + CL + SEP, grSide = GRIP_GAP + L.gD + CL + GRIP_GAP + SEP + L.lighterLen;
   out.push({ level: 'ok', text: `Wymiary zewnętrzne ${fmt(L.X)} × ${fmt(L.Y)} × ${fmt(L.H)} mm (bez żeber +2,0). Szerokość wyznaczają ${bookSide >= grSide ? 'bibułki' : 'młynek + zapalniczka'}.` });
-  // szuflady (v11): niska ma stały strop, wysoka kończy się pod dnem szczeliny na bibułki
-  const DR_Z1 = BASE_H + FLOOR + 1.0 - 1.6, DR_Z1_TALL = L.BOOK_FLOOR - 1.6;
-  const lowH = DR_Z1 - DR_Z0, tallH = DR_Z1_TALL - DR_Z0, MIN_DR = (MAG_D + MAG_CLR) + 2 * 1.2 + 0.4;
-  if (tallH < MIN_DR - E) out.push({ level: 'error', text: `Wysoka szuflada ma tylko ${fmt(tallH)} mm wysokości (min. ${fmt(MIN_DR)} mm na magnes). Zmniejsz wysokość bibułek albo zwiększ młynek.` });
-  else out.push({ level: tallH < 10 - E ? 'warn' : 'ok', text: `Szuflady: niska ${fmt(lowH)} mm, wysoka ${fmt(tallH)} mm (zależy od wysokości bibułek i młynka).` });
-  // zapalniczka: ile materiału pod dnem (z uwzględnieniem skosu) nad sufitami szuflad
-  const lFloor = L.Z_TOP_ITEMS - L.lT - 0.4;
-  const DR_XA = L.x0, DR_XB = L.X - WALL_X, DR_W = (DR_XB - DR_XA - SEP) / 2;
-  const pockets: [number, number, number][] = [[DR_XA, DR_XA + DR_W, DR_Z1], [DR_XA + DR_W + SEP, DR_XB, DR_Z1_TALL]];
+  const D = drawerPlan(p, L);
+  const bookX1 = L.x0 + L.bookL + CL;
   const lx0 = L.x0 + GRIP_GAP + L.gD + CL + GRIP_GAP + SEP, lx1 = lx0 + L.lighterLen;
-  const under = (a: number, b: number) => Math.max(...pockets.filter(([xa, xb]) => xb > a && xa < b).map((q) => q[2]));
+  const lFloor = L.Z_TOP_ITEMS - L.lT - 0.4;
+  const bayUnder = (a: number, b: number, needY: number) =>
+    Math.max(...D.bays.filter(({ xa, xb }) => xb > a && xa < b && D.yEnd > needY).map(() => D.c), -Infinity);
+  const under = (a: number, b: number) => Math.max(0.8, bayUnder(a, b, L.yB0));
   const rs = ramp(p, L);
+  if (!p.legacyDrawers) {
+    const Wd = val(p, 'dW'), Hd = val(p, 'dH'), Ldr = val(p, 'dL'), R = val(p, 'dRampH'), RLr = val(p, 'dRampL'), dXr = val(p, 'dX');
+    if (D.n > 0) {
+      const minHd = D.mag ? 11.3 : 8.0, minLd = D.mag ? 41.5 : 30.0, maxLd = L.Y - DR_REAR - 0.4;
+      const Pw = Wd + 2 * DR_CLR, total = D.n * Pw + (D.n - 1) * D.P;
+      if (Hd < minHd - E) out.push({ level: 'error', text: `Szuflada za niska (${fmt(Hd)} mm, min. ${fmt(minHd)} mm${D.mag ? ' – tyle potrzeba na magnes w ściance' : ''}).` });
+      if (Ldr < minLd - E) out.push({ level: 'error', text: `Szuflada za krótka (${fmt(Ldr)} mm, min. ${fmt(minLd)} mm${D.mag ? ' – magnesy przód/tył muszą się zmieścić i dać 20 mm wysuwu' : ''}).` });
+      if (Ldr > maxLd + E) out.push({ level: 'error', text: `Szuflada dłuższa niż pudełko (${fmt(Ldr)} mm, maks. ${fmt(maxLd)} mm).` });
+      if (Wd < 30 - E) out.push({ level: 'error', text: `Szuflada za wąska (${fmt(Wd)} mm, min. 30 mm).` });
+      if (total > D.Ls + E) out.push({ level: 'error', text: `Szuflady nie mieszczą się w szerokości pudełka (${fmt(total)} mm przy ${fmt(D.Ls)} mm dostępnych).` });
+      else if (dXr > D.free + E) out.push({ level: 'error', text: `Przesunięcie szuflad poza zakres (maks. ${fmt(D.free)} mm przy tej szerokości).` });
+      if (R > Math.max(0, Hd - FL - 5) + E) out.push({ level: 'error', text: `Skos dna szuflady za wysoki (${fmt(R)} mm, maks. ${fmt(Math.max(0, Hd - FL - 5))} mm przy tej wysokości).` });
+      if (R > 0 && RLr > Math.max(0, (Ldr - RW - FP - 5) / 2) + E) out.push({ level: 'error', text: `Skos dna szuflady za długi (${fmt(RLr)} mm, maks. ${fmt(Math.max(0, (Ldr - RW - FP - 5) / 2))} mm).` });
+    }
+    // dno pod bibułkami: nad wnęką zostaje ≥ 1,6 mm, bez wnęki ≥ 2,0 mm od spodu
+    const bUnder = D.bays.some(({ xa, xb }) => xb > L.x0 && xa < bookX1) ? D.c : 0.4;
+    const bMat = L.BOOK_FLOOR - bUnder;
+    if (bMat < 1.6 - E) out.push({ level: 'error', text: `Pod bibułkami zostaje ${fmt(bMat)} mm materiału${bUnder === D.c ? ' nad szufladą' : ''} (min. 1,6). Zmniejsz wysokość bibułek albo zwiększ młynek.` });
+    if (D.n > 0 && !out.some((n) => n.level === 'error' && /Szuflad/.test(n.text)))
+      out.push({ level: 'ok', text: `Szuflady: ${D.n} × ${fmt(Wd)} × ${fmt(Hd)} × ${fmt(Ldr)} mm${D.mag ? `, magnesy 5×2 (przegroda ${fmt(D.P)} mm)` : ', bez magnesów'}; dół otwarty, prowadnice 1,5 mm.` });
+    if (D.n === 0) out.push({ level: 'ok', text: `Bez szuflad: wysokość dna do młynka ${fmt(L.gFloor)} mm (minimum${val(p, 'baseExtra') > 0 ? ` + ${fmt(val(p, 'baseExtra'))}` : ''}).` });
+  }
   const mat0 = lFloor - under(lx0, lx1);
-  if (mat0 < 1.2 - E) out.push({ level: 'error', text: `Pod dnem zapalniczki zostaje ${fmt(mat0)} mm materiału nad szufladą (min. 1,2). Zmniejsz grubość zapalniczki albo wysokość szuflady.` });
+  if (mat0 < 1.2 - E) out.push({ level: 'error', text: `Pod dnem zapalniczki zostaje ${fmt(mat0)} mm materiału${D.n ? ' nad szufladą' : ''} (min. 1,2). Zmniejsz grubość zapalniczki albo wysokość szuflady.` });
   if (rs) {
     const xs = rs.side === 'right' ? rs.xe - rs.len : rs.xe, xe2 = rs.side === 'right' ? rs.xe : rs.xe + rs.len;
     const mat = lFloor - rs.depth - under(xs, xe2);
@@ -401,12 +518,22 @@ const PARAMS: ParamDef[] = [
   select('rampSide', 'Skos dna zapalniczki', 'right', [['right', 'prawy'], ['left', 'lewy'], ['off', 'wyłączony']]),
   { key: 'rampLen', label: 'Skos: długość', type: 'number', def: DEF.rampLen, min: 10, max: 60, step: 1, unit: 'mm', show: (p) => p.rampSide !== 'off', hint: 'Dno opada liniowo na tej długości ku wybranemu końcowi. Wciśnięty koniec unosi drugi.' },
   { key: 'rampDepth', label: 'Skos: głębokość', type: 'number', def: DEF.rampDepth, min: 0.5, max: 5, step: 0.1, unit: 'mm', show: (p) => p.rampSide !== 'off' },
+  { key: 'nDr', label: 'Szuflady: liczba', type: 'number', def: 2, min: 0, max: 2, step: 1, group: 'Szuflady', hint: '0 = bez szuflad (dno ma minimalną wysokość), 1 = jedna dowolna, 2 = dwie identyczne.' },
+  { key: 'dW', label: 'Szuflada: szerokość', type: 'number', def: DEF.dW, min: 30, max: 140, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, hint: 'Przy dwóch szufladach obie mają ten wymiar. Maksimum wynika z szerokości pudełka.' },
+  { key: 'dH', label: 'Szuflada: wysokość', type: 'number', def: DEF.dH, min: 8, max: 30, step: 0.1, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, hint: 'Wyznacza też wysokość pudełka (H rośnie razem z nią). Z magnesami min. 11,3 mm, żeby magnes nie wystawał ze ścianki.' },
+  { key: 'dL', label: 'Szuflada: długość', type: 'number', def: DEF.dL, min: 30, max: 100, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, hint: 'Maksimum wynika z głębokości pudełka. Z magnesami min. 41,5 mm (20 mm wysuwu).' },
+  { key: 'dX', label: 'Szuflada: położenie', type: 'number', def: DEF.dX, min: 0, max: 140, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, hint: 'Przesunięcie od lewej ściany wnęki w osi X (płynnie). Zakres to wolne miejsce przy tej szerokości.' },
+  { ...select('dMag', 'Szuflady: magnesy', 'on', [['on', 'tak (5×2 w ściankach)'], ['off', 'bez magnesów']]), show: (p) => Number(p.nDr ?? 2) > 0 },
+  { key: 'dRampH', label: 'Szuflada: skos dna – wysokość', type: 'number', def: DEF.dRampH, min: 0, max: 8, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, more: true, hint: '0 = płaskie dno. Skos przy ściance przedniej i tylnej ułatwia wyjmowanie z szuflady (łagodne zaokrąglenie).' },
+  { key: 'dRampL', label: 'Szuflada: skos dna – długość', type: 'number', def: DEF.dRampL, min: 5, max: 60, step: 1, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0 && Number(p.dRampH ?? DEF.dRampH) > 0, more: true },
+  { key: 'baseExtra', label: 'Dno: dodatkowa wysokość', type: 'number', def: 0, min: 0, max: 20, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) === 0, hint: 'Bez szuflad dno ma minimalną wysokość dla młynka i bibułek; tu można je podnieść.' },
   { key: 'lidT', label: 'Grubość pokrywy', type: 'number', def: DEF.lidT, min: 2.8, max: 6, step: 0.1, unit: 'mm', group: 'Pokrywa', hint: 'Podnosi też wysokość pudełka (H = … + grubość + 0,2). Kąt jaskółczego ogona maleje przy grubszej pokrywie.' },
   { key: 'trayDepth', label: 'Głębokość tacki', type: 'number', def: DEF.trayDepth, min: 0, max: 3, step: 0.1, unit: 'mm', hint: '0 = bez wgłębienia. Wgłębienie jest płynne (bez ścianek), na dolnej stronie pokrywy.' },
   { key: 'traySlope', label: 'Szerokość skosu tacki', type: 'number', def: DEF.traySlope, min: 8, max: 30, step: 1, unit: 'mm', more: true, hint: 'Im szerszy skos, tym łagodniejsze nachylenie (maks. nachylenie ≈ 1,5·głębokość / szerokość).' },
   select('textMode', 'Napis FKNDMN', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['none', 'bez napisu']]),
   { key: 'textDepth', label: 'Głębokość wkładki napisu', type: 'number', def: DEF.textDepth, min: 0.4, max: 1.6, step: 0.2, unit: 'mm', show: (p) => p.textMode === 'inlay' },
   { key: 'lidOpen', label: 'Pokrywa: wysunięcie (podgląd)', type: 'number', def: 0, min: 0, max: 100, step: 5, unit: '%', hint: '0 = zasunięta, 100 = wysunięta na magnesach. Tylko podgląd w edytorze, nie zmienia wydruku.' },
+  { key: 'legacyDrawers', label: 'Szuflady v11 (tylko do testów)', type: 'bool', def: false, show: () => false },
   { key: 'garby', label: 'Garby (v11, tylko do testów)', type: 'bool', def: false, show: () => false },
 ];
 
@@ -443,6 +570,21 @@ function repairParams(prev: Params, next: Params): Params {
   if (allowed(n)) return next;
   const pv = full(prev);
   const changed = PARAMS.filter((d) => String(next[d.key] ?? d.def) !== String(prev[d.key] ?? d.def)).map((d) => d.key);
+  // zmiana liczby szuflad albo magnesów: dopasuj wymiary szuflad (szerokość, wysokość, długość, położenie, skos) do nowych reguł
+  if (changed.includes('nDr') || changed.includes('dMag')) {
+    const nn = Math.max(0, Math.min(2, Math.round(Number(n.nDr))));
+    const c: Params = { ...n, nDr: nn };
+    const L0 = layout({ ...c, dH: Math.max(Number(c.dH), c.dMag === 'off' ? 8 : 11.3) });
+    const P0 = c.dMag === 'off' ? SEP : MAG_DEPTH + 0.8;
+    const wMax = Math.floor(((L0.X - WALL_X - L0.x0 - Math.max(0, nn - 1) * P0) / Math.max(1, nn) - 2 * DR_CLR) * 2) / 2;
+    c.dH = Math.max(Number(c.dH), c.dMag === 'off' ? 8 : 11.3);
+    c.dW = Math.max(30, Math.min(Number(c.dW), wMax));
+    c.dL = Math.max(c.dMag === 'off' ? 30 : 41.5, Math.min(Number(c.dL), Math.floor((L0.Y - DR_REAR - 0.4) * 2) / 2));
+    c.dX = 0;
+    c.dRampH = Math.min(Number(c.dRampH), Math.max(0, Math.floor((Number(c.dH) - FL - 5) * 2) / 2));
+    c.dRampL = Math.min(Number(c.dRampL), Math.max(5, Math.floor((Number(c.dL) - RW - FP - 5) / 2)));
+    if (allowed(full(c))) return { ...next, ...Object.fromEntries(['nDr', 'dH', 'dW', 'dL', 'dX', 'dRampH', 'dRampL'].map((k) => [k, c[k]])) };
+  }
   const nums = changed.filter((k) => PARAMS.find((d) => d.key === k)!.type === 'number');
   if (nums.length)
     for (let t = 0.98; t >= 0; t -= 0.02) {
@@ -469,6 +611,7 @@ export const PUDELKO_DEFS: PartDef[] = [
       { value: 'korpus', label: 'korpus', hole: false, body: 'new' },
       { value: 'pokrywa', label: 'pokrywa-tacka', hole: false, body: 'new' },
       { value: 'napis', label: 'napis (inny kolor)', hole: false, body: 'new', printWith: 'pokrywa' },
+      { value: 'szuflady', label: 'szuflady', hole: false, body: 'new' },
     ],
     notes: pudelkoNotes,
     printTurn: (p) => (p.piece === 'pokrywa' || p.piece === 'napis' ? [0, 180] : null),
