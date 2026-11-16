@@ -29,7 +29,7 @@ import { PRINTERS } from '../wizards/frame';
 import { groupFields, shortLabel, type FieldGroup } from './paramGroups';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
-const XMAS_ICON: Record<string, string> = { etykieta: 'xmasLabel', czubek: 'xmasTopper', foremka: 'xmasCutter' };
+const XMAS_ICON: Record<string, string> = { etykieta: 'xmasLabel', czubek: 'xmasTopper', foremka: 'xmasCutter', taca: 'xmasTray' };
 /** The „Części” tab: the building blocks in a few groups, each holding one or more of the old categories. */
 const PART_GROUPS: { id: string; label: string; cats: Category[] }[] = [
   { id: 'ready', label: 'Gotowe elementy', cats: ['ready'] },
@@ -152,7 +152,7 @@ export function Library() {
   const query = norm(q.trim());
   const hit = (...texts: string[]) => !query || texts.some((t) => norm(t).includes(query));
   const figs = tab === 'fig' ? FIG_ORDER.filter((id) => hit(FIG_MODELS[id].n)) : [];
-  const xmas = tab === 'fig' ? XMAS_ORDER.filter((id) => hit(FIG_MODELS[id].n, 'święta', 'boże narodzenie', 'christmas')) : [];
+  const xmas = tab === 'fig' ? XMAS_ORDER.filter((id) => hit(FIG_MODELS[id].n, 'święta', 'boże narodzenie', 'christmas', 'taca', 'tray')) : [];
   // Ready-made technical parts only: bare blocks and features are gone (see simple.ts).
   const sections = tab !== 'tech' ? [] : TECH_GROUPS.map((g) => {
     const fams = g.fams
@@ -255,7 +255,7 @@ export function Library() {
       {xmas.length > 0 &&
         category(
           'xmas',
-          'Święta: etykieta, czubek, foremki',
+          'Święta: etykieta, czubek, foremki, taca',
           'xmasTopper',
           xmas.length,
           xmas.length,

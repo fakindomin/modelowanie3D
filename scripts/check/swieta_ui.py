@@ -14,11 +14,11 @@ with sync_playwright() as p:
     errs=[]
     pg.on('console', lambda m: errs.append(m.text[:300]) if m.type=='error' else None)
     pg.on('pageerror', lambda e: errs.append('PAGEERROR '+str(e)[:300]))
-    pg.goto(URL); pg.wait_for_timeout(3000)
+    pg.goto(URL.rstrip('#')+('' if URL.endswith('#edytor') else '#edytor')); pg.wait_for_timeout(3500)
     pg.get_by_text('Figurki', exact=True).first.click(); pg.wait_for_timeout(400)
     lib = pg.locator('aside.library')
-    ok('Święta: etykieta, czubek, foremki' in lib.inner_text(), 'kategoria „Święta” w menu Figurki')
-    for n in ['Etykieta „Dla”','Czubek choinkowy','Foremka do piernika']:
+    ok('Święta: etykieta, czubek, foremki, taca' in lib.inner_text(), 'kategoria „Święta” w menu Figurki')
+    for n in ['Etykieta „Dla”','Czubek choinkowy','Foremka do piernika','Taca żebrowana']:
         ok(lib.get_by_text(n, exact=True).count()==1, 'kafelek '+n)
     right = lambda: pg.locator('aside').last
     def notes(): return right().inner_text()
@@ -58,9 +58,9 @@ with sync_playwright() as p:
     # Całość na 200
     right().get_by_text('Całość na', exact=False).first.click(); pg.wait_for_timeout(2000)
     # przekrój
-    pg.get_by_text('◧ Przekrój').click(); pg.wait_for_timeout(1500)
+    pg.get_by_role('button', name=re.compile('Przekrój')).first.click(); pg.wait_for_timeout(1500)
     pg.screenshot(path=SP+'/12_topper_section.png')
-    pg.get_by_text('✓ Przekrój').click(); pg.wait_for_timeout(500)
+    pg.get_by_role('button', name=re.compile('Przekrój')).first.click(); pg.wait_for_timeout(500)
     # ---- foremka
     lib.get_by_text('Foremka do piernika', exact=True).click(); pg.wait_for_timeout(2500)
     t = notes()
@@ -68,6 +68,24 @@ with sync_playwright() as p:
     sel = right().locator('select').nth(1)
     print('selects:', right().locator('select').count(), [right().locator('select').nth(i).input_value() for i in range(right().locator('select').count())])
     pg.screenshot(path=SP+'/13_cutter.png')
+    # ---- taca: prostokąt z zaokrąglonymi narożnikami
+    lib.get_by_text('Taca żebrowana', exact=True).click(); pg.wait_for_timeout(2500)
+    t = notes()
+    ok('Taca 240 × 75 × 20 mm' in t and 'narożniki R 15 mm' in t, 'taca domyślna: 240 × 75 × 20, narożniki R 15')
+    ok('4 renifery co 58 mm' in t and 'mieszczą się 3 tace' in t, 'taca: 4 renifery co 58 mm, 3 tace na stole')
+    ok('Całość na' not in t, 'brak przycisku „Całość na…” przy tacy')
+    labels = right().locator('label.field span').all_inner_texts() + right().locator('.size-row').all_inner_texts()
+    for need in ['Długość', 'Szerokość', 'Wysokość', 'Zaokrąglenie narożników']:
+        ok(any(need in x for x in labels), 'taca: suwak „'+need+'”')
+    pg.screenshot(path=SP+'/14_tray.png')
+    setnum('Zaokrąglenie narożników', 37)
+    ok('narożniki R 37 mm' in notes(), 'taca R 37: '+re.search(r'narożniki R \d+ mm', notes()).group(0))
+    setnum('Szerokość', 100)
+    t = notes()
+    ok('Taca 240 × 100 × 20 mm' in t and 'narożniki R 37 mm' in t and 'mieszczą się 2 tace' in t, 'taca szer. 100: 240 × 100, 2 tace na stole')
+    setnum('Zaokrąglenie narożników', 60)
+    ok('narożniki R 50 mm' in notes(), 'promień 60 ograniczony do połowy szerokości (R 50)')
+    pg.screenshot(path=SP+'/15_tray_pill.png')
     print('console errors:', errs[:5])
     ok(not [e for e in errs if 'PAGEERROR' in e], 'brak błędów strony')
     b.close()

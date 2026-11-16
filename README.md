@@ -159,13 +159,15 @@ Każda ma własną scenę, historię cofania i autozapis.
 - **Figurki:** 16 modeli z żebrowanej kolekcji (silnik przeniesiony z artefaktu, STANDARD v1.0),
   suwaki zmieniają wszystkie części figurki naraz, „Całość na 150 mm”. Do figurek można dodawać
   narzędzia techniczne: magnesy, otwory, czopy, gwinty.
-- **Figurki, kategoria „Święta”:** trzy modele z artefaktu „Świąteczne dodatki”, z tymi samymi suwakami.
+- **Figurki, kategoria „Święta”:** cztery modele: trzy z artefaktu „Świąteczne dodatki” z tymi samymi suwakami i taca.
   **Etykieta „Dla”**: wpisujesz imię (polskie znaki działają), szerokość dopasowuje się sama, ustawiasz
   wysokość liter; plik nazywa się np. „Dla Ania.stl”. **Czubek choinkowy**: średnica czubka choinki
   (otwór ma 0,6 mm luzu), długość tulei 30–80 mm, wysokość całkowita, średnica kuli; kula jest pusta
   i otwarta od dołu, więc czubek choinki wchodzi aż pod sufit wnęki (głębokość podaje uwaga pod nazwą).
   Druk stojąco, bez podpór. **Foremka do piernika**: pięć kształtów, rozmiar ciasta, kołnierz (brim)
-  na stałe od strony dociskania (szerokość i grubość). Szczegóły i sprawdzanie zgodności z Pythonem
+  na stałe od strony dociskania (szerokość i grubość). **Taca żebrowana**: prostokątna z zaokrąglonymi narożnikami,
+  na renifery kręgle, suwaki długości, szerokości, wysokości i promienia narożników (domyślnie 240 × 75 × 20 mm, R 15, 3 szt. na stole P1S),
+  uwagi pod nazwą podają, ile reniferów się mieści. Szczegóły i sprawdzanie zgodności z Pythonem
   w `docs/swieta.md`.
 - **Przekrój (◧):** przycisk w pasku (na telefonie w menu ⋮) ucina widok płaszczyzną przez środek,
   żeby zajrzeć do wnętrza, np. do wnęki czubka. Tylko podgląd, nie zmienia modelu ani eksportu.

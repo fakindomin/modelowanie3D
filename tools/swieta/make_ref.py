@@ -1,7 +1,7 @@
 """Wartości wzorcowe dla scripts/check/swieta.ts: objętości i wymiary z Pythona (repozytorium linia-3d).
 
 Użycie:  python3 tools/swieta/make_ref.py /ścieżka/do/linia-3d  > tools/swieta/ref.json
-Wymaga w linia-3d: etykieta.py, foremki_piernik.py, czubek_choinkowy.py (+ trimesh, shapely, numpy).
+Wymaga w linia-3d: etykieta.py, foremki_piernik.py, czubek_choinkowy.py, taca.py (+ trimesh, shapely, numpy).
 Źródłem prawdy jest Python; src/figurines/swieta.ts ma te same stałe i wzory.
 """
 import json
@@ -13,8 +13,9 @@ from shapely import affinity  # noqa: E402
 import etykieta as ET  # noqa: E402
 import foremki_piernik as FP  # noqa: E402
 import czubek_choinkowy as CZ  # noqa: E402
+import taca as TA  # noqa: E402
 
-out = {'label': [], 'cutter': [], 'topper': []}
+out = {'label': [], 'cutter': [], 'topper': [], 'tray': []}
 font = ET.Font()
 for name, cap in (('Ania', 11), ('Łukasz', 11), ('Babcia Ela', 11), ('Jan', 14)):
     m, _ = ET.build_label(name, cap, font)
@@ -30,4 +31,10 @@ FP.FL_W, FP.FL_T = 5.0, 2.0
 for top, h, bulb, sleeve in ((18, 240, 62, 62), (14, 200, 54, 50), (26, 260, 80, 70), (10, 180, 40, 30)):
     m, g, _ = CZ.build(top, h, bulb, sleeve)
     out['topper'].append({'top': top, 'h': h, 'bulb': bulb, 'sleeve': sleeve, 'volume': float(m.volume), 'extents': [float(v) for v in m.extents]})
+for ln, wd, h, rd in ((240, 75, 20, 15), (240, 75, 20, 37.5), (240, 57, 30, 10), (180, 60, 16, 6), (250, 100, 30, 25), (120, 45, 12, 22.5), (200, 90, 25, 60), (240, 75, 20, 2)):
+    m, g = TA.build(ln, wd, h, TA.FLOOR, rd, TA.WALL)
+    cl, _, _, r_rim = TA.reindeer_fit(g['S_in'], TA.FLOOR, h, count=TA.COUNT)
+    out['tray'].append({'len': ln, 'wid': wd, 'h': h, 'rad': rd, 'ribs': int(g['N']), 'volume': float(m.volume), 'extents': [float(v) for v in m.extents],
+                        'cavity_ml': float(g['S_in'].area * (h - TA.FLOOR) / 1000.0), 'wall_valley': float(TA.thin_wall(g['S_out'], g['S_in'])),
+                        'clearance4': float(cl), 'max_reindeer': int(TA.max_reindeer(g['S_in'], TA.FLOOR, h))})
 json.dump(out, sys.stdout, ensure_ascii=False, indent=1)

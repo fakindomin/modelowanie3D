@@ -397,8 +397,162 @@ export function buildTopper(top: number, hIn: number, bulbIn: number, sleeve: nu
   return { pieces: [{ name: 'Czubek', manifold: solid }], size: { w: bb.max[0] - bb.min[0], h: bb.max[2] - bb.min[2], d: bb.max[1] - bb.min[1] }, notes };
 }
 
+// ------------------------------------------------------------------------------------------------ taca (taca.py)
+/**
+ * Żebrowana taca prostokątna z zaokrąglonymi narożnikami na renifery kręgle i drobiazgi. Obrys to prostokąt L × W z narożnikami o promieniu R
+ * (liczonym po grzbietach żeber; R = W/2 daje kształt „tabletki”); żebra biegną po linii środkowej, ścianka wnęki ma stałe 2,0 mm od tej linii
+ * (w dolinie żebra 1,2 mm), dno 2,4 mm. Ścianki są pionowe, dolna krawędź ma fazkę w dwóch schodkach, więc nic nie wisi
+ * i taca drukuje się dnem do stołu bez podpór. Wymiar zewnętrzny liczy się po grzbietach żeber (liczba żeber jest podzielna przez 4:
+ * grzbiet wypada w środkach czterech boków).
+ */
+export const TC = {
+  WALL: 2.0, FLOOR: 2.4, RAD: 15.0, K_PTS: 20, RIB_AMP: 0.8, RIB_PITCH: 3.4, SIMPLIFY: 0.01,
+  FOOT: [[0.2, 0.3], [0.4, 0.15]] as [number, number][], // (wysokość schodka do [mm], cofnięcie obrysu [mm])
+  PITCH: 58.0, COUNT: 4, BASE_R: 16.5, TOTAL_W: 54.6,
+  BED: 256, BED_GAP: 8, BED_MARGIN: 4,
+  // promień korpusu renifera kręgla (bez żeber) co 5 mm od jego podstawy: shapes.bunny_profile
+  RDZ: [[0, 16.5], [5, 17.6], [10, 18.9], [15, 20.3], [20, 21.7], [25, 23.0], [30, 24.2], [35, 25.2], [40, 26.0], [45, 26.4]] as P2[],
+};
+
+const reindeerR = (z: number) => {
+  const t = TC.RDZ;
+  if (z <= t[0][0]) return t[0][1];
+  for (let i = 1; i < t.length; i++) if (z <= t[i][0]) return t[i - 1][1] + ((z - t[i - 1][0]) / (t[i][0] - t[i - 1][0])) * (t[i][1] - t[i - 1][1]);
+  return t[t.length - 1][1];
+};
+
+/** Promień łuku linii środkowej: R po grzbietach minus amplituda, nie więcej niż połowa mniejszej osi i nie mniej niż 1 mm. */
+export function cornerRadius(length: number, width: number, rad: number): number {
+  const amp = TC.RIB_AMP, a = length / 2 - amp, b = width / 2 - amp;
+  return Math.min(Math.max(Math.min(rad, length / 2, width / 2) - amp, 1), a, b);
+}
+
+/** Obrys z żebrami, linia środkowa (prostokąt o półosiach L/2 − amp, W/2 − amp z łukami rc = R − amp) i liczba żeber N (podzielna przez 4). */
+export function ribbedOutline(length: number, width: number, rad: number): { out: P2[]; mid: P2[]; N: number } {
+  const amp = TC.RIB_AMP, a = length / 2 - amp, b = width / 2 - amp, rc = cornerRadius(length, width, rad);
+  const w = a - rc, h = b - rc, q = (Math.PI / 2) * rc;
+  // dziewięć odcinków od środka prawego boku, obieg przeciwny do ruchu wskazówek: bok, łuk, bok, łuk, bok, łuk, bok, łuk, bok
+  type Seg = { arc: boolean; p: P2; d: P2 | number; len: number };
+  const segs: Seg[] = [
+    { arc: false, p: [a, 0], d: [0, 1], len: h }, { arc: true, p: [w, h], d: 0, len: q },
+    { arc: false, p: [w, b], d: [-1, 0], len: 2 * w }, { arc: true, p: [-w, h], d: Math.PI / 2, len: q },
+    { arc: false, p: [-a, h], d: [0, -1], len: 2 * h }, { arc: true, p: [-w, -h], d: Math.PI, len: q },
+    { arc: false, p: [-w, -b], d: [1, 0], len: 2 * w }, { arc: true, p: [w, -h], d: 1.5 * Math.PI, len: q },
+    { arc: false, p: [a, -h], d: [0, 1], len: h },
+  ];
+  const edges = [0];
+  for (const sg of segs) edges.push(edges[edges.length - 1] + sg.len);
+  const Ltot = edges[edges.length - 1];
+  const N = 4 * Math.max(1, Math.round(Ltot / (4 * TC.RIB_PITCH)));
+  const K = N * TC.K_PTS;
+  const out: P2[] = new Array(K), mid: P2[] = new Array(K);
+  let j = 0;
+  for (let i = 0; i < K; i++) {
+    const s = (Ltot * i) / K;
+    while (j < segs.length - 1 && s >= edges[j + 1]) j++;
+    const sg = segs[j], u = s - edges[j];
+    let px: number, py: number, tx: number, ty: number;
+    if (sg.arc) {
+      const th = (sg.d as number) + u / rc;
+      px = sg.p[0] + rc * Math.cos(th); py = sg.p[1] + rc * Math.sin(th); tx = -Math.sin(th); ty = Math.cos(th);
+    } else {
+      const d = sg.d as P2;
+      px = sg.p[0] + d[0] * u; py = sg.p[1] + d[1] * u; tx = d[0]; ty = d[1];
+    }
+    const c = Math.cos((N * 2 * Math.PI * s) / Ltot);
+    const off = amp * Math.sign(c) * Math.abs(c) ** 0.8;
+    mid[i] = [px, py];
+    out[i] = [px + ty * off, py - tx * off]; // normalna na zewnątrz (obieg przeciwny do ruchu wskazówek)
+  }
+  return { out, mid, N };
+}
+
+function ringDist(ring: P2[], x: number, y: number): number {
+  let best = Infinity;
+  for (let i = 0, k = ring.length - 1; i < ring.length; k = i++) {
+    const [ax, ay] = ring[k], [bx, by] = ring[i];
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+    const d = Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+function inRing(ring: P2[], x: number, y: number): boolean {
+  let c = false;
+  for (let i = 0, k = ring.length - 1; i < ring.length; k = i++) {
+    const [ax, ay] = ring[k], [bx, by] = ring[i];
+    if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) c = !c;
+  }
+  return c;
+}
+
+/** Luz (mm) renifera kręgla na rancie ścianki dla `count` sztuk w rzędzie co `pitch`; −1, gdy któryś nie mieści się we wnęce. */
+export function reindeerFit(inner: P2[], floor: number, height: number, pitch: number, count: number): { clearance: number; rRim: number } {
+  const rRim = reindeerR(height - floor) + TC.RIB_AMP;
+  let cl = Infinity, ok = true;
+  for (let i = 0; i < count; i++) {
+    const x = (i - (count - 1) / 2) * pitch;
+    if (!inRing(inner, x, 0)) { ok = false; continue; }
+    cl = Math.min(cl, ringDist(inner, x, 0) - rRim);
+  }
+  return { clearance: ok && Number.isFinite(cl) ? cl : -1, rRim };
+}
+
+export function buildTaca(length: number, width: number, height: number, rad: number = TC.RAD, floor: number = TC.FLOOR, wall: number = TC.WALL): SwResult {
+  const { out, mid, N } = ribbedOutline(length, width, rad);
+  // Pamięć WASM nie sprząta się sama: wszystko pośrednie zwalniamy na końcu.
+  const tmp: { delete(): void }[] = [];
+  const keep = <T extends { delete(): void }>(x: T): T => (tmp.push(x), x);
+  const S = keep(cs(out));
+  const inner = keep(keep(cs(mid)).offset(-wall, 'Round', 2, 64).simplify(TC.SIMPLIFY));
+  const slabs: Manifold[] = [];
+  let z0 = 0;
+  for (const [z1, inset] of TC.FOOT) {
+    slabs.push(keep(keep(keep(S.offset(-inset, 'Round', 2, 32)).extrude(z1 - z0)).translate([0, 0, z0])));
+    z0 = z1;
+  }
+  slabs.push(keep(keep(S.extrude(height - z0)).translate([0, 0, z0])));
+  const body = keep(M().Manifold.union(slabs));
+  const solid = body.subtract(keep(keep(inner.extrude(height + 1 - floor)).translate([0, 0, floor])));
+  const bb = solid.boundingBox();
+  const w = bb.max[0] - bb.min[0], dep = bb.max[1] - bb.min[1];
+
+  const ring = inner.toPolygons().sort((a, b) => b.length - a.length)[0] as P2[];
+  const ringS = ring ?? [];
+  const outRing = out;
+  let tw = Infinity;
+  for (let i = 0; i < ringS.length; i += 3) tw = Math.min(tw, ringDist(outRing, ringS[i][0], ringS[i][1]));
+  const maxN = (() => {
+    let best = 0;
+    for (let k = 1; k <= 6; k++) if (reindeerFit(ringS, floor, height, TC.TOTAL_W + 2.5, k).clearance >= 0.5) best = k;
+    return best;
+  })();
+  const std = reindeerFit(ringS, floor, height, TC.PITCH, TC.COUNT);
+  const cavMl = (inner.area() * (height - floor)) / 1000;
+  const g = (solid.volume() / 1000) * PETG;
+  const rows = Math.floor((TC.BED - 2 * TC.BED_MARGIN + TC.BED_GAP) / (width + TC.BED_GAP));
+  const cols = Math.floor((TC.BED - 2 * TC.BED_MARGIN + TC.BED_GAP) / (length + TC.BED_GAP));
+  const onBed = Math.max(0, rows) * Math.max(0, cols);
+  const plural = (n: number) => (n === 1 ? 'taca' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'tace' : 'tac');
+
+  const notes: SwNote[] = [
+    { level: 'ok', text: `Taca ${pl(w, 0)} × ${pl(dep, 0)} × ${pl(height, 0)} mm po grzbietach żeber, narożniki R ${pl(Math.min(rad, length / 2, width / 2), 0)} mm, ${N} żeber, wnęka ok. ${pl(cavMl, 0)} ml, ok. ${pl(g, 0)} g PETG. Druk dnem do stołu, bez podpór.` },
+  ];
+  if (maxN >= 1) {
+    notes.push({ level: 'ok', text: `Renifery kręgle (brzuch Ø ${pl(TC.TOTAL_W)} mm, na rancie Ø ${pl(2 * std.rRim)} mm) mieszczą się w rzędzie do ${maxN} szt. przy rozstawie ${pl(TC.TOTAL_W + 2.5, 0)} mm i luzie co najmniej 0,5 mm.` });
+    if (std.clearance >= 0.5) notes.push({ level: 'ok', text: `${TC.COUNT} renifery co ${pl(TC.PITCH, 0)} mm: luz do ścianki ${pl(std.clearance)} mm.` });
+  } else notes.push({ level: 'warn', text: `Renifer kręgiel (podstawa Ø ${pl(2 * TC.BASE_R, 0)} mm, na rancie Ø ${pl(2 * std.rRim)} mm) się tu nie zmieści: poszerz tacę albo ją obniż.` });
+  if (onBed >= 1) notes.push({ level: 'ok', text: `Na stole P1S (${TC.BED} × ${TC.BED} mm) mieszczą się ${onBed} ${plural(onBed)} naraz (odstęp ${pl(TC.BED_GAP, 0)} mm).` });
+  else notes.push({ level: 'warn', text: `Taca ${pl(length, 0)} × ${pl(width, 0)} mm nie mieści się na stole P1S (${TC.BED} × ${TC.BED} mm, margines ${pl(TC.BED_MARGIN, 0)} mm): skróć ją albo zwęź.` });
+  if (tw < 0.8) notes.push({ level: 'warn', text: `Ścianka w dolinie żebra ma tylko ${pl(tw, 2)} mm (dysza 0,4 mm potrzebuje co najmniej 0,8 mm).` });
+  for (const x of tmp) x.delete();
+  return { pieces: [{ name: 'Taca', manifold: solid }], size: { w, h: height, d: dep }, notes };
+}
+
 // ------------------------------------------------------------------------------------------------ modele i suwaki dla menu Figurki
-export const SW_ORDER = ['etykieta', 'czubek', 'foremka'];
+export const SW_ORDER = ['etykieta', 'czubek', 'foremka', 'taca'];
 
 export const SW_MODELS: Record<string, SwModel> = {
   etykieta: {
@@ -420,6 +574,12 @@ export const SW_MODELS: Record<string, SwModel> = {
     desc: 'Foremka do wykrawania ciastek z kołnierzem (brim) na stałe od strony dociskania, który ją usztywnia. Pięć kształtów, rozmiar ciasta i wymiary kołnierza ustawiasz suwakami.',
     g: ['cutter'],
     d: { shape: 'choinka', scale: 1, flw: CT.FL_W, flt: CT.FL_T },
+  },
+  taca: {
+    n: 'Taca żebrowana',
+    desc: 'Żebrowana taca prostokątna z zaokrąglonymi narożnikami na renifery kręgle i drobiazgi: pionowe ścianki, dno 2,4 mm, druk dnem do stołu bez podpór. Długość, szerokość, wysokość i promień zaokrąglenia narożników ustawiasz suwakami.',
+    g: ['tray'],
+    d: { len: 240, wid: 75, h: 20, r: TC.RAD },
   },
 };
 
@@ -449,6 +609,15 @@ export const SW_GR: Record<string, { t: string; items: SwItem[] }> = {
       { k: 'flt', l: 'Kołnierz (brim): grubość', min: 1.6, max: 4, step: 0.2, unit: 'mm' },
     ],
   },
+  tray: {
+    t: 'Taca',
+    items: [
+      { k: 'len', l: 'Długość', min: 100, max: 250, step: 1, unit: 'mm', hint: 'Wymiar po grzbietach żeber. Stół P1S ma 256 mm, taca ma zostawić margines.' },
+      { k: 'wid', l: 'Szerokość', min: 40, max: 150, step: 1, unit: 'mm', hint: 'Przy 75 mm trzy tace mieszczą się obok siebie na stole P1S. Renifer kręgiel ma brzuch Ø 54,6 mm.' },
+      { k: 'h', l: 'Wysokość', min: 10, max: 40, step: 1, unit: 'mm', hint: 'Dno ma 2,4 mm. Ściana jest pionowa, więc wysokość nie dodaje podpór.' },
+      { k: 'r', l: 'Zaokrąglenie narożników (promień)', min: 2, max: 60, step: 1, unit: 'mm', hint: 'Promień liczony po grzbietach żeber. Połowa szerokości daje całkiem okrągłe końce („tabletka”), wartość większa jest ograniczana do tej połowy.' },
+    ],
+  },
 };
 
 /** Nazwa pliku dla pojedynczego świątecznego elementu w scenie: „Dla Ania”, „Czubek choinkowy”, „Foremka choinka”. Inne sceny: null (zostaje „figurki”). */
@@ -460,6 +629,7 @@ export function swietaFileName(parts: { type: string; params: Record<string, num
   const clean = (s: string) => s.replace(/[^\p{L}\p{N} _.-]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
   if (id === 'etykieta') return `Dla ${clean(String(p.name ?? '')) || 'etykieta'}`.trim();
   if (id === 'czubek') return 'Czubek choinkowy';
+  if (id === 'taca') return `Taca ${Math.round(Number(p.len))}x${Math.round(Number(p.wid))}x${Math.round(Number(p.h))}`;
   const shape = CUTTER_SHAPES.find(([k]) => k === p.shape);
   return `Foremka ${(shape ? shape[1] : String(p.shape ?? '')).toLowerCase()}`.trim();
 }
@@ -470,5 +640,6 @@ export function buildSwieta(id: string, p: Record<string, number | string | bool
   const n = (k: string) => (Number.isFinite(Number(p[k])) ? Number(p[k]) : Number(d[k]));
   if (id === 'etykieta') return buildLabel(String(p.name ?? d.name), n('cap'));
   if (id === 'czubek') return buildTopper(n('top'), n('h'), n('bulb'), n('sleeve'), quality === 'draft');
+  if (id === 'taca') return buildTaca(n('len'), n('wid'), n('h'), n('r'));
   return buildCutter(String(p.shape ?? d.shape), n('scale'), n('flw'), n('flt'));
 }
