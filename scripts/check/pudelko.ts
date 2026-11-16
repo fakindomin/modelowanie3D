@@ -85,5 +85,30 @@ const cmp = (name: string, got: any, want: { bounds: number[][]; vol: number }, 
     const ok = st === 'NoError,NoError' && c < 0.5 && k.volume() > 0 && l.lid.volume() > 0;
     expect(`wariant ${JSON.stringify(q)}`, ok, `[${st}] kolizja ${c.toFixed(2)} mm³, błędów kontroli: ${notes}, ${Date.now() - t0} ms`);
   }
+
+  // ---- zakresy suwaków: losowe przeciąganie nigdy nie daje uwagi/błędu ----
+  let seed = 12345; const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  let st: any = { ...base }; let repairs = 0, steps = 0, narrowed = new Set<string>();
+  const allOk = (q: any) => pudelkoNotes(q).every((n) => n.level === 'ok');
+  expect('stan startowy dozwolony', allOk(st));
+  for (let i = 0; i < 400; i++) {
+    const fields = def.paramsFor(st).filter((d: any) => d.key !== 'garby' && (!d.show || d.show(st)));
+    const d = fields[Math.floor(rnd() * fields.length)];
+    let v: any;
+    if (d.type === 'number') { const stp = d.step ?? 1; const k = Math.floor((d.max - d.min) / stp); v = Math.round((d.min + Math.floor(rnd() * (k + 1)) * stp) * 1000) / 1000; v = Math.min(d.max, Math.max(d.min, v)); if (d.min > def.params.find((x: any) => x.key === d.key).min || d.max < def.params.find((x: any) => x.key === d.key).max) narrowed.add(d.key); }
+    else if (d.type === 'select') v = d.options[Math.floor(rnd() * d.options.length)].value; else continue;
+    const nextRaw = { ...st, [d.key]: v };
+    const next = def.normalize(st, nextRaw);
+    if (JSON.stringify(next) !== JSON.stringify(nextRaw)) repairs++;
+    st = next; steps++;
+    if (!allOk(st)) { expect(`krok ${i}: ${d.key}=${v} daje stan niedozwolony`, false, pudelkoNotes(st).filter((n) => n.level !== 'ok').map((n) => n.text).join(' | ')); break; }
+    if (i % 25 === 0) { const k = korpus(st), l = lidInBox(st); const c = k.intersect(l.lid).volume(); if (k.status() !== 'NoError' || l.lid.status() !== 'NoError' || c > 0.5) expect(`krok ${i}: geometria`, false, JSON.stringify(st)); }
+  }
+  expect(`${steps} losowych kroków bez uwag i błędów`, bad === 0, `(korekt przy wyborze opcji: ${repairs}, zawężone suwaki: ${[...narrowed].join(', ')})`);
+  // wartość wklejona z JSON poza zakresem jest korygowana
+  const fixed = def.normalize(base, { ...base, bookH: 80, gH: 20 });
+  expect('niedozwolone wartości z JSON są korygowane', allOk(fixed), JSON.stringify({ bookH: fixed.bookH, gH: fixed.gH }));
+  const r0 = def.paramsFor(base); const rg = (k: string) => { const d = r0.find((x: any) => x.key === k); return `${k}: ${d.min}–${d.max}`; };
+  console.log('zakresy przy wartościach domyślnych:', ['gH', 'bookH', 'lT', 'rampDepth', 'rampLen', 'trayDepth', 'traySlope', 'lidT', 'gD', 'bookT'].map(rg).join(', '));
   console.log(bad ? `\n${bad} błędów` : '\nwszystko OK'); process.exit(bad ? 1 : 0);
 })();

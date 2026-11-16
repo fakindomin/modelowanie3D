@@ -57,3 +57,10 @@ Cel druku: Bambu Lab P1S (AMS), bez podpór wewnątrz, pokrywa górą do stołu.
 - Kontrole w panelu części (`PartDef.notes`, `src/ui/Panels.tsx`): wymiary zewnętrzne i co je wyznacza, wysokości szuflad (błąd < 8,25 mm), materiał pod zapalniczką/skosem (uwaga < 2, błąd < 1,2 mm), nachylenie skosu 3–10°, uniesienie ≥ 3 mm, minimalna głębokość pudełka na ubijak.
 - Tymczasowo: odstęp magnesów szuflad jest przycinany do szerokości kieszeni, a magnesy pokrywy do głębokości pudełka; pełna logika magnesów w punkcie 3.
 - Ubijak i okno pod palec mają nadal stałe wymiary v11.
+
+## Zasada: suwaki nie dopuszczają stanów z uwagą ani błędem
+- `PartDef.paramsFor` (`dynamicParams` w `src/parts/pudelko.ts`) liczy dla każdego suwaka zakres na żywo: od bieżącej wartości w obie strony, dopóki wszystkie reguły z `pudelkoNotes` są spełnione (szuflady, skos, materiał pod zapalniczką, ubijak, tacka i napis). Przy zawężeniu w podpowiedzi pola jest zdanie o przyczynie.
+- `PartDef.normalize` (`repairParams`) koryguje wartości spoza reguł (wklejony JSON, włączenie skosu) do najbliższego dozwolonego stanu.
+- Czerwone/żółte kontrole zostają tylko jako zabezpieczenie dla danych spoza suwaków. Test: 400 losowych przeciągnięć suwaków z wartości domyślnych nie daje ani jednej uwagi (`scripts/check/pudelko.sh`).
+- Każda nowa reguła (np. magnesy szuflady w punkcie 3) trafia do `pudelkoNotes`, więc zakresy suwaków uwzględnią ją automatycznie.
+- Progi: wysoka szuflada ≥ 10 mm, materiał nad szufladą ≥ 2 mm, skos 3–10° i uniesienie ≥ 3 mm, tacka max 10° i ≥ 1,2 mm pod nią (≥ 0,8 mm do napisu).
