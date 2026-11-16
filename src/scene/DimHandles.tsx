@@ -105,10 +105,12 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   const { camera, gl, controls } = useThree();
   const box = built(part).box;
   const dims = useMemo(() => axisDims(part), [part.type, part.params]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Like a drawing: one dimension line per size, on the sides facing the viewer; its knob moves that side.
+  const side = useViewSide(part, box);
   const handles: HandleDef[] = [];
   dims.forEach((d, a) => {
     if (!d) return;
-    handles.push({ axis: a as 0 | 1 | 2, sign: 1, dim: d }, { axis: a as 0 | 1 | 2, sign: -1, dim: d });
+    handles.push({ axis: a as 0 | 1 | 2, sign: a === 2 ? 1 : side[a], dim: d });
   });
   const [hot, setHot] = useState<number | null>(null);
   const [edit, setEdit] = useState<number | null>(null);
@@ -125,7 +127,6 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
     };
   }, [litKey, setDimHover]);
   const drag = useRef<Drag | null>(null);
-  const near = useNear(part, box, handles);
 
   const facePoint = (h: HandleDef, b = box) => {
     const c = b.getCenter(new THREE.Vector3());
@@ -226,43 +227,45 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
     onHold(true);
   };
 
-  const shown = handles.map((h, i) => (live ? live.i === i : hot === i || edit === i || near.includes(i) || h.dim.key === dimHover));
+  const off = Math.max(4, 0.09 * Math.max(...box.getSize(new THREE.Vector3()).toArray()));
   return (
     <group position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
       {handles.map((h, i) => {
-        const at = facePoint(h);
-        const active = hot === i || live?.i === i || edit === i || (!live && h.dim.key === dimHover && h.sign > 0);
+        const { p1, p2, out, ticks } = dimLine(box, h.axis, side, off);
+        const mid = p1.clone().add(p2).multiplyScalar(0.5);
+        const active = hot === i || live?.i === i || edit === i || (!live && h.dim.key === dimHover);
+        const value = live?.i === i ? live.to : Number(part.params[h.dim.key]);
         return (
           <group key={i}>
-            {(active || shown[i]) && <FaceOutline box={box} axis={h.axis} sign={h.sign} strong={active} />}
+            {active && <FaceOutline box={box} axis={h.axis} sign={h.sign} strong />}
+            <DimLine pts={[p1, p2, ...ticks]} active={active} />
             <Dot
-              position={at}
-              visible={shown[i]}
+              position={mid}
+              visible
               active={active}
               onPointerDown={(e) => press(e, h)}
               onPointerOver={(e) => (e.stopPropagation(), setHot(i))}
               onPointerOut={() => setHot((x) => (x === i ? null : x))}
             />
-            {(active || live?.i === i) && (
-              <Html position={at} zIndexRange={[25, 0]} style={{ transform: 'translate(12px, -28px)', pointerEvents: edit === i ? 'auto' : 'none' }}>
-                {edit === i ? (
-                  <DimInput
-                    label={h.dim.label}
-                    value={Number(part.params[h.dim.key])}
-                    onDone={(v) => {
-                      setEdit(null);
-                      if (v !== null) useStore.getState().update(part.id, patchFor(part, h, v));
-                      if (v !== null && (v > h.dim.max || v < h.dim.min)) useStore.getState().notify(`${h.dim.label}: ${v > h.dim.max ? 'maks.' : 'min.'} ${fmt(v > h.dim.max ? h.dim.max : h.dim.min)} mm.`);
-                    }}
-                  />
-                ) : (
-                  <span className="dim-tag">
-                    {h.dim.label} {live?.i === i ? `${fmt(live.from)} → ${fmt(live.to)}` : fmt(Number(part.params[h.dim.key]))} mm
-                    {live?.i === i && live.limit && <b className="dim-limit"> {live.limit} {fmt(live.to)} mm</b>}
-                  </span>
-                )}
-              </Html>
-            )}
+            <Html position={mid.clone().addScaledVector(out, off * 1.5)} center zIndexRange={[25, 0]} style={{ pointerEvents: edit === i ? 'auto' : 'none' }}>
+              {edit === i ? (
+                <DimInput
+                  label={h.dim.label}
+                  value={Number(part.params[h.dim.key])}
+                  onDone={(v) => {
+                    setEdit(null);
+                    if (v !== null) useStore.getState().update(part.id, patchFor(part, h, v));
+                    if (v !== null && (v > h.dim.max || v < h.dim.min)) useStore.getState().notify(`${h.dim.label}: ${v > h.dim.max ? 'maks.' : 'min.'} ${fmt(v > h.dim.max ? h.dim.max : h.dim.min)} mm.`);
+                  }}
+                />
+              ) : (
+                <span className={active ? 'dim-tag on' : 'dim-tag'}>
+                  {active && <i>{h.dim.label} </i>}
+                  {fmt(value)} mm
+                  {live?.i === i && live.limit && <b className="dim-limit"> {live.limit}</b>}
+                </span>
+              )}
+            </Html>
           </group>
         );
       })}
@@ -270,33 +273,62 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   );
 }
 
-/** Indices of the handles within reach of the pointer (about 60 px), so they show only when needed. */
-function useNear(part: Part, box: THREE.Box3, handles: HandleDef[]) {
-  const { camera, gl } = useThree();
-  const [near, setNear] = useState<number[]>([]);
-  const key = handles.map((h) => h.axis * 2 + (h.sign > 0 ? 1 : 0)).join(',');
-  useEffect(() => {
-    const m = partMatrix(part.position, part.rotation);
-    const pts = handles.map((h) => {
-      const c = box.getCenter(new THREE.Vector3());
-      c.setComponent(h.axis, h.sign > 0 ? box.max.getComponent(h.axis) : box.min.getComponent(h.axis));
-      return c.applyMatrix4(m);
-    });
-    const onMove = (ev: PointerEvent) => {
-      const rect = gl.domElement.getBoundingClientRect();
-      const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
-      const next: number[] = [];
-      pts.forEach((p, i) => {
-        const q = p.clone().project(camera);
-        const sx = ((q.x + 1) / 2) * rect.width, sy = ((1 - q.y) / 2) * rect.height;
-        if (Math.hypot(sx - x, sy - y) < 60) next.push(i);
-      });
-      setNear((old) => (old.join() === next.join() ? old : next));
-    };
-    window.addEventListener('pointermove', onMove);
-    return () => window.removeEventListener('pointermove', onMove);
-  }, [part.position, part.rotation, box, key, camera, gl]); // eslint-disable-line react-hooks/exhaustive-deps
-  return near;
+/** Which way (±1 on X and Y, in the part's own axes) the viewer looks from; follows the camera as it turns. */
+function useViewSide(part: Part, box: THREE.Box3): [1 | -1, 1 | -1] {
+  const { camera } = useThree();
+  const [side, setSide] = useState<[1 | -1, 1 | -1]>([1, -1]);
+  useFrame(() => {
+    const inv = partMatrix(part.position, part.rotation).invert();
+    const c = camera.position.clone().applyMatrix4(inv).sub(box.getCenter(new THREE.Vector3()));
+    const next: [1 | -1, 1 | -1] = [c.x >= 0 ? 1 : -1, c.y >= 0 ? 1 : -1];
+    if (next[0] !== side[0] || next[1] !== side[1]) setSide(next);
+  });
+  return side;
+}
+
+/**
+ * A drawing's dimension line for one axis, beside the box on the viewer's side: width along the front
+ * bottom edge, depth along the side bottom edge, height up the far front corner.
+ */
+function dimLine(b: THREE.Box3, axis: 0 | 1 | 2, side: [1 | -1, 1 | -1], off: number) {
+  const [sx, sy] = side;
+  const fy = sy > 0 ? b.max.y : b.min.y, fx = sx > 0 ? b.max.x : b.min.x;
+  const z = b.min.z;
+  let p1: THREE.Vector3, p2: THREE.Vector3, out: THREE.Vector3, e1: THREE.Vector3, e2: THREE.Vector3;
+  if (axis === 0) {
+    out = new THREE.Vector3(0, sy, 0);
+    p1 = new THREE.Vector3(b.min.x, fy + sy * off, z);
+    p2 = new THREE.Vector3(b.max.x, fy + sy * off, z);
+    e1 = new THREE.Vector3(b.min.x, fy, z);
+    e2 = new THREE.Vector3(b.max.x, fy, z);
+  } else if (axis === 1) {
+    out = new THREE.Vector3(sx, 0, 0);
+    p1 = new THREE.Vector3(fx + sx * off, b.min.y, z);
+    p2 = new THREE.Vector3(fx + sx * off, b.max.y, z);
+    e1 = new THREE.Vector3(fx, b.min.y, z);
+    e2 = new THREE.Vector3(fx, b.max.y, z);
+  } else {
+    const cx = sx > 0 ? b.min.x : b.max.x;
+    out = new THREE.Vector3(-sx, 0, 0);
+    p1 = new THREE.Vector3(cx - sx * off, fy, b.min.z);
+    p2 = new THREE.Vector3(cx - sx * off, fy, b.max.z);
+    e1 = new THREE.Vector3(cx, fy, b.min.z);
+    e2 = new THREE.Vector3(cx, fy, b.max.z);
+  }
+  const over = (p: THREE.Vector3) => p.clone().addScaledVector(out, off * 0.25);
+  // Extension lines from the edge to a little past the dimension line, as on a drawing.
+  return { p1, p2, out, ticks: [e1, over(p1), e2, over(p2)] };
+}
+
+/** The dimension line and its two extension lines; orange while its knob is under the cursor or held. */
+function DimLine({ pts, active }: { pts: THREE.Vector3[]; active: boolean }) {
+  const geo = useMemo(() => new THREE.BufferGeometry().setFromPoints(pts), [pts.map((p) => p.toArray().join()).join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => geo.dispose(), [geo]);
+  return (
+    <lineSegments geometry={geo} renderOrder={6}>
+      <lineBasicMaterial color={active ? '#f3b47e' : '#dfe6e0'} transparent opacity={active ? 1 : 0.8} depthTest={false} depthWrite={false} />
+    </lineSegments>
+  );
 }
 
 /** Small dot that keeps the same size on screen at any zoom. */
@@ -320,7 +352,7 @@ function Dot({ position, visible, active, ...ev }: { position: THREE.Vector3; vi
   });
   return (
     <mesh ref={ref} position={position} userData={{ handle: true }} renderOrder={7} raycast={visible ? THREE.Mesh.prototype.raycast : noHit} {...ev}>
-      <sphereGeometry args={[active ? 1.3 : 0.9, 14, 10]} />
+      <sphereGeometry args={[active ? 1.8 : 1.3, 16, 12]} />
       <meshBasicMaterial color={active ? '#f3b47e' : '#ffffff'} transparent opacity={visible ? 1 : 0} depthTest={false} depthWrite={false} />
     </mesh>
   );

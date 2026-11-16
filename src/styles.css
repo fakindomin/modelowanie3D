@@ -788,3 +788,7 @@ button.variant.pick:hover .chip { border-color: var(--accent); }
 .lib-mode button { justify-content: center; }
 .tile.project .badge .kicon { display: block; }
 .mt-icon .kicon { display: block; }
+/* Linie wymiarów na modelu: liczba zawsze widoczna, nazwa i pomarańcz przy chwycie */
+.dim-tag:not(.on):not(.edit) { border-color: rgba(223, 230, 224, 0.35); color: #e8ece9; background: rgba(22, 23, 24, 0.75); }
+.dim-tag.on { font-weight: 600; }
+.dim-tag i { font-style: normal; font-weight: 400; opacity: 0.8; }
