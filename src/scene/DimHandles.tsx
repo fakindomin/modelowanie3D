@@ -239,8 +239,9 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
         return (
           <group key={i}>
             <DimLine pts={[p1, p2, ...ticks]} active={active} />
+            {/* The knob sits on the end of the arrow at the side it moves, so it stays under the cursor while dragging. */}
             <Dot
-              position={mid}
+              position={h.sign > 0 ? p2 : p1}
               visible
               active={active}
               onPointerDown={(e) => press(e, h)}
