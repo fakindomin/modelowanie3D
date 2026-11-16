@@ -30,6 +30,12 @@ export function Shell() {
     return () => removeEventListener('hashchange', on);
   }, []);
 
+  // Leaving the editor (Back or the logo) closes a wizard, so the next pick starts clean.
+  useEffect(() => {
+    if (editor || !App) return;
+    void import('./store').then(({ useStore }) => useStore.getState().openWizard(null));
+  }, [editor, App]);
+
   useEffect(() => {
     if (!editor || !App || !pending.current) return;
     const a = pending.current;

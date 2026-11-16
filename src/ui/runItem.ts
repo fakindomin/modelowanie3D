@@ -7,6 +7,7 @@ import type { ProjectItem } from '../projects';
 export function runProjectItem(i: ProjectItem) {
   const st = useStore.getState();
   if (i.kind === 'wizard') return st.openWizard({ id: i.wizard });
+  st.openWizard(null); // a wizard left open earlier must not cover the project
   if (i.kind === 'figurines') return st.setTab('fig');
   st.setTab('tech');
   st.startNew();
