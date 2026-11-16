@@ -793,3 +793,14 @@ button.variant.pick:hover .chip { border-color: var(--accent); }
 .dim-tag.on { font-weight: 600; }
 .dim-tag i { font-style: normal; font-weight: 400; opacity: 0.8; }
 .toolbar button:has(> .kicon) { display: inline-flex; align-items: center; gap: 6px; }
+/* Wymiary w grupach (modele z wieloma wymiarami) */
+.dim-groups { display: flex; flex-direction: column; gap: 6px; }
+.dim-group { border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; background: var(--panel-2); }
+.dim-group > summary { cursor: pointer; padding: 7px 0; font-weight: 600; font-size: 12.5px; list-style: none; display: flex; align-items: center; gap: 6px; }
+.dim-group > summary::-webkit-details-marker { display: none; }
+.dim-group > summary::before { content: '▸'; color: var(--muted); transition: transform .15s; }
+.dim-group[open] > summary::before { transform: rotate(90deg); }
+.dim-group > summary .count { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 11px; }
+.dim-group[open] { padding-bottom: 6px; }
+.dim-sub { border-left: 2px solid var(--line); padding-left: 8px; margin: 4px 0 8px; }
+.dim-sub > h5 { margin: 4px 0 2px; font-size: 11.5px; color: var(--accent-2); text-transform: none; letter-spacing: 0; }

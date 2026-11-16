@@ -26,6 +26,7 @@ import { cardInfo, fmtMin, type CardInfo } from './modelCard';
 import { runProjectItem } from './runItem';
 import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../simple';
 import { PRINTERS } from '../wizards/frame';
+import { groupFields, shortLabel, type FieldGroup } from './paramGroups';
 
 const FIG_TOOLS: Category[] = ['joints', 'threads', 'hinges', 'basic'];
 const XMAS_ICON: Record<string, string> = { etykieta: 'xmasLabel', czubek: 'xmasTopper', foremka: 'xmasCutter' };
@@ -1386,11 +1387,12 @@ function PartProperties({ part }: { part: Part }) {
   const ends = fields.filter((p) => p.end && p.type === 'select');
   const main = fields.filter((p) => !p.end && !isMore(p));
   const more = fields.filter((p) => !p.end && isMore(p));
-  const field = (p: ParamDef) => (
+  const groups = groupFields(fields.filter((p) => !p.end));
+  const field = (p: ParamDef, sub?: string | null) => (
     <div key={p.key}>
-      {p.group && <h5>{p.group}</h5>}
+      {!groups && p.group && <h5>{p.group}</h5>}
       <ParamField
-        def={p}
+        def={groups ? { ...p, label: shortLabel(p.label, sub ?? null) } : p}
         value={part.params[p.key]}
         onChange={(v) => st.update(part.id, { params: { ...part.params, [p.key]: v } })}
         onStart={() => st.beginGesture()}
@@ -1490,13 +1492,14 @@ function PartProperties({ part }: { part: Part }) {
       <h4>
         Wymiary <Info text={INFO.dims} />
       </h4>
-      {main.map(field)}
-      {more.length > 0 && (
+      {groups && <DimGroups type={part.type} groups={groups} field={field} />}
+      {!groups && main.map((p) => field(p))}
+      {!groups && more.length > 0 && (
         <details className="more-dims" open={moreOpen} onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary>
             Wymiary dodatkowe <Info text={INFO.moreDims} />
           </summary>
-          {more.map(field)}
+          {more.map((p) => field(p))}
         </details>
       )}
       {ends.length > 0 && <EndsSection part={part} fields={ends} />}
@@ -2123,6 +2126,47 @@ export function PrinterPicker() {
           {bad.length ? `⚠ Nie mieści się: ${bad.length}` : '✓ Mieści się'}
         </span>
       )}
+    </div>
+  );
+}
+
+/** The sizes of a model in named, foldable groups (folding is remembered per model and group). */
+function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]; field: (p: ParamDef, sub?: string | null) => React.ReactNode }) {
+  const KEY = 'modelowanie3d.dimGroups';
+  const [closed, setClosed] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(KEY) ?? '[]');
+    } catch {
+      return [];
+    }
+  });
+  const toggle = (id: string, open: boolean) => {
+    const next = open ? closed.filter((x) => x !== id) : [...new Set([...closed, id])];
+    setClosed(next);
+    try {
+      localStorage.setItem(KEY, JSON.stringify(next));
+    } catch {
+      /* not stored */
+    }
+  };
+  return (
+    <div className="dim-groups">
+      {groups.map((g) => {
+        const id = `${type}/${g.name}`;
+        return (
+          <details key={g.name} className="dim-group" open={!closed.includes(id)} onToggle={(e) => toggle(id, (e.currentTarget as HTMLDetailsElement).open)}>
+            <summary>
+              {g.name} <span className="count">{g.count}</span>
+            </summary>
+            {g.subs.map((s) => (
+              <div key={s.name ?? ''} className={s.name ? 'dim-sub' : undefined}>
+                {s.name && <h5>{s.name}</h5>}
+                {s.fields.map((p) => field(p, s.name ?? g.name))}
+              </div>
+            ))}
+          </details>
+        );
+      })}
     </div>
   );
 }
