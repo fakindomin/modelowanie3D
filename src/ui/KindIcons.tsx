@@ -27,8 +27,8 @@ export function ReadyIcon({ size = 18, className, title }: P) {
   return (
     <svg {...base(size, className)} aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
       {title && <title>{title}</title>}
-      <path d={BED} />
-      <path d={POT} fill="currentColor" fillRule="evenodd" stroke="none" />
+      <path className="kl" pathLength={1} d={BED} />
+      <path className="kb" d={POT} fill="currentColor" fillRule="evenodd" stroke="none" />
     </svg>
   );
 }
@@ -38,8 +38,8 @@ export function WizardIcon({ size = 18, className, title }: P) {
   return (
     <svg {...base(size, className)} aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
       {title && <title>{title}</title>}
-      <path d="M2 9.75h4.5v4.5H2z" fill="currentColor" stroke="none" />
-      <path d="M9 5l5 7-5 7M16 5l5 7-5 7" />
+      <path className="kb" d="M2 9.75h4.5v4.5H2z" fill="currentColor" stroke="none" />
+      <path className="kl" pathLength={1} d="M9 5l5 7-5 7M16 5l5 7-5 7" />
     </svg>
   );
 }
@@ -60,8 +60,8 @@ export function MenuIcon({ id, size = 18, className }: { id: MenuIconId; size?: 
   const ic = MENU_ICONS[id];
   return (
     <svg {...base(size, className)} aria-hidden>
-      <path d={ic.line} />
-      <path d={ic.block} fill="currentColor" stroke="none" />
+      <path className="kl" pathLength={1} d={ic.line} />
+      <path className="kb" d={ic.block} fill="currentColor" stroke="none" />
     </svg>
   );
 }

@@ -329,3 +329,12 @@
 .landing .view canvas.eng, .landing .view svg.dims { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; display: block; }
 .landing .view svg.dims { overflow: visible; }
 .landing .view svg.dims .dim { stroke-width: 1.2; }
+/* Menu icons redraw on hover: the line draws itself, then the solid block pops in (variant C, quick). */
+.landing .nav ul a .kicon { transition: color .15s; }
+.landing .nav ul a:hover .kicon { color: var(--orange); }
+.landing .nav ul a:hover .kl { stroke-dasharray: 1; animation: lnav-draw .38s ease-out; }
+.landing .nav ul a .kb { transform-box: fill-box; transform-origin: center; }
+.landing .nav ul a:hover .kb { animation: lnav-pop .16s .3s backwards; }
+@keyframes lnav-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes lnav-pop { from { transform: scale(0); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .landing .nav ul a:hover .kl, .landing .nav ul a:hover .kb { animation: none; } }
