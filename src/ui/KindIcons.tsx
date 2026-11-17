@@ -160,6 +160,7 @@ const STATE_ICONS = {
   expand: { block: 'M6 9h12l-6 7z' },
   info: { line: 'M9 10h3v10M8 20h8', block: 'M10.5 3.5h3v3h-3z' },
   back: { line: 'M20 12H5M11 6l-6 6 6 6' },
+  list: { line: 'M9 5h12M9 12h12M9 19h12', block: 'M3 3.5h3v3H3z' },
   settings: { line: 'M18.3 10.6 21.4 10.5 21.4 13.5 18.3 13.4 17.5 15.5 19.7 17.6 17.6 19.7 15.5 17.5 13.4 18.3 13.5 21.4 10.5 21.4 10.6 18.3 8.5 17.5 6.4 19.7 4.3 17.6 6.5 15.5 5.7 13.4 2.6 13.5 2.6 10.5 5.7 10.6 6.5 8.5 4.3 6.4 6.4 4.3 8.5 6.5 10.6 5.7 10.5 2.6 13.5 2.6 13.4 5.7 15.5 6.5 17.6 4.3 19.7 6.4 17.5 8.5z', block: 'M10 10h4v4h-4z' },
 } as const;
 export type StateIconId = keyof typeof STATE_ICONS;

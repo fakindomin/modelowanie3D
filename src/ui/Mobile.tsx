@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { StateIcon, WizardIcon } from './KindIcons';
+import { StateIcon, ToolIcon, type ToolIconId, WizardIcon } from './KindIcons';
 import { Viewport } from '../scene/Viewport';
 import { Library, PrinterPicker, Properties } from './Panels';
 import { MeasurePanel } from './MeasurePanel';
@@ -27,9 +27,9 @@ type Sheet = 'add' | 'list' | 'props';
 type Size = 'closed' | 'half' | 'full';
 
 const SHEETS: { id: Sheet | 'wiz'; icon: ReactNode; label: string }[] = [
-  { id: 'add', icon: '➕', label: 'Dodaj' },
+  { id: 'add', icon: <ToolIcon id="new" size={18} />, label: 'Dodaj' },
   { id: 'wiz', icon: <WizardIcon size={18} />, label: 'Kreatory' },
-  { id: 'list', icon: '☰', label: 'Elementy' },
+  { id: 'list', icon: <StateIcon id="list" size={18} />, label: 'Elementy' },
   { id: 'props', icon: <StateIcon id="settings" size={18} />, label: 'Właściwości' },
 ];
 
@@ -102,7 +102,7 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
   }, [menu, setMenu]);
-  const item = (label: string, fn: () => void, cls = '') => (
+  const item = (label: string, fn: () => void, cls = '', icon?: ToolIconId) => (
     <button
       key={label}
       className={cls}
@@ -111,7 +111,8 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
         fn();
       }}
     >
-      {label}
+      {icon && <ToolIcon id={icon} size={18} />}
+      <span>{label}</span>
     </button>
   );
   return (
@@ -125,10 +126,10 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
         ))}
       </div>
       <button className="icon" onClick={st.undo} disabled={!st.past.length} aria-label="Cofnij">
-        ↶
+        <ToolIcon id="undo" size={18} />
       </button>
       <button className="icon" onClick={st.redo} disabled={!st.future.length} aria-label="Ponów">
-        ↷
+        <ToolIcon id="redo" size={18} />
       </button>
       <button className={menu ? 'icon on' : 'icon'} onClick={() => setMenu(!menu)} aria-label="Menu">
         <StateIcon id="more" size={18} />
@@ -138,20 +139,20 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
         <div className="mmenu">
           <PrinterPicker />
           <div className="mmenu-grid">
-            {item('Nowy', act.fresh)}
-            {item('Otwórz', act.open)}
-            {item('Zapisz', act.save)}
-            {item('⤢ Całość', st.fit)}
-            {item('⊞ Ułóż na stole', st.layoutOnBed)}
-            {item(st.measure ? '✓ 📏 Wymiary' : '📏 Wymiary', () => st.setMeasure(!st.measure), st.measure ? 'on' : '')}
-            {item(st.section ? '✓ Przekrój' : '◧ Przekrój', () => st.setSection(!st.section), st.section ? 'on' : '')}
-            {item(st.preview ? '✓ Podgląd' : 'Podgląd wydruku', () => st.setPreview(!st.preview), st.preview ? 'on' : '')}
-            {item('Sprawdź model', st.runCheck)}
-            {item('📖 Instrukcja', act.manual)}
+            {item('Nowy', act.fresh, '', 'new')}
+            {item('Otwórz', act.open, '', 'open')}
+            {item('Zapisz', act.save, '', 'save')}
+            {item('Całość', st.fit, '', 'fit')}
+            {item('Ułóż na stole', st.layoutOnBed, '', 'layout')}
+            {item('Wymiary', () => st.setMeasure(!st.measure), st.measure ? 'on' : '', 'measure')}
+            {item('Przekrój', () => st.setSection(!st.section), st.section ? 'on' : '', 'section')}
+            {item('Podgląd wydruku', () => st.setPreview(!st.preview), st.preview ? 'on' : '', 'preview')}
+            {item('Sprawdź model', st.runCheck, '', 'check')}
+            {item('Instrukcja', act.manual, '', 'manual')}
           </div>
           <div className="mmenu-grid">
-            {item('Eksport STL', () => act.exportAs('stl'), 'primary')}
-            {item('Eksport 3MF', () => act.exportAs('3mf'), 'primary')}
+            {item('Eksport STL', () => act.exportAs('stl'), 'primary', 'export')}
+            {item('Eksport 3MF', () => act.exportAs('3mf'), 'primary', 'export')}
           </div>
           <p className="mmenu-help">
             Jeden palec: obrót widoku. Dwa palce: przesuw i przybliżenie. Stuknięcie: wybór części. Wymiary zmieniasz suwakami w zakładce Właściwości. Dwa stuknięcia w ściankę: faktura, napis i magnesy na niej.

@@ -912,3 +912,9 @@ button > .sicon:only-child { display: block; margin: auto; }
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l9-7z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .library h3:not(.closed)::before { transform: rotate(90deg); }
+/* Phone: top-bar buttons and the ⋮ menu use the same icons as the desktop toolbar. */
+.mbar .icon { display: inline-flex; align-items: center; justify-content: center; }
+.mbar .icon .kicon { display: block; }
+.mmenu-grid button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.mmenu-grid button .kicon { display: block; }
+.mtabs .mt-icon .kicon { display: block; margin: 0 auto; }
