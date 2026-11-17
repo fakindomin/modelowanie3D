@@ -215,17 +215,35 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
     stops.push('k' in step ? { ...last, [step.k]: step.to } : 'lid' in step ? { ...last, lid: step.lid } : { ...last, [step.add]: !last[step.add] });
   }
   // The show starts once the engine has drawn the real box; without WebGL it plays on the flat drawing.
+  // TEMPORARY diagnostics (2026-11-17): why the engine show does not start for the user.
+  const diag = (msg: string) => {
+    cfg.dataset.engine = msg;
+    const d = document.createElement('div');
+    d.className = 'diag';
+    d.textContent = msg;
+    d.style.cssText = 'position:absolute;left:8px;right:8px;bottom:44px;z-index:5;font:600 12px/1.3 monospace;background:#fff;color:#b00;border:1px solid #b00;padding:6px;white-space:pre-wrap';
+    cfg.appendChild(d);
+  };
+  const t0 = performance.now();
+  const slow = setTimeout(() => diag('silnik: brak gotowości po 15 s'), 15000);
   engineView($<HTMLElement>('.view'), stops)
     .then((v) => {
+      clearTimeout(slow);
       if (stopped) return v.stop();
       eng = v;
-      draw();
+      try {
+        draw();
+      } catch (e) {
+        diag('rysowanie: ' + String((e as Error)?.stack ?? e).slice(0, 400));
+        throw e;
+      }
       svg.style.visibility = 'hidden';
       go();
     })
     .catch((e) => {
       console.warn('show engine', e);
-      cfg.dataset.engine = String((e as Error)?.message ?? e).slice(0, 200);
+      clearTimeout(slow);
+      diag('silnik: ' + String((e as Error)?.stack ?? e).slice(0, 400) + ' (' + Math.round(performance.now() - t0) + ' ms)');
       go();
     });
   return () => {
