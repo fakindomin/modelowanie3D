@@ -1,4 +1,4 @@
-import { MotionBar } from './MotionBar';
+import { LoadingSpinner, MotionBar } from './MotionBar';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { LogoMark, StateIcon, ToolIcon, type ToolIconId, WizardIcon } from './KindIcons';
 import { Viewport } from '../scene/Viewport';
@@ -62,6 +62,7 @@ export function MobileApp() {
       <main className="viewport">
         <Viewport />
         <MotionBar />
+        <LoadingSpinner />
         {toast && <div className="toast">{toast}</div>}
         <MeasurePanel />
         <CornerSuggest />

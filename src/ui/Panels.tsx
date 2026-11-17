@@ -22,6 +22,7 @@ import { fittingGeo } from '../parts/couplings';
 import { PROJECT_ITEMS, USE_CATS, itemsIn, type ProjectItem } from '../projects';
 import { cardInfo, fmtMin, type CardInfo } from './modelCard';
 import { runProjectItem } from './runItem';
+import { withLoading } from './loading';
 import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../simple';
 import { PRINTERS } from '../wizards/frame';
 import { groupFields, shortLabel, type FieldGroup } from './paramGroups';
@@ -75,11 +76,12 @@ export function Library() {
   const startNew = useStore((s) => s.startNew);
   const matingGear = useStore((s) => s.matingGear);
   /** A new project from one ready-made part; gears come with their mating partner. */
-  const startWith = (type: string) => {
-    startNew();
-    const id = add(type);
-    if (GEAR_PAIR[type]) matingGear(id, GEAR_PAIR[type]);
-  };
+  const startWith = (type: string) =>
+    withLoading(() => {
+      startNew();
+      const id = add(type);
+      if (GEAR_PAIR[type]) matingGear(id, GEAR_PAIR[type]);
+    });
   const [open, setOpen] = useState<string | null>('box');
   const [q, setQ] = useState('');
   const [card, setCard] = useState<{ item: ProjectItem; top: number; left: number } | null>(null);
@@ -110,10 +112,11 @@ export function Library() {
     }
   };
   const addVariant = useStore((s) => s.addVariant);
-  const startVariant = (f: Family, v: Family['variants'][number]) => {
-    startNew();
-    addVariant(f, v, 'M');
-  };
+  const startVariant = (f: Family, v: Family['variants'][number]) =>
+    withLoading(() => {
+      startNew();
+      addVariant(f, v, 'M');
+    });
   const [closed, setClosed] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '[]') as string[]);
@@ -234,7 +237,7 @@ export function Library() {
           figs.length,
           figs.length,
           figs.map((id) => (
-            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => (startNew(), addFigurine(id))}>
+            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => withLoading(() => (startNew(), addFigurine(id)))}>
               <Icon type="figurine" hole={false} />
               <span>{FIG_MODELS[id].n}</span>
             </button>
@@ -248,7 +251,7 @@ export function Library() {
           xmas.length,
           xmas.length,
           xmas.map((id) => (
-            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => (startNew(), addFigurine(id))}>
+            <button key={id} className="tile fig" title={FIG_MODELS[id].desc} onClick={() => withLoading(() => (startNew(), addFigurine(id)))}>
               <Icon type={XMAS_ICON[id] ?? 'figurine'} hole={false} />
               <span>{FIG_MODELS[id].n}</span>
             </button>

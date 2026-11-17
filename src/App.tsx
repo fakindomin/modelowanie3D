@@ -20,7 +20,7 @@ import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
 import { MobileApp, useMobile } from './ui/Mobile';
 import { ReviewBar, useReview } from './ui/Review';
-import { MotionBar, ZoneTip } from './ui/MotionBar';
+import { LoadingSpinner, MotionBar, ZoneTip } from './ui/MotionBar';
 
 function projectOf(): Project {
   const s = useStore.getState();
@@ -468,6 +468,7 @@ export function App() {
         <ReviewBar />
         <MotionBar />
         <ZoneTip />
+        <LoadingSpinner />
       </main>
       <Properties />
       <WizardDialog />

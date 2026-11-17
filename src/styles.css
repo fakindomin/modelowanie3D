@@ -1006,3 +1006,8 @@ button > .sicon:only-child { display: block; margin: auto; }
 .desc-bar > summary::before { content: '▸'; font-size: 10px; }
 .desc-bar[open] > summary::before { content: '▾'; }
 .desc-bar .statusbar { padding: 0 8px 8px; }
+
+/* Kółko ładowania na środku widoku (obraca się na kompozytorze, więc kręci się także w trakcie budowania modelu). */
+.view-loading { position: absolute; inset: 0; display: grid; place-items: center; z-index: 30; pointer-events: none; background: rgba(26, 28, 25, 0.35); }
+.view-loading .spin { width: 46px; height: 46px; border-radius: 50%; border: 4px solid rgba(179, 182, 170, 0.25); border-top-color: var(--accent, #f26419); animation: view-spin 0.8s linear infinite; will-change: transform; }
+@keyframes view-spin { to { transform: rotate(360deg); } }

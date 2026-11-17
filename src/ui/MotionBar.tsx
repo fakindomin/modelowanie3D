@@ -1,4 +1,5 @@
 import { useStore } from '../store';
+import { useLoading } from './loading';
 import type { Part } from '../types';
 import type { Motion } from '../parts/def';
 import { baseOf, focusGroup, motionsOf, noteRest, play, rigFor, setMotion, shownOf, useMotion } from './motion';
@@ -90,6 +91,17 @@ export function ZoneTip() {
     <div className="zone-tip" style={{ left: h.x + 14, top: h.y + 16 }}>
       {h.label}
       {!h.motion && <small>kliknij: wymiary</small>}
+    </div>
+  );
+}
+
+/** Spinner in the middle of the view while a model is being built. */
+export function LoadingSpinner() {
+  const on = useLoading((s) => s.on);
+  if (!on) return null;
+  return (
+    <div className="view-loading" role="status" aria-label="Wczytywanie modelu">
+      <span className="spin" />
     </div>
   );
 }

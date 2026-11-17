@@ -10,6 +10,7 @@ import { estimate, fmtH, fmtKg, type Estimate } from '../wizards/estimate';
 import type { Field, Plan, Wizard } from '../wizards/types';
 import { SizeRow } from './Panels';
 import { PRINTERS } from '../wizards/frame';
+import { withLoading } from './loading';
 
 /** Tiles that offer sizes in millimetres (wall 1,6 / 2 / 3 mm): the tiles stay as quick picks, and the exact value has its field and slider. */
 function sizeOf(f: Field): { label: string; min: number; max: number; step: number } | null {
@@ -121,8 +122,10 @@ function Steps({ wz, initial, run }: { wz: Wizard; initial: WizValues; run?: str
   const last = step === wz.steps.length - 1;
   const plan = result?.plan ?? null;
   const create = (manual: boolean) => {
-    st.applyWizard(wz.id, values, run);
-    if (manual) st.setManual(true);
+    withLoading(() => {
+      st.applyWizard(wz.id, values, run);
+      if (manual) st.setManual(true);
+    });
   };
 
   return (
