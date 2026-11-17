@@ -4,9 +4,10 @@ import { CASE_WIZARD, JUNCTION_WIZARD, PANEL_WIZARD } from './electronics';
 import { POT_WIZARD, STAND_WIZARD } from './home';
 import { DOME_WIZARD } from './dome';
 import { GEARBOX_WIZARD } from './gearbox';
+import { STACK_WIZARD } from './stack';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD].map((w) => [w.id, w]));
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD, STACK_WIZARD].map((w) => [w.id, w]));
 const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
 
 const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
@@ -28,7 +29,7 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
       ready(ORGANIZER_WIZARD),
       ready(BOX_WIZARD),
       ready(CABINET_WIZARD),
-      soon('stack', 'Pojemniki piętrowe', 'Stackowane moduły o jednej podstawie.'),
+      ready(STACK_WIZARD),
     ],
   },
   {

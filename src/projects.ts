@@ -50,6 +50,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   wiz('stand', ['desk'], 'wedge'),
   wiz('gearbox', ['workshop', 'kids'], 'gear'),
   wiz('dome', ['garden', 'kids'], 'pipeEnd'),
+  wiz('stack', ['workshop', 'home', 'desk'], 'stackBin'),
   // Everyday things sized from one measurement.
   part('pudelko', ['desk', 'home']),
   part('wallHook', ['home', 'bath']),
@@ -71,6 +72,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   part('cableClip', ['desk', 'electronics']),
   part('penCup', ['desk']),
   part('phoneStand', ['desk', 'electronics']),
+  part('stackBin', ['workshop', 'home']),
   part('spinningTop', ['kids']),
   // Cables and desk.
   part('cableComb', ['electronics', 'desk', 'workshop']),

@@ -135,7 +135,7 @@ const OFF: Partial<Record<Group, Partial<Record<Op, OpOff>>>> = {
  * the lattice on flat panels and racks, and texture everywhere except where it would spoil a fit or a function.
  */
 const USEFUL_MAGNETS = new Set([
-  'pudelko', 'linkBin', 'spiceRack', 'cosmeticOrganizer', 'screwTray', 'batteryTray', 'nozzleOrganizer', 'penCup', 'brushStand',
+  'pudelko', 'linkBin', 'stackBin', 'spiceRack', 'cosmeticOrganizer', 'screwTray', 'batteryTray', 'nozzleOrganizer', 'penCup', 'brushStand',
   'capsuleRack', 'soapDish', 'wallHook', 'hookRail', 'toolRail', 'bitHolder', 'keyShelf', 'leashHook', 'remoteHolder', 'tapeHolder',
   'paperTowelHolder', 'ventGrille',
 ]);

@@ -1,7 +1,7 @@
 import type { CrossSection, Manifold } from 'manifold-3d';
 import { M, settle } from '../geom/manifold';
 import type { ParamDef, Params, PartDef } from './def';
-import { box, cyl, cylX, num, select, union } from './util';
+import { block, box, cyl, cylX, num, rblock, select, union } from './util';
 import { FONT, textOutline } from './text';
 import { internalThreadCut, type ThreadSpec } from './threads';
 import { type P2, adv, arc, ccw, count, csHole, csHoleX, hookPlate, n, nv, onSide, screwOf, screwParams, stroke } from './useful';
@@ -787,7 +787,75 @@ function phoneStand(p: Params): Manifold {
   return settle(m);
 }
 
+/**
+ * Stackable bin (or its lid): the bottom has a foot that sits inside the top of the bin below, with a 45° step
+ * from the foot to the full outline, so it prints without supports and the stack centres itself.
+ * The foot is hollow, so the floor stays low; dividers end below the next bin's foot.
+ */
+export function stackSizes(p: Params) {
+  const t = nv(p, 'T', 1.6), c = nv(p, 'c', 0.3), f = nv(p, 'f', 4);
+  const W = num(p, 'W'), D = num(p, 'D'), r = Math.min(nv(p, 'rad', 4), W / 2 - 0.1, D / 2 - 0.1);
+  const inset = t + c; // the foot is this much smaller on each side
+  return { t, c, f, W, D, r, inset, step: inset, H: p.kind === 'lid' ? f + inset + nv(p, 'lidT', 2) : num(p, 'H') };
+}
+
+function stackBin(p: Params): Manifold {
+  const { t, f, W, D, r, inset, step, H } = stackSizes(p);
+  const B = nv(p, 'B', 1.2);
+  const slab = (k: number, z: number) => rblock(W - 2 * k, D - 2 * k, 0.01, Math.max(0, r - k), 0, 0, z);
+  // Outline grown by k from the inside of the wall: k = 0 is the outside, k = t the inside.
+  const shape = (k: number, z0: number, z1: number) =>
+    union([
+      rblock(W - 2 * (inset + k), D - 2 * (inset + k), f - z0 + 0.02, Math.max(0, r - inset - k), 0, 0, z0),
+      M().Manifold.hull([slab(inset + k, f), slab(k, f + step)]),
+      rblock(W - 2 * k, D - 2 * k, z1 - f - step + 0.02, Math.max(0, r - k), 0, 0, f + step - 0.02),
+    ]);
+  if (p.kind === 'lid') {
+    // A plate on a foot ring: the foot drops into the top bin, the plate covers its rim.
+    const solid = shape(0, 0, H);
+    const ring = rblock(W - 2 * (inset + t), D - 2 * (inset + t), f, Math.max(0, r - inset - t), 0, 0, -0.01);
+    return settle(solid.subtract(ring));
+  }
+  let m = shape(0, 0, H).subtract(shape(t, B, H + 1));
+  const nx = Math.max(1, Math.round(nv(p, 'nx', 1))), ny = Math.max(1, Math.round(nv(p, 'ny', 1)));
+  const top = H - f - 1; // under the foot of the bin above
+  const walls: Manifold[] = [];
+  const iw = W - 2 * t, id = D - 2 * t;
+  for (let i = 1; i < nx; i++) walls.push(block(t, id, top - B + 0.1, -iw / 2 + (iw * i) / nx, 0, B - 0.1));
+  for (let j = 1; j < ny; j++) walls.push(block(iw, t, top - B + 0.1, 0, -id / 2 + (id * j) / ny, B - 0.1));
+  // A hair into the walls and the floor, so they join as one body.
+  if (walls.length && top > B + 2) m = m.add(union(walls).intersect(shape(t - 0.1, B - 0.1, H + 1)));
+  if (p.grab) {
+    // A U-shaped opening in the front wall, so the bin can be reached while stacked.
+    const gw = Math.min(W * 0.5, 80), gd = Math.min((H - f) * 0.45, 40);
+    const u = union([block(gw, t * 4, gd, 0, -D / 2, H - gd + gw / 4), cyl(t * 4, gw / 2, gw / 2, 64).rotate([90, 0, 0]).translate([0, -D / 2 + t * 2, H - gd + gw / 2])]);
+    m = m.subtract(u.intersect(block(W, D, H, 0, 0, f + step + 2)));
+  }
+  return settle(m);
+}
+
 export const USEFUL4_DEFS: PartDef[] = [
+  {
+    type: 'stackBin', label: 'Pojemnik piętrowy', category: 'useful', hole: false,
+    description: 'Pojemnik ze stopką od spodu, która wchodzi w górę pojemnika niżej: stawiasz je jeden na drugim i się nie zsuwają. Ta sama podstawa dla wszystkich pięter, wysokość dowolna. Jako „Pokrywka” zamyka górny.',
+    params: [
+      select('kind', 'Element', 'bin', [['bin', 'Pojemnik'], ['lid', 'Pokrywka na górę']]),
+      n('W', 'Szerokość', 120, 40, 300),
+      n('D', 'Głębokość', 90, 40, 300),
+      { ...n('H', 'Wysokość', 50, 20, 250), show: (p) => p.kind !== 'lid' },
+      { ...count('nx', 'Przegródki wzdłuż', 1, 1, 8), show: (p) => p.kind !== 'lid' },
+      { ...count('ny', 'Przegródki w poprzek', 1, 1, 8), show: (p) => p.kind !== 'lid' },
+      { ...bool('grab', 'Wycięcie z przodu', false, 'Sięgasz do środka, gdy pojemniki stoją jeden na drugim.'), show: (p) => p.kind !== 'lid' },
+      adv('rad', 'Zaokrąglenie narożników', 4, 0, 20, 0.5),
+      adv('T', 'Grubość ścianki', 1.6, 1.2, 4, 0.2),
+      adv('B', 'Grubość dna', 1.2, 0.8, 4, 0.2),
+      adv('f', 'Wysokość stopki', 4, 2, 10, 0.5),
+      adv('c', 'Luz stopki', 0.3, 0.1, 0.8, 0.05),
+    ],
+    build: stackBin,
+    // The lid prints plate down, so the foot ring doesn't need a bridge.
+    printTurn: (p) => (p.kind === 'lid' ? [0, 180] : null),
+  },
   {
     type: 'phoneStand', label: 'Stojak na telefon lub tablet', category: 'useful', hole: false,
     description: 'Podstawa z rantem i pochylonym oparciem w jednej bryle, z żebrem za oparciem i wycięciem na kabel. Drukuje się tak, jak stoi, bez podpór (oparcie pochyla się najwyżej o 45°).',
