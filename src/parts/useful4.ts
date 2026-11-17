@@ -941,7 +941,64 @@ function dripStake(p: Params): Manifold {
   return settle(m);
 }
 
+/**
+ * Linear guide on two bought rods along X: end blocks hold the rods, the carriage rides on them on linear bearings
+ * (LMxUU pressed into housings) or on printed bushings. Both print without supports: the ends stand on their base
+ * with teardrop holes, the carriage lies plate down (it is turned over on the rods).
+ */
+export function railSizes(p: Params) {
+  const d = nv(p, 'd', 8), S = nv(p, 'S', 60), lm = p.bush !== 'print';
+  const B = lm ? nv(p, 'B', 15) : d + 0.35, R = (lm ? B : d) / 2 + 3;
+  const h = R + 2; // rod axis above the base, so the carriage clears it
+  const tp = 5; // carriage plate
+  return { d, S, lm, B, R, h, tp, Te: 14, Lc: nv(p, 'Lc', 60), screw: nv(p, 'screwD', 3) };
+}
+
+function linearRail(p: Params): Manifold {
+  const { d, S, lm, B, R, h, tp, Te, Lc, screw } = railSizes(p);
+  if (p.piece === 'end') {
+    const w = S + d + 16, H = h + d / 2 + 5, ear = screw * 2 + 6;
+    let m = box(0, -w / 2, 0, Te, w / 2, H).add(box(0, -w / 2 - ear, 0, Te, w / 2 + ear, 5));
+    for (const y of [-S / 2, S / 2]) m = m.subtract(tearX(d / 2 + 0.1, -1, Te + 1, y, h));
+    for (const y of [-w / 2 - ear / 2, w / 2 + ear / 2]) m = m.subtract(cyl(7, screw / 2 + 0.2).translate([Te / 2, y, -1]));
+    return m;
+  }
+  // Carriage in its print pose: plate on the bed, the housings on top with the rods' axes at zc, teardrops up.
+  const zc = tp + R - 1;
+  const w = S + 2 * R;
+  let m = box(-Lc / 2, -w / 2, 0, Lc / 2, w / 2, tp);
+  for (const y of [-S / 2, S / 2]) m = m.add(cylX(-Lc / 2, Lc / 2, R, y, zc)).add(box(-Lc / 2, y - R, tp - 0.01, Lc / 2, y + R, zc));
+  for (const y of [-S / 2, S / 2]) {
+    if (lm) {
+      // Bearings pressed in from both ends; a lip in the middle stops them.
+      const BL = nv(p, 'BL', 24);
+      const lip = Math.max(0, Lc - 2 * BL);
+      m = m.subtract(tearX(B / 2 + 0.05, -Lc / 2 - 1, -lip / 2, y, zc)).subtract(tearX(B / 2 + 0.05, lip / 2, Lc / 2 + 1, y, zc));
+      m = m.subtract(tearX(d / 2 + 1, -Lc / 2 - 1, Lc / 2 + 1, y, zc));
+    } else m = m.subtract(tearX(B / 2, -Lc / 2 - 1, Lc / 2 + 1, y, zc));
+  }
+  // Mounting holes through the plate, 20 mm grid.
+  const nx = Math.max(1, Math.floor((Lc - 10) / 20)), ny = Math.max(1, Math.floor((S - 2 * R) / 20));
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) m = m.subtract(cyl(tp + 2, screw / 2 - 0.3).translate([-((nx - 1) * 20) / 2 + i * 20, -((ny - 1) * 20) / 2 + j * 20, -1]));
+  return m;
+}
+
 export const USEFUL4_DEFS: PartDef[] = [
+  {
+    type: 'linearRail', label: 'Prowadnica na prętach', category: 'useful', hole: false,
+    description: 'Wózek na dwóch kupnych prętach (8–12 mm) z łożyskami liniowymi LMxUU albo drukowanymi tulejami, i dwie podpory końcowe na wkręty.',
+    params: [
+      select('piece', 'Element', 'carriage', [['carriage', 'Wózek'], ['end', 'Podpora końcowa']]),
+      n('d', 'Średnica pręta', 8, 6, 20, 0.5),
+      n('S', 'Rozstaw prętów', 60, 30, 200),
+      { ...select('bush', 'Ślizg', 'lm', [['lm', 'Łożyska liniowe LMxUU'], ['print', 'Drukowana tuleja']]), show: (p) => p.piece !== 'end' },
+      { ...n('Lc', 'Długość wózka', 60, 30, 200), show: (p) => p.piece !== 'end' },
+      { ...n('B', 'Łożysko: średnica zewnętrzna', 15, 8, 30, 0.5), show: (p) => p.piece !== 'end' && p.bush !== 'print', more: true },
+      { ...n('BL', 'Łożysko: długość', 24, 10, 40, 0.5), show: (p) => p.piece !== 'end' && p.bush !== 'print', more: true },
+      adv('screwD', 'Średnica wkrętu', 3, 2.5, 5, 0.5),
+    ],
+    build: linearRail,
+  },
   {
     type: 'dripStake', label: 'Kroplownik na wężyk (szpilka)', category: 'useful', hole: false,
     description: 'Wbijasz w ziemię przy roślinie, wężyk nasuwasz na karby. Woda wypływa małym otworem z boku: im mniejszy, tym wolniej kapie. Drukuj z PETG.',

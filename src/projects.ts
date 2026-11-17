@@ -50,6 +50,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   wiz('stand', ['desk'], 'wedge'),
   wiz('gearbox', ['workshop', 'kids'], 'gear'),
   wiz('dome', ['garden', 'kids'], 'pipeEnd'),
+  wiz('slide', ['workshop'], 'linearRail'),
   wiz('irrigation', ['garden'], 'dripStake'),
   wiz('profileFrame', ['home', 'workshop', 'garden'], 'profileFitting'),
   wiz('rack', ['home', 'workshop'], 'boardJoint'),
