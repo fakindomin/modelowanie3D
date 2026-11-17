@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Manifold } from 'manifold-3d';
 import { DEFS } from '../catalog';
 import type { Part, Texture } from '../types';
+import type { Motion } from '../parts/def';
 import { M, matrixToMat4, toGeometry } from './manifold';
 import { applyTexture } from './texture';
 import { applyEdges } from './edges';
@@ -182,7 +183,7 @@ export interface Segment {
   geometry: THREE.BufferGeometry;
   /** Key of the motion moving it, or null. */
   motion: string | null;
-  move: [number, number, number];
+  m: Motion | null;
 }
 
 const segCache = new WeakMap<Built, Segment[]>();
@@ -194,18 +195,18 @@ export function segments(part: Part): Segment[] {
   if (hit) return hit;
   const ms = b.failed ? [] : (DEFS[part.type]?.motions?.(part.params) ?? []).filter((m) => m.pieces.includes(String(part.params.piece ?? '')));
   let out: Segment[];
-  if (!ms.length) out = [{ geometry: b.geometry, motion: null, move: [0, 0, 0] }];
-  else if (!ms.some((m) => m.region)) out = [{ geometry: b.geometry, motion: ms[0].key, move: ms[0].move }];
+  if (!ms.length) out = [{ geometry: b.geometry, motion: null, m: null }];
+  else if (!ms.some((m) => m.region)) out = [{ geometry: b.geometry, motion: ms[0].key, m: ms[0] }];
   else {
     out = [];
     const boxes = ms.map((m) => M().Manifold.cube([m.region![1][0] - m.region![0][0], m.region![1][1] - m.region![0][1], m.region![1][2] - m.region![0][2]]).translate(m.region![0]));
     ms.forEach((m, i) => {
       const part = b.manifold.intersect(boxes[i]);
-      if (!part.isEmpty()) out.push({ geometry: toGeometry(part), motion: m.key, move: m.move });
+      if (!part.isEmpty()) out.push({ geometry: toGeometry(part), motion: m.key, m });
       part.delete();
     });
     const rest = b.manifold.subtract(M().Manifold.union(boxes));
-    if (!rest.isEmpty()) out.push({ geometry: toGeometry(rest), motion: null, move: [0, 0, 0] });
+    if (!rest.isEmpty()) out.push({ geometry: toGeometry(rest), motion: null, m: null });
     rest.delete();
     boxes.forEach((x) => x.delete());
   }

@@ -1,34 +1,45 @@
 import { useStore } from '../store';
 import type { Part } from '../types';
-import { focusGroup, motionsOf, play, rigOf, setMotion, useMotion } from './motion';
+import type { Motion } from '../parts/def';
+import { baseOf, focusGroup, motionsOf, noteRest, play, rigFor, setMotion, shownOf, useMotion } from './motion';
 
-/** The model whose moving elements the bar shows: the selected one, otherwise the first with motions. */
-function movingPart(parts: Part[], selectedId: string | null): Part | undefined {
-  const sel = parts.find((p) => p.id === selectedId);
-  if (sel && motionsOf(sel).length) return sel;
-  return parts.find((p) => !p.hidden && motionsOf(p).length);
+/** Every moving element of the model (a set of pieces counts once), in the order of the parts. */
+function movingItems(parts: Part[]): { rig: string; m: Motion }[] {
+  const out: { rig: string; m: Motion }[] = [];
+  const seen = new Set<string>();
+  for (const p of parts) {
+    if (p.hidden) continue;
+    for (const m of motionsOf(p).filter((q) => (q.world ? !q.hidden : q.pieces.includes(String(p.params.piece ?? ''))))) {
+      const rig = rigFor(p, m);
+      noteRest(rig, m);
+      if (seen.has(rig + '/' + m.key)) continue;
+      seen.add(rig + '/' + m.key);
+      out.push({ rig, m });
+    }
+  }
+  return out;
 }
 
 /**
- * Bar under the model with moving elements (lid, drawers): „Rozsuń” moves them all at once, ▶ shows how it
- * opens and closes, and each element has its own button. Only a preview: the print stays closed.
+ * Bar under the model with moving elements (lid, drawers, a door): „Rozsuń” moves them all at once, ▶ shows how
+ * it opens and closes, and each element has its own button. Only a preview: the print stays as it is.
  */
 export function MotionBar() {
   const parts = useStore((s) => s.parts);
-  const selectedId = useStore((s) => s.selectedId);
   const preview = useStore((s) => s.preview);
-  const part = movingPart(parts, selectedId);
-  const rig = part ? rigOf(part) : '';
-  const base = useMotion((s) => s.base[rig]);
-  const shown = useMotion((s) => s.shown[rig]);
-  if (!part || preview) return null;
-  const ms = motionsOf(part);
-  const keys = ms.map((m) => m.key);
-  const all = Math.round((keys.reduce((a, k) => a + Math.min(1, shown?.[k] ?? 0), 0) / keys.length) * 100);
-  const set = (v: number) => setMotion(rig, Object.fromEntries(keys.map((k) => [k, v])));
+  const base = useMotion((s) => s.base);
+  const shown = useMotion((s) => s.shown);
+  const items = movingItems(parts);
+  if (!items.length || preview) return null;
+  const all = Math.round((items.reduce((a, { rig, m }) => a + Math.min(1, shownOf({ shown }, rig, m.key)), 0) / items.length) * 100);
+  const set = (v: number) => {
+    const by = new Map<string, Record<string, number>>();
+    for (const { rig, m } of items) by.set(rig, { ...by.get(rig), [m.key]: v });
+    for (const [rig, vals] of by) setMotion(rig, vals);
+  };
   return (
     <div className="motion-bar" onPointerDown={(e) => e.stopPropagation()}>
-      <button className="mb-play" title="Pokaż, jak się otwiera i zamyka" aria-label="Pokaż ruch" onClick={() => play(rig, keys)}>
+      <button className="mb-play" title="Pokaż, jak się otwiera i zamyka" aria-label="Pokaż ruch" onClick={() => play(items.map(({ rig, m }) => ({ rig, key: m.key })))}>
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
           <path d="M3 1.8v10.4L12 7z" fill="currentColor" />
         </svg>
@@ -49,13 +60,13 @@ export function MotionBar() {
         <output>{all}%</output>
       </label>
       <div className="mb-chips">
-        {ms.map((m) => {
-          const on = (base?.[m.key] ?? 0) >= 0.5;
+        {items.map(({ rig, m }) => {
+          const on = baseOf({ base }, rig, m.key) >= 0.5;
           return (
             <button
-              key={m.key}
+              key={rig + m.key}
               className={on ? 'mb-chip on' : 'mb-chip'}
-              title={on ? `Zasuń: ${m.label.toLowerCase()}` : `Wysuń: ${m.label.toLowerCase()}`}
+              title={on ? `Zamknij: ${m.label.toLowerCase()}` : `Otwórz: ${m.label.toLowerCase()}`}
               onClick={() => {
                 setMotion(rig, { [m.key]: on ? 0 : 1 }, true);
                 focusGroup(m.group);

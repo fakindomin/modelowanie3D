@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { DEFS } from '../catalog';
 import { assembly, bodyBox, groupBody, groupId, isLocked, useStore } from '../store';
 import { built, buildBodies, partMatrix, segments, worldBox, type BodyResult } from '../geom/parts';
-import { focusGroup, hoverZone, pickZone, rigOf, setMotion, useMotion, zoneAt, zonesOf, motionsOf, type ZoneHover } from '../ui/motion';
+import { baseOf, focusGroup, hoverZone, motionPoint, motionPose, noteRest, pickZone, rigFor, rigOf, setMotion, shownOf, useMotion, zoneAt, zonesOf, motionsOf, type ZoneHover } from '../ui/motion';
+import type { Motion } from '../parts/def';
 import { toGeometry } from '../geom/manifold';
 import { finishing, warped } from '../geom/modify';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
@@ -66,27 +67,33 @@ function shownCut(parts: Part[]): Set<number> {
 
 function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolean }) {
   const segs = segments(part);
-  const rig = rigOf(part);
+  // A part moved as part of an assembly (a lid onto its box): its whole pose follows that element.
+  const w = motionsOf(part).find((m) => m.world) ?? null;
+  const rig = w ? w.rig! : rigOf(part);
+  if (w) noteRest(rig, w);
   const shown = useMotion((s) => s.shown[rig]);
+  const wv = useMotion((s) => (w ? shownOf(s, rig, w.key) : 0));
+  const wpose = w ? motionPose(w, wv) : null;
   const hov = useMotion((s) => (s.hover && s.hover.rig === rig ? s.hover : null));
   const picked = useMotion((s) => (s.picked && s.picked.rig === rig ? s.picked : null));
   const zh = hov ?? picked;
   const sec = useSection();
-  const zoned = !!(DEFS[part.type]?.motions || DEFS[part.type]?.zones);
+  const zoned = !!(DEFS[part.type]?.motions || DEFS[part.type]?.zones || w);
   // A model with named places outlines the place under the pointer, not the whole piece.
   const hovered = look.hovered && !(zoned && zh && (zh.box || zh.motion));
   return (
+    <group position={wpose?.position ?? [0, 0, 0]} quaternion={wpose?.quaternion}>
     <group name={part.id} position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
       {segs.map((sg, i) => {
         const { geometry } = sg;
         const heavy = geometry.attributes.position.count > EDGE_LIMIT;
-        const zone = !!sg.motion && (hov?.motion === sg.motion || picked?.motion === sg.motion);
+        const segKey = w ? w.key : sg.motion;
+        const zone = !!segKey && (hov?.motion === segKey || picked?.motion === segKey);
         const edge = heavy ? null : zone ? '#ff7a2e' : look.selected ? '#ffffff' : look.snap ? '#8a9440' : hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
         const tint = zone && heavy ? '#7a3a12' : look.selected && heavy ? '#5a3c22' : hovered ? '#3e3a36' : '#000000';
-        const v = sg.motion ? (shown?.[sg.motion] ?? 0) : 0;
-        const at: Vec3 = [sg.move[0] * v, sg.move[1] * v, sg.move[2] * v];
+        const pose = sg.m ? motionPose(sg.m, shown?.[sg.m.key] ?? 0) : null;
         return (
-          <mesh key={i} position={at} geometry={geometry} castShadow={!part.hole} receiveShadow renderOrder={part.hole ? 2 : 1} userData={{ pick: part.id, seg: sg.motion }}>
+          <mesh key={i} position={pose?.position ?? [0, 0, 0]} quaternion={pose?.quaternion} geometry={geometry} castShadow={!part.hole} receiveShadow renderOrder={part.hole ? 2 : 1} userData={{ pick: part.id, seg: segKey }}>
             {part.hole ? (
               <meshStandardMaterial color={look.hovered || look.selected ? '#d6d8da' : part.color} transparent opacity={ghost ? (look.hovered || look.selected ? 0.3 : 0.1) : look.hovered ? 0.6 : 0.42} depthWrite={false} roughness={0.6} />
             ) : (
@@ -115,6 +122,7 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
           z.solid ? <ZoneShape key={i} part={part} label={z.label} /> : <ZoneBox key={i} box={z.box} />
         ) : null,
       )}
+    </group>
     </group>
   );
 }
@@ -230,10 +238,26 @@ function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | nu
   const bodies = useBodies(parts, merged, merged.join(','));
   const hidden = new Set(merged.filter((b) => parts.filter((p) => p.body === b && !p.hole).every((p) => p.hidden)));
   const off = new Set(parts.filter((p) => p.noPrint).map((p) => p.body));
+  const shown = useMotion((s) => s.shown);
+  // A body that is part of a moving element (a lid on its hinge) is drawn where that element is now.
+  const moving = (body: number) => {
+    for (const p of parts) {
+      if (p.body !== body) continue;
+      const m = motionsOf(p).find((q) => q.world);
+      if (m) {
+        noteRest(m.rig!, m);
+        return { p, m, pose: motionPose(m, shownOf({ shown }, m.rig!, m.key)) };
+      }
+    }
+    return null;
+  };
   return (
     <>
-      {bodies.filter((b) => !hidden.has(b.body)).map((b) => (
-        <mesh key={b.body} geometry={b.geometry} castShadow receiveShadow userData={{ pick: groupId(b.body) }}>
+      {bodies.filter((b) => !hidden.has(b.body)).map((b) => {
+        const mv = moving(b.body);
+        return (
+        <group key={b.body} position={mv?.pose.position ?? [0, 0, 0]} quaternion={mv?.pose.quaternion}>
+        <mesh geometry={b.geometry} castShadow receiveShadow userData={{ pick: groupId(b.body), seg: mv?.m.key, segPart: mv?.p.id }}>
           <meshStandardMaterial
             key={off.has(b.body) ? 'off' : 'on'}
             color={b.color}
@@ -248,7 +272,9 @@ function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | nu
           />
           {selectedBody === b.body && !sec.planes && b.geometry.attributes.position.count <= EDGE_LIMIT && <Edges threshold={20} color="#ffffff" lineWidth={2} />}
         </mesh>
-      ))}
+        </group>
+        );
+      })}
     </>
   );
 }
@@ -279,15 +305,17 @@ function candidates(e: ThreeEvent<PointerEvent>): string[] {
 function zoneHit(e: ThreeEvent<PointerEvent>): ZoneHover | null {
   const it = e.intersections.find((i) => i.object instanceof THREE.Mesh && i.object.userData.pick !== undefined);
   if (!it) return null;
-  const part = useStore.getState().parts.find((p) => p.id === it.object.userData.pick);
+  const id = (it.object.userData.segPart as string | undefined) ?? it.object.userData.pick;
+  const part = useStore.getState().parts.find((p) => p.id === id);
   const def = part && DEFS[part.type];
-  if (!part || !def || !(def.motions || def.zones)) return null;
   const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
-  const seg = it.object.userData.seg as string | null;
-  if (seg) {
-    const m = motionsOf(part).find((q) => q.key === seg);
-    if (m) return { part: part.id, rig: rigOf(part), label: m.label, group: m.group, motion: m.key, box: null, solid: false, x, y };
+  const seg = it.object.userData.seg as string | null | undefined;
+  if (part && seg) {
+    const ms = motionsOf(part);
+    const m = ms.find((q) => q.key === seg && q.world) ?? ms.find((q) => q.key === seg);
+    if (m) return { part: part.id, rig: rigFor(part, m), label: m.label, group: m.group, motion: m.key, box: null, solid: false, x, y };
   }
+  if (!part || !def || !(def.motions || def.zones)) return null;
   const l = it.object.worldToLocal(it.point.clone());
   const z = zoneAt(part, [l.x, l.y, l.z]);
   if (!z) return null;
@@ -299,7 +327,9 @@ function zoneHit(e: ThreeEvent<PointerEvent>): ZoneHover | null {
 
 let cancelDrag = () => {};
 /** Sliding a picked lid or drawer with the pointer: screen travel `sv` (px) is 100 %. */
-let mdrag: { rig: string; key: string; start: number; max: number; sv: THREE.Vector2; x0: number; y0: number } | null = null;
+let mdrag: { rig: string; part: string; m: Motion; local: THREE.Vector3; v: number; x: number; y: number } | null = null;
+/** First surface hit of a pointer event. */
+const it0 = (e: ThreeEvent<PointerEvent>) => e.intersections.find((i) => i.object instanceof THREE.Mesh && i.object.userData.pick !== undefined) ?? e.intersections[0];
 
 interface Drag {
   /** Part id, or group id for a whole body. */
@@ -330,9 +360,24 @@ function Scene() {
     const hit = new THREE.Vector3();
     const move = (ev: PointerEvent) => {
       if (mdrag) {
+        // The element follows the pointer along its own path (a straight run or a turn): step by the screen direction of travel here.
         const md = mdrag;
-        const t = md.start + ((ev.clientX - md.x0) * md.sv.x + (ev.clientY - md.y0) * md.sv.y) / md.sv.lengthSq();
-        setMotion(md.rig, { [md.key]: Math.min(md.max, Math.max(0, t)) });
+        const part = useStore.getState().parts.find((p) => p.id === md.part);
+        if (!part) return;
+        const mat = md.m.world ? new THREE.Matrix4() : partMatrix(part.position, part.rotation);
+        const rect = gl.domElement.getBoundingClientRect();
+        const scr = (v: number) => {
+          const q = motionPoint(md.m, v, md.local).applyMatrix4(mat).project(camera);
+          return new THREE.Vector2(((q.x + 1) / 2) * rect.width, ((1 - q.y) / 2) * rect.height);
+        };
+        const dv = 0.02;
+        const tan = scr(md.v + dv).sub(scr(md.v)).divideScalar(dv);
+        const dx = ev.clientX - md.x, dy = ev.clientY - md.y;
+        md.x = ev.clientX;
+        md.y = ev.clientY;
+        if (tan.lengthSq() < 1) return;
+        md.v = Math.min(md.m.max ?? 1, Math.max(0, md.v + (dx * tan.x + dy * tan.y) / tan.lengthSq()));
+        setMotion(md.rig, { [md.m.key]: md.v });
         return;
       }
       const d = drag.current;
@@ -463,22 +508,19 @@ function Scene() {
     // A picked moving element (lid, drawer) pressed again slides along its track with the pointer.
     if (zh?.motion && was && was.rig === zh.rig && was.motion === zh.motion) {
       const part = st.parts.find((p) => p.id === zh.part)!;
-      const m = motionsOf(part).find((q) => q.key === zh.motion);
+      const ms = motionsOf(part);
+      const m = ms.find((q) => q.key === zh.motion && q.world) ?? ms.find((q) => q.key === zh.motion);
       if (m) {
-        const mat = partMatrix(part.position, part.rotation);
-        const a = e.point.clone();
-        const b = a.clone().add(new THREE.Vector3(...m.move).transformDirection(mat).multiplyScalar(new THREE.Vector3(...m.move).length()));
-        const rect = gl.domElement.getBoundingClientRect();
-        const scr = (v: THREE.Vector3) => {
-          const q = v.clone().project(camera);
-          return new THREE.Vector2(((q.x + 1) / 2) * rect.width, ((1 - q.y) / 2) * rect.height);
-        };
-        const sv = scr(b).sub(scr(a));
-        if (sv.lengthSq() > 25) {
-          mdrag = { rig: zh.rig, key: m.key, start: useMotion.getState().base[zh.rig]?.[m.key] ?? 0, max: m.max ?? 1, sv, x0: e.nativeEvent.clientX, y0: e.nativeEvent.clientY };
-          if (controls) (controls as unknown as { enabled: boolean }).enabled = false;
-          return;
-        }
+        const v = baseOf(useMotion.getState(), zh.rig, m.key);
+        let local: THREE.Vector3;
+        if (m.world) {
+          // The point where it would be with the element closed: undo the element's pose now.
+          const pose = motionPose(m, v);
+          local = e.point.clone().sub(new THREE.Vector3(...pose.position)).applyQuaternion(pose.quaternion.clone().invert());
+        } else local = it0(e).object.worldToLocal(e.point.clone());
+        mdrag = { rig: zh.rig, part: part.id, m, local, v, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
+        if (controls) (controls as unknown as { enabled: boolean }).enabled = false;
+        return;
       }
     }
     // Ready-made models stay where they are: a click only picks (sizes change with the handles and the panel).

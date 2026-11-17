@@ -49,6 +49,20 @@ export interface Motion {
   pieces: string[];
   /** Travel at 100 % (the working stop, e.g. on the magnets), in the part's own frame (mm). */
   move: Vec3;
+  /** Turn at 100 % about an axis through a point (a door on its hinge, a lid screwed off), in the part's own frame. */
+  turn?: { axis: Vec3; at: Vec3; deg: number };
+  /** Several stages instead of one straight run (slide out of the grooves, then back to where it is printed): pose at each value, in order; `rot` = degrees about X, then Y, then Z, about `at`. */
+  keys?: { v: number; move: Vec3; rot?: Vec3 }[];
+  /** Pivot of `keys` rotations. */
+  at?: Vec3;
+  /** Value it shows before anyone moves it (a lid lying beside its box on the bed: the last key). Default 0 = closed. */
+  rest?: number;
+  /** Pose given in the scene's frame, not the part's (an assembly of separate parts: a lid onto its box). */
+  world?: boolean;
+  /** Shares the value of another element (a gasket going with its cap). */
+  rig?: string;
+  /** No button of its own on the bar (it follows another element). */
+  hidden?: boolean;
   /** How far past 100 % it can go (taken right out of the box), as a multiple of `move`; default 1. */
   max?: number;
   /** Only this box of the piece moves (two drawers printed as one piece). */

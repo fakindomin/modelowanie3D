@@ -1103,6 +1103,11 @@ export const USEFUL4_DEFS: PartDef[] = [
       adv('luz', 'Luz zawiasu', 0.4, 0.3, 0.8, 0.05),
     ],
     build: hingedDoor,
+    // Podgląd: drzwiczki obracają się na osi zawiasu (do 110°), listwa stoi.
+    motions: (p) => {
+      const { xa, R } = doorSizes(p);
+      return [{ key: 'open', label: 'Drzwiczki', group: '', pieces: ['door'], move: [0, 0, 0], turn: { axis: [0, 1, 0], at: [xa, 0, R], deg: -110 } }];
+    },
   },
   {
     type: 'stackBin', label: 'Pojemnik piętrowy', category: 'useful', hole: false,
