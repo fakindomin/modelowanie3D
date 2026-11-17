@@ -154,7 +154,13 @@ export function DimHandles() {
   // A model with moving elements and named places (the accessory box): the pointer only outlines, sizes show on a click.
   const hov = parts.find((p) => p.id === hoveredId);
   const quiet = !!hov && !!(DEFS[hov.type]?.motions || DEFS[hov.type]?.zones || motionsOf(hov).some((m) => m.world));
-  const ids = [...new Set([held, quiet ? null : resolve(hoveredId), resolve(selectedId)].filter((x): x is string => !!x))];
+  // Such a model shows sizes only for the element clicked in it (a drawer, the lid), not for the whole piece picked on loading.
+  const picked = useMotion((s) => s.picked);
+  const zonedSel = (x: string | null) => {
+    const p = parts.find((q) => q.id === x);
+    return !!p && !!(DEFS[p.type]?.motions || DEFS[p.type]?.zones || motionsOf(p).some((m) => m.world)) && picked?.part !== x;
+  };
+  const ids = [...new Set([held, quiet ? null : resolve(hoveredId), zonedSel(selectedId) ? null : resolve(selectedId)].filter((x): x is string => !!x))];
   return (
     <>
       {ids.map((id) => {
