@@ -1,3 +1,4 @@
+import { StateIcon } from './KindIcons';
 import { useStore } from '../store';
 import { DEFS, paramsOf } from '../catalog';
 import { distance, type Feature } from '../scene/measure';
@@ -73,7 +74,7 @@ export function MeasurePanel() {
         {pairs.map((pair, k) => (
           <div key={k} className="pair">
             <button className="mini x" onClick={() => removePin(2 * k)} title="Usuń ten pomiar">
-              ✕
+              <StateIcon id="close" />
             </button>
             <Pin f={pair[0]} tag="A" />
             {pair[1] ? (

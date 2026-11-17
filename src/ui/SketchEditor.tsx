@@ -1,3 +1,4 @@
+import { StateIcon } from './KindIcons';
 import { useRef, useState } from 'react';
 import { useStore } from '../store';
 import type { Part } from '../types';
@@ -68,7 +69,7 @@ export function SketchMenu({ part, compact }: { part: Part; compact?: boolean })
     <div className="sk-menu-head">
       <b>{title}</b>
       <button className="flag" onClick={close} title="Zamknij">
-        ✕
+        <StateIcon id="close" />
       </button>
     </div>
   );

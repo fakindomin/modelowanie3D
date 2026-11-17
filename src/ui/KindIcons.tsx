@@ -150,3 +150,26 @@ export function OptIcon({ id, size = 16, className }: { id: OptIconId; size?: nu
     </svg>
   );
 }
+
+/** State icons and small UI symbols (ok, warning, close, menu, expand, info, back, settings). */
+const STATE_ICONS = {
+  ok: { line: 'M8 2h8l6 6v8l-6 6H8l-6-6V8zM7 12l3.5 3.5L17 9' },
+  warn: { line: 'M8 2h8l6 6v8l-6 6H8l-6-6V8zM12 6.5v7.5', block: 'M10.5 15.5h3v2.5h-3z' },
+  close: { line: 'M3 3h18v18H3zM8 8l8 8M16 8l-8 8' },
+  more: { line: 'M3 6h18M3 12h18M3 18h18' },
+  expand: { block: 'M6 9h12l-6 7z' },
+  info: { line: 'M9 10h3v10M8 20h8', block: 'M10.5 3.5h3v3h-3z' },
+  back: { line: 'M20 12H5M11 6l-6 6 6 6' },
+  settings: { line: 'M18.3 10.6 21.4 10.5 21.4 13.5 18.3 13.4 17.5 15.5 19.7 17.6 17.6 19.7 15.5 17.5 13.4 18.3 13.5 21.4 10.5 21.4 10.6 18.3 8.5 17.5 6.4 19.7 4.3 17.6 6.5 15.5 5.7 13.4 2.6 13.5 2.6 10.5 5.7 10.6 6.5 8.5 4.3 6.4 6.4 4.3 8.5 6.5 10.6 5.7 10.5 2.6 13.5 2.6 13.4 5.7 15.5 6.5 17.6 4.3 19.7 6.4 17.5 8.5z', block: 'M10 10h4v4h-4z' },
+} as const;
+export type StateIconId = keyof typeof STATE_ICONS;
+
+export function StateIcon({ id, size = 14, className }: { id: StateIconId; size?: number; className?: string }) {
+  const ic: { line?: string; block?: string } = STATE_ICONS[id];
+  return (
+    <svg {...base(size, className ? 'sicon ' + className : 'sicon')} aria-hidden>
+      {ic.line && <path d={ic.line} />}
+      {ic.block && <path d={ic.block} fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}

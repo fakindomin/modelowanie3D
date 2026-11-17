@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { CatIcon, OptIcon, type OptIconId, ReadyIcon, ToolIcon, WizardIcon } from './KindIcons';
+import { CatIcon, OptIcon, type OptIconId, ReadyIcon, StateIcon, ToolIcon, WizardIcon } from './KindIcons';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
 import { bodyRisk, opOff, type Op } from './ops';
@@ -71,7 +71,7 @@ function ModelCard({ item, top, left }: { item: ProjectItem; top: number; left: 
             <br />
             ok. {Math.max(1, Math.round(info.grams))} g PLA · ok. {fmtMin(info.minutes)}
           </p>
-          <p className={fits ? 'mc-fit ok' : 'mc-fit no'}>{fits ? `✓ Mieści się na stole ${bed[0]} × ${bed[1]} mm` : `✗ Większe niż stół ${bed[0]} × ${bed[1]} × ${bed[2]} mm: zmniejsz albo podziel („Podziel na części”)`}</p>
+          <p className={fits ? 'mc-fit ok' : 'mc-fit no'}>{fits ? <><StateIcon id="ok" /> Mieści się na stole {bed[0]} × {bed[1]} mm</> : <><StateIcon id="warn" /> Większe niż stół {bed[0]} × {bed[1]} × {bed[2]} mm: zmniejsz albo podziel („Podziel na części”)</>}</p>
           <p className="mc-note">Dla wymiarów domyślnych; po wstawieniu zmienisz je w panelu po prawej.</p>
         </>
       )}
@@ -207,7 +207,7 @@ export function Library() {
           {typeof icon === 'string' ? <Icon type={icon} hole={false} /> : icon}
           <span className="cat-name">{label}</span>
           <span className="count">{count}</span>
-          <span className="chev">▾</span>
+          <span className="chev"><StateIcon id="expand" size={12} /></span>
         </button>
         <Expand open={isOpen}>
           <div className="grid cat-grid">{body}</div>
@@ -377,7 +377,7 @@ function FamilyTile({ family, open, onToggle, only, onPick }: { family: Family; 
         </button>
         <button className="fam-more" onClick={onToggle} aria-expanded={open} title={open ? 'Zwiń' : `Pokaż ${family.variants.length} odmian`}>
           <span className="count">{(only ?? family.variants).length}</span>
-          <span className="chev">▾</span>
+          <span className="chev"><StateIcon id="expand" size={12} /></span>
         </button>
       </div>
       <Expand open={open}>
@@ -916,7 +916,7 @@ function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) 
                 setEdit(open ? null : `face:${face}`);
               }}
             >
-              ⚙
+              <StateIcon id="settings" size={16} />
             </button>
           )}
         </div>
@@ -1008,7 +1008,7 @@ function FaceSection({ part }: { part: Part }) {
           ▣ Wybrana ścianka: <b>{name}</b>
         </span>
         <button className="mini" onClick={() => setFaceSel(null)} title="Zamknij (dwuklik w inną ściankę wybiera ją)">
-          ✕
+          <StateIcon id="close" />
         </button>
       </div>
       {!off && <h5>Faktura</h5>}
@@ -1099,7 +1099,7 @@ function OpSection({ part, op, title, info, open, children }: { part: Part; op: 
 function Risk({ body, op }: { body: number; op: 'bend' | 'xform' | 'split' }) {
   const parts = useStore((s) => s.parts);
   const text = bodyRisk(parts, body, op);
-  return text ? <p className="warn-line">⚠ {text}</p> : null;
+  return text ? <p className="warn-line"><StateIcon id="warn" /> {text}</p> : null;
 }
 
 const FACES: [FaceMagnetOptions['face'], string][] = [
@@ -1449,7 +1449,7 @@ function PartProperties({ part }: { part: Part }) {
   def.notes?.(part.params).forEach((n, i) =>
     status.push(
       <div key={`note${i}`} className={n.level === 'ok' ? 'linkbar' : 'warn-line'}>
-        {n.level === 'error' ? '⛔' : n.level === 'warn' ? '⚠' : '✓'} {n.text}
+        <StateIcon id={n.level === 'ok' ? 'ok' : 'warn'} /> {n.text}
       </div>,
     ),
   );
@@ -2125,7 +2125,7 @@ export function PrinterPicker() {
           className={bad.length ? 'fit bad' : 'fit ok'}
           title={bad.length ? `Większe niż stół ${mmTxt(bed)} mm: ${bad.join(', ')}. Zmniejsz wymiary albo wybierz większą drukarkę.` : `Wszystkie części mieszczą się na stole ${mmTxt(bed)} mm`}
         >
-          {bad.length ? `⚠ Nie mieści się: ${bad.length}` : '✓ Mieści się'}
+          {bad.length ? <><StateIcon id="warn" /> Nie mieści się: {bad.length}</> : <><StateIcon id="ok" /> Mieści się</>}
         </span>
       )}
     </div>
@@ -2213,7 +2213,7 @@ function Outliner() {
               <span className="label">{main.name}</span>
               {on && !bodyFit(parts, b, bed).fits && (
                 <span className="nofit" title="Nie mieści się na stole drukarki">
-                  ⚠
+                  <StateIcon id="warn" />
                 </span>
               )}
             </li>
@@ -2237,16 +2237,16 @@ function CheckPanel() {
   return (
     <div className="checkres">
       <div className="checkres-head">
-        <b>{check.title ? `${check.title}: ${problems ? `do poprawy ${problems}` : 'w porządku'}` : problems ? `Do poprawy: ${problems}` : '✓ Model gotowy do druku'}</b>
+        <b>{!problems && <StateIcon id="ok" />} {check.title ? `${check.title}: ${problems ? `do poprawy ${problems}` : 'w porządku'}` : problems ? `Do poprawy: ${problems}` : 'Model gotowy do druku'}</b>
         <button className="mini" onClick={close}>
-          ✕
+          <StateIcon id="close" />
         </button>
       </div>
       {!check.issues.length && <p className="desc">Siatki są szczelne (bez dziur i podwójnych ścianek), bryły nie nachodzą na siebie, nie ma ścianek cieńszych niż {String(minWall).replace('.', ',')} mm.</p>}
       <ul>
         {check.issues.map((i, k) => (
           <li key={k} className={i.level} onClick={() => i.select && select(i.select)}>
-            {i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠️' : 'ℹ️'} {i.text}
+            <StateIcon id={i.level === 'info' ? 'info' : 'warn'} /> {i.text}
           </li>
         ))}
       </ul>

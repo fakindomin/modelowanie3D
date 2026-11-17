@@ -1,3 +1,4 @@
+import { StateIcon } from './KindIcons';
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
@@ -195,12 +196,12 @@ function Steps({ wz, initial, run }: { wz: Wizard; initial: WizValues; run?: str
               <button disabled={!plan || busy} onClick={() => create(true)}>
                 {run ? 'Zapisz i pokaż instrukcję' : 'Utwórz i pokaż instrukcję'}
               </button>
-              <button onClick={() => setStep(step - 1)}>← Wstecz</button>
+              <button onClick={() => setStep(step - 1)}><StateIcon id="back" /> Wstecz</button>
             </>
           ) : (
             <>
               <button disabled={step === 0} onClick={() => setStep(step - 1)}>
-                ← Wstecz
+                <StateIcon id="back" /> Wstecz
               </button>
               <button className="primary" onClick={() => setStep(step + 1)}>
                 Dalej →

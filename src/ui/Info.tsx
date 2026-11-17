@@ -1,3 +1,4 @@
+import { StateIcon } from './KindIcons';
 import { useState } from 'react';
 
 /** Short explanations of what each tool does, shown by the ⓘ marks. */
@@ -83,7 +84,7 @@ export function Info({ text }: { text: string }) {
         else show(e.currentTarget);
       }}
     >
-      ⓘ
+      <StateIcon id="info" size={12} />
       {at && (
         <span className="info-pop" role="tooltip" style={{ left: at.left, top: at.top, transform: at.up ? 'translateY(-100%)' : undefined }}>
           {text}

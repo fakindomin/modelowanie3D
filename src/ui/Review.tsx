@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
-import { WizardIcon } from './KindIcons';
+import { StateIcon, WizardIcon } from './KindIcons';
 import { CATALOG, CATEGORIES } from '../catalog';
 import { FAMILIES, IN_FAMILY } from '../families';
 import { PROJECT_ITEMS, USE_CATS, type ProjectItem } from '../projects';
@@ -203,7 +203,7 @@ export function ReviewBar() {
         <button onClick={() => r.go(r.i + 1)} disabled={r.i >= list.length - 1} title="Następny element">▶</button>
         <span className="rv-count" title="Obejrzane / wszystkie">{done}/{list.length}</span>
         <span className="rv-prog"><span style={{ width: `${(done / list.length) * 100}%` }} /></span>
-        <button className="rv-close" onClick={() => r.setOpen(false)} title="Zamknij przegląd (postęp zostaje zapisany)">✕</button>
+        <button className="rv-close" onClick={() => r.setOpen(false)} title="Zamknij przegląd (postęp zostaje zapisany)"><StateIcon id="close" /></button>
       </div>
       <div className="rv-row">
         <span className="rv-group">{cur.group}</span>

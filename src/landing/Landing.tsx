@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PROJECT_ITEMS, USE_CATS, type ProjectItem, type UseCat } from '../projects';
 import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
-import { CatIcon, MenuIcon, ReadyIcon, WizardIcon } from '../ui/KindIcons';
+import { CatIcon, MenuIcon, ReadyIcon, StateIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
 import { thumb, type ThumbKey } from './thumbs';
 import './landing.css';
@@ -185,7 +185,7 @@ function Start({ projects, wizards }: { projects: number; wizards: number }) {
             <div className="view">
               <span className="caption">Chwyć wymiar i przeciągnij</span>
               <svg className="iso" viewBox="0 0 400 320" aria-hidden />
-              <span className="fit ok">✓ mieści się na stole 256 mm</span>
+              <span className="fit ok"><StateIcon id="ok" /> mieści się na stole 256 mm</span>
             </div>
             <div className="ctrls">
               <h4>Wymiary</h4>

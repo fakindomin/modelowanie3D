@@ -2,7 +2,7 @@ import { printable } from './simple';
 import { swietaFileName } from './figurines/swieta';
 import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
-import { ToolIcon, WizardIcon } from './ui/KindIcons';
+import { StateIcon, ToolIcon, WizardIcon } from './ui/KindIcons';
 import { Library, PrinterPicker, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
 import { WizardDialog } from './ui/WizardDialog';
@@ -232,7 +232,7 @@ function Settings() {
   return (
     <div className="settings" ref={ref}>
       <button className={open ? 'toggle on' : 'toggle'} onClick={() => setOpen(!open)} title="Siatka, przyciąganie, kładzenie na wierzchu">
-        ⚙
+        <StateIcon id="settings" size={16} />
       </button>
       {open && (
         <div className="settings-pop">

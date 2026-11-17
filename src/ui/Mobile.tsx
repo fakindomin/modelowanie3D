@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { WizardIcon } from './KindIcons';
+import { StateIcon, WizardIcon } from './KindIcons';
 import { Viewport } from '../scene/Viewport';
 import { Library, PrinterPicker, Properties } from './Panels';
 import { MeasurePanel } from './MeasurePanel';
@@ -30,7 +30,7 @@ const SHEETS: { id: Sheet | 'wiz'; icon: ReactNode; label: string }[] = [
   { id: 'add', icon: '➕', label: 'Dodaj' },
   { id: 'wiz', icon: <WizardIcon size={18} />, label: 'Kreatory' },
   { id: 'list', icon: '☰', label: 'Elementy' },
-  { id: 'props', icon: '⚙', label: 'Właściwości' },
+  { id: 'props', icon: <StateIcon id="settings" size={18} />, label: 'Właściwości' },
 ];
 
 export function MobileApp() {
@@ -131,7 +131,7 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
         ↷
       </button>
       <button className={menu ? 'icon on' : 'icon'} onClick={() => setMenu(!menu)} aria-label="Menu">
-        ⋮
+        <StateIcon id="more" size={18} />
       </button>
       {act.input}
       {menu && (
@@ -154,7 +154,7 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
             {item('Eksport 3MF', () => act.exportAs('3mf'), 'primary')}
           </div>
           <p className="mmenu-help">
-            Jeden palec: obrót widoku. Dwa palce: przesuw i przybliżenie. Stuknięcie: wybór części. Wymiary zmieniasz suwakami w zakładce ⚙ Właściwości. Dwa stuknięcia w ściankę: faktura, napis i magnesy na niej.
+            Jeden palec: obrót widoku. Dwa palce: przesuw i przybliżenie. Stuknięcie: wybór części. Wymiary zmieniasz suwakami w zakładce Właściwości. Dwa stuknięcia w ściankę: faktura, napis i magnesy na niej.
           </p>
         </div>
       )}
@@ -177,7 +177,7 @@ function SelectionChip({ onProps }: { onProps: () => void }) {
         <span className="muted"> · wymiary ›</span>
       </button>
       <button aria-label="Odznacz" title="Odznacz" onClick={() => st.select(null)}>
-        ✕
+        <StateIcon id="close" />
       </button>
     </div>
   );

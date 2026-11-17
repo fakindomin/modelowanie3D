@@ -898,3 +898,17 @@ body { -webkit-font-smoothing: antialiased; }
 .library .lib-sep + .lib-mode { margin-top: 0; }
 .section > summary .kicon, h4 .kicon, h5 .kicon, .field > span .kicon, .linkbar .kicon, .action .kicon { margin-right: 6px; color: var(--army-text, currentColor); }
 .action:has(> .kicon) { display: inline-flex; align-items: center; }
+
+/* State icons (ok, warning, close, menu, expand, info, back, settings): follow the text colour. */
+.sicon { vertical-align: -0.2em; }
+.chev .sicon { display: block; }
+.warn-line .sicon, .fit .sicon, .mc-fit .sicon, .checkres li .sicon, .nofit .sicon { color: inherit; margin-right: 4px; }
+.linkbar .sicon { margin-right: 4px; }
+button > .sicon:only-child { display: block; margin: auto; }
+/* Group arrows drawn as the solid triangle from the state icons (instead of ▸/▾ text). */
+.dim-group > summary::before, .library h3::before {
+  content: ''; width: 10px; height: 10px; flex: none; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l9-7z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l9-7z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.library h3:not(.closed)::before { transform: rotate(90deg); }
