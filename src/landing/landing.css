@@ -284,3 +284,18 @@
 @media (min-width: 980px) {
   .landing .ltop { padding: 22px 32px 0; }
 }
+
+/* Left menu on a computer: a narrow strip of icons that widens over the page, with the names, on hover */
+@media (min-width: 980px) {
+  .landing.lpage { grid-template-columns: 72px minmax(0, 1fr); }
+  .landing.lpage > .nav { z-index: 20; overflow: visible; }
+  .landing .nav .wrap { width: 72px; padding: 24px 0; gap: 32px; overflow: hidden; background: var(--sheet); border-right: 1px solid var(--line); transition: width .2s ease, box-shadow .2s ease; }
+  .landing.lpage > .nav { border-right: 0; }
+  .landing .nav:hover .wrap, .landing .nav:has(:focus-visible) .wrap { width: 230px; box-shadow: 12px 0 30px rgba(0, 0, 0, .12); }
+  .landing .nav .llogo { align-self: flex-start; margin-left: 14px; }
+  .landing .nav .llogo .disc { width: 44px; height: 44px; }
+  .landing .nav ul a { padding: 12px 0 12px 28px; gap: 14px; white-space: nowrap; align-items: center; }
+  .landing .nav ul a svg { flex: none; }
+  .landing .nav ul a .lbl { opacity: 0; transition: opacity .15s ease; }
+  .landing .nav:hover ul a .lbl, .landing .nav:has(:focus-visible) ul a .lbl { opacity: 1; }
+}

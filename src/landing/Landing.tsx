@@ -85,9 +85,6 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
         <div className="wrap">
           <a className="llogo" href="#start" aria-label="Modelowanie 3D, start">
             <LogoMark className="disc" />
-            <span>
-              Modelowanie&nbsp;3D<i>.</i>
-            </span>
           </a>
           <button className="menu-btn" type="button" aria-expanded={menu} aria-controls="lmenu" onClick={() => setMenu(!menu)}>
             Menu
@@ -97,7 +94,7 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
               <li key={id}>
                 <a href={'#' + id} aria-current={view === id ? 'page' : undefined}>
                   {id === 'projekty' ? <ReadyIcon size={16} /> : id === 'kreatory' ? <WizardIcon size={16} /> : <MenuIcon id={id} size={16} />}
-                  {label}
+                  <span className="lbl">{label}</span>
                 </a>
               </li>
             ))}
