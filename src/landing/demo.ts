@@ -1,7 +1,11 @@
+import { engineView, type ShowView } from './engineShow';
+
 /**
  * The start page's show: a box with a lid whose width, depth and height change on their own while a
  * cursor drags the dimension on the model (computer) or the slider (phone), then flips the lid type
- * and the texture. It is only a show: the whole block is inert and ignores touches.
+ * and the texture. It is only a show: the whole block is inert and ignores touches. The model is built by
+ * the app's engine (engineShow.ts); the flat drawing below is only the first picture until the engine is ready
+ * (and the fallback where WebGL is missing).
  */
 const NS = 'http://www.w3.org/2000/svg';
 const C = Math.cos(Math.PI / 6);
@@ -47,7 +51,16 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
   const st: State = { W: 120, D: 80, H: 60, lid: 'press', text: true, tex: false, active: null };
   let handles: Partial<Record<Key, [number, number]>> = {};
 
+  let eng: ShowView | null = null;
   function draw() {
+    if (eng) eng.draw(st);
+    else drawFlat();
+    const fit = $<HTMLElement>('.fit');
+    const ok = Math.max(st.W, st.D, st.H + 8) <= bed;
+    fit.className = 'fit ' + (ok ? 'ok' : 'bad');
+    fit.textContent = ok ? `✓ mieści się na stole ${bed} mm` : 'za duże na stół';
+  }
+  function drawFlat() {
     svg.innerHTML = '';
     const { W, D, H } = st;
     const lidH = 8;
@@ -83,10 +96,6 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
     dim([0, D, 0], [W, D, 0], W + ' mm', [-8, 10], 'W');
     dim([W, 0, 0], [W, D, 0], D + ' mm', [12, 8], 'D');
     dim([0, D, 0], [0, D, H], H + ' mm', [-14, 0], 'H');
-    const fit = $<HTMLElement>('.fit');
-    const ok = Math.max(W, D, H + lidH) <= bed;
-    fit.className = 'fit ' + (ok ? 'ok' : 'bad');
-    fit.textContent = ok ? `✓ mieści się na stole ${bed} mm` : 'za duże na stół';
   }
 
   let run = 1;
@@ -106,6 +115,8 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
       const f = (+i.value - +i.min) / (+i.max - +i.min);
       return rel(r.left + 8 + f * (r.width - 16), r.top + r.height / 2);
     }
+    const e = eng?.handle(k);
+    if (e) return rel(...e);
     const h = handles[k] ?? [0, 0], r = svg.getBoundingClientRect(), sc = r.width / 400;
     return rel(r.left + h[0] * sc, r.top + h[1] * sc);
   }
@@ -188,11 +199,32 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
   }
 
   draw();
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    cur.hidden = true;
-    cap.textContent = phone() ? 'Przesuń suwak' : 'Chwyć wymiar i przeciągnij';
-  } else loop(run).catch(() => {});
+  let stopped = false;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const go = () => {
+    if (stopped) return;
+    if (still) {
+      cur.hidden = true;
+      cap.textContent = phone() ? 'Przesuń suwak' : 'Chwyć wymiar i przeciągnij';
+    } else loop(run).catch(() => {});
+  };
+  // The show starts once the engine has drawn the real box; without WebGL it plays on the flat drawing.
+  engineView($<HTMLElement>('.view'), phone, () => {
+    svg.style.visibility = 'hidden';
+    go();
+  })
+    .then((v) => {
+      if (stopped) return v.stop();
+      eng = v;
+      draw();
+    })
+    .catch((e) => {
+      console.warn('show engine', e);
+      go();
+    });
   return () => {
+    stopped = true;
     run++;
+    eng?.stop();
   };
 }

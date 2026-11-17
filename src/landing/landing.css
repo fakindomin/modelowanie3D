@@ -324,3 +324,8 @@
 @media (min-width: 980px) {
   .landing .m-theme, .landing .nav .menu-btn { display: none; }
 }
+
+/* Show drawn by the engine: the canvas fills the view, dimension lines on top of it. */
+.landing .view canvas.eng, .landing .view svg.dims { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; display: block; }
+.landing .view svg.dims { overflow: visible; }
+.landing .view svg.dims .dim { stroke-width: 1.2; }
