@@ -299,3 +299,16 @@
   .landing .nav ul a .lbl { opacity: 0; transition: opacity .15s ease; }
   .landing .nav:hover ul a .lbl, .landing .nav:has(:focus-visible) ul a .lbl { opacity: 1; }
 }
+
+/* Bigger icons in the left strip (3× the menu's 16 px) */
+@media (min-width: 980px) {
+  .landing.lpage { grid-template-columns: 96px minmax(0, 1fr); }
+  .landing .nav .wrap { width: 96px; }
+  .landing .nav:hover .wrap, .landing .nav:has(:focus-visible) .wrap { width: 290px; }
+  .landing .nav .llogo { margin-left: 20px; }
+  .landing .nav .llogo .disc { width: 56px; height: 56px; }
+  .landing .nav ul { gap: 6px; font-size: 17px; }
+  .landing .nav ul a { padding: 8px 0 8px 24px; gap: 18px; }
+  .landing .nav ul a svg { width: 48px; height: 48px; }
+  .landing .nav ul a .lbl { font-size: 17px; }
+}

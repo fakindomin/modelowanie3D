@@ -104,9 +104,6 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
 
       <main>
         <div className="ltop">
-          <button className="btn primary app-go" type="button" onClick={() => onOpen({ kind: 'app' })}>
-            Otwórz aplikację →
-          </button>
           <button
             type="button"
             className={dark ? 'theme-toggle is-dark' : 'theme-toggle'}
@@ -126,7 +123,7 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
             </svg>
           </button>
         </div>
-        {view === 'start' && <Start projects={projects.length} wizards={wizardCount} />}
+        {view === 'start' && <Start projects={projects.length} wizards={wizardCount} onOpen={onOpen} />}
         {view === 'projekty' && <Projects items={projects} onOpen={onOpen} />}
         {view === 'kreatory' && <Wizards onOpen={onOpen} />}
         {view === 'jak' && <How />}
@@ -137,7 +134,7 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
   );
 }
 
-function Start({ projects, wizards }: { projects: number; wizards: number }) {
+function Start({ projects, wizards, onOpen }: { projects: number; wizards: number; onOpen: (a: StartAction) => void }) {
   const cfg = useRef<HTMLDivElement>(null);
   useEffect(() => (cfg.current ? mountDemo(cfg.current) : undefined), []);
   return (
@@ -149,9 +146,9 @@ function Start({ projects, wizards }: { projects: number; wizards: number }) {
         <p className="lede">
           <strong>Nic nie projektujesz od zera.</strong> Bierzesz gotowy projekt albo odpowiadasz na pytania kreatora, a potem przesuwasz suwaki i wybierasz opcje.
         </p>
-        <a className="btn primary start-go" href="#projekty">
+        <button className="btn primary start-go" type="button" onClick={() => onOpen({ kind: 'app' })}>
           Zaczynamy →
-        </a>
+        </button>
 
         <div className="cfg" ref={cfg} role="img" aria-label="Pokaz: zmiana wymiarów i opcji pudełka z pokrywką" inert>
           <div className="cfg-body">
