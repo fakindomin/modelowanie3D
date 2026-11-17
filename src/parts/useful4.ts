@@ -983,7 +983,73 @@ function linearRail(p: Params): Manifold {
   return m;
 }
 
+/**
+ * Replacement part from caliper measurements: sleeve, washer, cap over a leg, knob on a shaft (with a D flat) or a
+ * wheel. The fit allowance is added to holes, so the user types what the caliper shows.
+ */
+function measured(p: Params): Manifold {
+  const kind = String(p.kind ?? 'sleeve'), fit = nv(p, 'fit', 0.25);
+  const seg = 96;
+  if (kind === 'sleeve' || kind === 'washer') {
+    const OD = num(p, 'OD'), ID = num(p, 'ID'), L = kind === 'washer' ? num(p, 'T') : num(p, 'L');
+    let m = cyl(L, OD / 2, OD / 2, seg);
+    const fl = nv(p, 'flD', 0), flT = nv(p, 'flT', 2);
+    if (kind === 'sleeve' && fl > OD) m = m.add(cyl(flT, fl / 2, fl / 2, seg));
+    return m.subtract(cyl(L + 2, (ID + fit) / 2, (ID + fit) / 2, seg).translate([0, 0, -1]));
+  }
+  if (kind === 'legCap') {
+    const A = num(p, 'A') + fit, P = num(p, 'P'), w = nv(p, 'w', 2), B = nv(p, 'B', 3);
+    const sq = p.shape === 'square';
+    const outer = sq ? rblock(A + 2 * w, A + 2 * w, B + P, 2) : cyl(B + P, A / 2 + w, A / 2 + w, seg);
+    const inner = sq ? rblock(A, A, P + 1, 0.5, 0, 0, B) : cyl(P + 1, A / 2, A / 2, seg).translate([0, 0, B]);
+    return outer.subtract(inner);
+  }
+  if (kind === 'knob') {
+    const D = num(p, 'D'), H = num(p, 'H'), d = num(p, 'd') + fit, flat = nv(p, 'flat', 0), depth = Math.min(nv(p, 'depth', 10), H - 2);
+    let m = cyl(H, D / 2, D / 2, seg);
+    const n = Math.max(8, Math.round((Math.PI * D) / 5));
+    const grooves: Manifold[] = [];
+    for (let i = 0; i < n; i++) grooves.push(cyl(H + 2, 0.9, 0.9, 12).translate([D / 2 + 0.3, 0, -1]).rotate([0, 0, (360 * i) / n]));
+    m = m.subtract(union(grooves));
+    let bore = cyl(depth, d / 2, d / 2, 48);
+    // A D-shaped shaft: the flat leaves this much of the circle filled in.
+    if (flat > 0) bore = bore.subtract(box(d / 2 - flat, -d / 2 - 1, -1, d / 2 + 1, d / 2 + 1, depth + 1));
+    return m.subtract(bore.translate([0, 0, -0.01]));
+  }
+  // Wheel
+  const OD = num(p, 'OD'), W = num(p, 'W'), ax = num(p, 'ax') + fit, ch = Math.min(1, W / 6);
+  const m = cyl(ch, OD / 2 - ch, OD / 2, seg).add(cyl(W - 2 * ch, OD / 2, OD / 2, seg).translate([0, 0, ch])).add(cyl(ch, OD / 2, OD / 2 - ch, seg).translate([0, 0, W - ch]));
+  return m.subtract(cyl(W + 2, ax / 2, ax / 2, 48).translate([0, 0, -1]));
+}
+
 export const USEFUL4_DEFS: PartDef[] = [
+  {
+    type: 'measured', label: 'Część z pomiaru', category: 'useful', hole: false,
+    description: 'Część zamienna z wymiarów zdjętych suwmiarką: tuleja, podkładka, nasadka na nogę, gałka na oś albo kółko. Wpisujesz to, co pokazuje suwmiarka; luz do otworów dodaje się sam.',
+    params: [
+      select('kind', 'Część', 'sleeve', [['sleeve', 'Tuleja'], ['washer', 'Podkładka'], ['legCap', 'Nasadka na nogę'], ['knob', 'Gałka na oś'], ['wheel', 'Kółko']]),
+      { ...n('OD', 'Średnica zewnętrzna', 20, 3, 250, 0.1), show: (p) => ['sleeve', 'washer', 'wheel'].includes(String(p.kind)) },
+      { ...n('ID', 'Średnica otworu', 8, 1, 240, 0.1), show: (p) => p.kind === 'sleeve' || p.kind === 'washer' },
+      { ...n('L', 'Długość', 15, 1, 250, 0.1), show: (p) => p.kind === 'sleeve' },
+      { ...n('T', 'Grubość', 2, 0.6, 20, 0.1), show: (p) => p.kind === 'washer' },
+      { ...n('flD', 'Kołnierz: średnica (0 = bez)', 0, 0, 250, 0.1), show: (p) => p.kind === 'sleeve' },
+      { ...n('flT', 'Kołnierz: grubość', 2, 0.8, 20, 0.1), show: (p) => p.kind === 'sleeve' && nv(p, 'flD', 0) > 0 },
+      { ...select('shape', 'Przekrój nogi', 'round', [['round', 'Okrągły'], ['square', 'Kwadratowy']]), show: (p) => p.kind === 'legCap' },
+      { ...n('A', 'Noga: średnica / bok', 22, 5, 120, 0.1), show: (p) => p.kind === 'legCap' },
+      { ...n('P', 'Głębokość nasadki', 15, 3, 80, 0.5), show: (p) => p.kind === 'legCap' },
+      { ...n('B', 'Grubość spodu', 3, 1, 15, 0.5), show: (p) => p.kind === 'legCap' },
+      { ...n('w', 'Grubość ścianki', 2, 1.2, 6, 0.2), show: (p) => p.kind === 'legCap' },
+      { ...n('D', 'Średnica gałki', 30, 8, 120, 0.5), show: (p) => p.kind === 'knob' },
+      { ...n('H', 'Wysokość gałki', 18, 5, 80, 0.5), show: (p) => p.kind === 'knob' },
+      { ...n('d', 'Średnica osi', 6, 2, 30, 0.1), show: (p) => p.kind === 'knob' },
+      { ...n('flat', 'Ścięcie osi (D)', 0, 0, 10, 0.1, 'Średnica osi minus wymiar w miejscu ścięcia; 0 = oś okrągła.'), show: (p) => p.kind === 'knob' },
+      { ...n('depth', 'Głębokość osi w gałce', 10, 3, 70, 0.5), show: (p) => p.kind === 'knob' },
+      { ...n('W', 'Szerokość kółka', 12, 2, 80, 0.1), show: (p) => p.kind === 'wheel' },
+      { ...n('ax', 'Średnica osi kółka', 6, 1, 60, 0.1), show: (p) => p.kind === 'wheel' },
+      adv('fit', 'Luz w otworach', 0.25, 0, 1, 0.05),
+    ],
+    build: measured,
+  },
   {
     type: 'linearRail', label: 'Prowadnica na prętach', category: 'useful', hole: false,
     description: 'Wózek na dwóch kupnych prętach (8–12 mm) z łożyskami liniowymi LMxUU albo drukowanymi tulejami, i dwie podpory końcowe na wkręty.',

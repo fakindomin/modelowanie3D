@@ -11,12 +11,11 @@ import { RACK_WIZARD } from './rack';
 import { PROFILE_FRAME_WIZARD } from './profileFrame';
 import { IRRIGATION_WIZARD } from './irrigation';
 import { SLIDE_WIZARD } from './slide';
+import { SPARE_WIZARD } from './spare';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD, STACK_WIZARD, HOLDERS_WIZARD, DOOR_WIZARD, RACK_WIZARD, PROFILE_FRAME_WIZARD, IRRIGATION_WIZARD, SLIDE_WIZARD].map((w) => [w.id, w]));
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD, STACK_WIZARD, HOLDERS_WIZARD, DOOR_WIZARD, RACK_WIZARD, PROFILE_FRAME_WIZARD, IRRIGATION_WIZARD, SLIDE_WIZARD, SPARE_WIZARD].map((w) => [w.id, w]));
 const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
-
-const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
 
 /** The gallery: ready wizards first in each group, planned ones greyed out. */
 export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
@@ -65,6 +64,6 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
   },
   {
     label: 'Części zamienne',
-    items: [soon('spare', 'Część z pomiaru', 'Wymiary z suwmiarki krok po kroku.')],
+    items: [ready(SPARE_WIZARD)],
   },
 ];
