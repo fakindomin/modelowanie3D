@@ -27,11 +27,10 @@ function movingItems(parts: Part[]): { rig: string; m: Motion }[] {
  */
 export function MotionBar() {
   const parts = useStore((s) => s.parts);
-  const preview = useStore((s) => s.preview);
   const base = useMotion((s) => s.base);
   const shown = useMotion((s) => s.shown);
   const items = movingItems(parts);
-  if (!items.length || preview) return null;
+  if (!items.length) return null;
   const all = Math.round((items.reduce((a, { rig, m }) => a + Math.min(1, shownOf({ shown }, rig, m.key)), 0) / items.length) * 100);
   const set = (v: number) => {
     const by = new Map<string, Record<string, number>>();
