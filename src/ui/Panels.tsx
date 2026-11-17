@@ -227,6 +227,7 @@ export function Library() {
           wizItems.length,
           wizItems.map((i) => itemTile(i, `wiz:${i.label}`, false)),
         )}
+      {wizItems.length > 0 && tab === 'tech' && <div className="lib-sep" role="separator" />}
       {tab === 'tech' && (
         <div className="lib-mode" role="tablist">
           <button role="tab" aria-selected={mode === 'projects'} className={mode === 'projects' ? 'on' : ''} onClick={() => setMode('projects')} title="Gotowe rzeczy według miejsca: dom, kuchnia, ogród, warsztat…">

@@ -892,3 +892,7 @@ body { -webkit-font-smoothing: antialiased; }
 .num { background: var(--gray-3); }
 .dim-tag:not(.on):not(.edit) { border-color: var(--army); background: rgba(26, 28, 25, 0.85); }
 .dim-tag.on { border-color: var(--accent); color: var(--accent); }
+
+/* Kreatory oddzielone od Projektów / Części wyraźną przerwą i linią. */
+.lib-sep { height: 0; border-top: 2px solid var(--army, #6b7530); margin: 16px 0 14px; opacity: .8; }
+.library .lib-sep + .lib-mode { margin-top: 0; }
