@@ -4,7 +4,8 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { DEFS, paramsOf, type Params } from '../catalog';
 import { groupBody, isLocked, useStore } from '../store';
-import { built, partMatrix } from '../geom/parts';
+import { built, partMatrix, segments } from '../geom/parts';
+import { motionPose, motionsOf, rigOf, shownOf, useMotion } from '../ui/motion';
 import type { Part, Vec3 } from '../types';
 import { REMOVED_TYPES, mainOf } from '../simple';
 
@@ -74,6 +75,9 @@ export function DimHandles() {
   // A picked body, a magnet pocket or a label stands for the part the body is known by.
   const resolve = (x: string | null) => {
     if (!x) return null;
+    // A moving element (a drawer, a lid) shows its own sizes, which travel with it.
+    const own = parts.find((p) => p.id === x);
+    if (own && !own.hole && motionsOf(own).some((m) => m.world || m.pieces.includes(String(own.params.piece ?? '')))) return x;
     const gb = groupBody(x) ?? parts.find((p) => p.id === x && (p.hole || REMOVED_TYPES.has(p.type)) && !p.wiz)?.body ?? null;
     return gb !== null ? (mainOf(parts, gb)?.id ?? null) : x;
   };
@@ -104,6 +108,28 @@ interface Drag {
 function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => void }) {
   const { camera, gl, controls } = useThree();
   const box = built(part).box;
+  // A drawer or lid moved in the preview carries its sizes along: the world pose of an assembly, then the
+  // part's own pose, then the element's pose in the part (the furthest-out element when there are several).
+  const w = motionsOf(part).find((m) => m.world) ?? null;
+  const rig = w ? w.rig! : rigOf(part);
+  const wv = useMotion((s) => (w ? shownOf(s, rig, w.key) : 0));
+  const row = useMotion((s) => s.shown[rig]);
+  const wpose = w ? motionPose(w, wv) : null;
+  let lm = null as ReturnType<typeof motionPose> | null;
+  let best = 0;
+  // With several elements in one piece (two drawers) the lines measure the one that is out.
+  const segs = segments(part);
+  let seg: (typeof segs)[number] | null = null;
+  for (const sg of segs) {
+    const v = sg.m ? (row?.[sg.m.key] ?? 0) : 0;
+    if (sg.m && v > best) {
+      best = v;
+      lm = motionPose(sg.m, v);
+      seg = segs.length > 1 ? sg : null;
+    }
+  }
+  const poseMatrix = (mt: { position: Vec3; quaternion: THREE.Quaternion } | null) => (mt ? new THREE.Matrix4().compose(new THREE.Vector3(...mt.position), mt.quaternion, new THREE.Vector3(1, 1, 1)) : new THREE.Matrix4());
+  const fullMatrix = () => poseMatrix(wpose).multiply(partMatrix(part.position, part.rotation)).multiply(poseMatrix(lm));
   const dims = useMemo(() => axisDims(part), [part.type, part.params]); // eslint-disable-line react-hooks/exhaustive-deps
   // Like a drawing: one dimension line per size, on the sides facing the viewer; its knob moves that side.
   const side = useViewSide(part, box);
@@ -219,7 +245,7 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   const press = (e: ThreeEvent<PointerEvent>, h: HandleDef, knob: THREE.Vector3) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    const m = partMatrix(part.position, part.rotation);
+    const m = fullMatrix();
     const q = new THREE.Quaternion().setFromRotationMatrix(m);
     const axisWorld = new THREE.Vector3().setComponent(h.axis, h.sign).applyQuaternion(q).normalize();
     // Measure along a line through the knob's centre, so the first move does not jump by the knob's offset from the face.
@@ -231,16 +257,20 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
     if (controls) (controls as unknown as { enabled: boolean }).enabled = false;
   };
 
-  const off = Math.max(4, 0.09 * Math.max(...box.getSize(new THREE.Vector3()).toArray()));
-  const geo = built(part).geometry;
+  const geo = seg ? seg.geometry : built(part).geometry;
+  if (seg && !seg.geometry.boundingBox) seg.geometry.computeBoundingBox();
+  const lineBox = seg ? seg.geometry.boundingBox! : box;
+  const off = Math.max(4, 0.09 * Math.max(...lineBox.getSize(new THREE.Vector3()).toArray()));
   return (
+    <group position={wpose?.position ?? [0, 0, 0]} quaternion={wpose?.quaternion}>
     <group position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
+    <group position={lm?.position ?? [0, 0, 0]} quaternion={lm?.quaternion}>
       {[0, 1, 2].map((axis) => {
         const own = handles.map((h, i) => [h, i] as const).filter(([h]) => h.axis === axis);
         if (!own.length) return null;
         const h = own[0][0];
         const mine = (x: number | null | undefined) => x != null && own.some(([, i]) => i === x);
-        const { p1, p2, out, ticks } = dimLine(box, h.axis, side, off, geo);
+        const { p1, p2, out, ticks } = dimLine(lineBox, h.axis, side, off, geo);
         const mid = p1.clone().add(p2).multiplyScalar(0.5);
         const active = mine(hot) || mine(live?.i) || mine(edit) || (!live && h.dim.key === dimHover);
         const value = mine(live?.i) ? live!.to : Number(part.params[h.dim.key]);
@@ -285,6 +315,8 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
           </group>
         );
       })}
+    </group>
+    </group>
     </group>
   );
 }
