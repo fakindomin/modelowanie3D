@@ -1,5 +1,6 @@
 import { useStore } from '../store';
 import { useLoading } from './loading';
+import { pickGroup } from './pickGroup';
 import type { Part } from '../types';
 import type { Motion } from '../parts/def';
 import { baseOf, focusGroup, motionsOf, noteRest, play, rigFor, setMotion, shownOf, useMotion } from './motion';
@@ -70,6 +71,7 @@ export function MotionBar() {
               onClick={() => {
                 setMotion(rig, { [m.key]: on ? 0 : 1 }, true);
                 focusGroup(m.group);
+                pickGroup(m.group, m.key);
               }}
             >
               {m.label}

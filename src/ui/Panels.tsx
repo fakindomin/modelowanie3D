@@ -27,6 +27,7 @@ import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../sim
 import { PRINTERS } from '../wizards/frame';
 import { groupFields, shortLabel, type FieldGroup } from './paramGroups';
 import { motionsOf, rigFor, setMotion, useMotion } from './motion';
+import { pickGroup } from './pickGroup';
 
 const XMAS_ICON: Record<string, string> = { etykieta: 'xmasLabel', czubek: 'xmasTopper', foremka: 'xmasCutter', taca: 'xmasTray' };
 type LibMode = 'projects' | 'parts';
@@ -1597,6 +1598,7 @@ function DimGroups({ part, groups, field }: { part: Part; groups: FieldGroup[]; 
             onClick={(e) => {
               e.preventDefault();
               setOpen(open === g.name ? null : g.name);
+              if (open !== g.name) pickGroup(g.name);
               // Sizes of the inside: the lid slides out of the way so they can be seen.
               if (open !== g.name)
                 for (const m of motionsOf(part)) if (m.reveals?.includes(g.name)) setMotion(rigFor(part, m), { [m.key]: 1 }, true);
@@ -1611,6 +1613,7 @@ function DimGroups({ part, groups, field }: { part: Part; groups: FieldGroup[]; 
                   onClick={(e) => {
                     e.preventDefault();
                     setOpenSub(g.name, subOpen(g.name, s.name!) ? null : s.name);
+                    if (!subOpen(g.name, s.name!)) pickGroup(`${g.name} › ${s.name}`);
                   }}
                 >
                   {s.name} <span className="count">{s.fields.length}</span>
