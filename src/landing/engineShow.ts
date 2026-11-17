@@ -129,7 +129,12 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
   for (const s of plan) {
     const k = keyOf(s);
     if (cache.has(k)) continue;
-    cache.set(k, build(s));
+    try {
+      cache.set(k, build(s));
+    } catch (e) {
+      // A stop that fails is built (or stretched to) while the show plays instead.
+      console.warn('show stop', keyOf(s), e);
+    }
     await new Promise((r) => setTimeout(r, 0));
   }
 
@@ -138,7 +143,13 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
   const over = document.createElementNS(NS, 'svg');
   over.setAttribute('class', 'dims');
   over.setAttribute('aria-hidden', 'true');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  } catch {
+    // Some phones refuse a smoothed canvas while another WebGL view is open: take a plain one.
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'low-power' });
+  }
   renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
 
   const scene = new THREE.Scene();
@@ -219,9 +230,13 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
     if (shown && optsOf(shown.st) === optsOf(s)) return show(shown, s);
     const near = [...cache.values()].find((m) => optsOf(m.st) === optsOf(s));
     if (near) return show(near, s);
-    const m = build(s);
-    cache.set(keyOf(s), m);
-    show(m, s);
+    try {
+      const m = build(s);
+      cache.set(keyOf(s), m);
+      show(m, s);
+    } catch (e) {
+      console.warn('show', e);
+    }
   }
 
   function resize() {

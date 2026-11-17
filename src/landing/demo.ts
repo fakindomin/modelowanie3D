@@ -225,6 +225,7 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
     })
     .catch((e) => {
       console.warn('show engine', e);
+      cfg.dataset.engine = String((e as Error)?.message ?? e).slice(0, 200);
       go();
     });
   return () => {
