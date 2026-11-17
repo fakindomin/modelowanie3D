@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PROJECT_ITEMS, USE_CATS, type ProjectItem, type UseCat } from '../projects';
 import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
-import { CatIcon, MenuIcon, ReadyIcon, StateIcon, WizardIcon } from '../ui/KindIcons';
+import { CatIcon, LogoMark, MenuIcon, ReadyIcon, StateIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
 import { onThumb, thumb, thumbKey, thumbNow, type ThumbKey } from './thumbs';
 import { ITEM_TAGS, WIZARD_TAGS, matches } from '../searchTags';
@@ -84,7 +84,7 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
       <header className="nav">
         <div className="wrap">
           <a className="llogo" href="#start" aria-label="Modelowanie 3D, start">
-            <span className="disc" aria-hidden>◆</span>
+            <LogoMark className="disc" />
             <span>
               Modelowanie&nbsp;3D<i>.</i>
             </span>

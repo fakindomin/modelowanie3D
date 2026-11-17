@@ -2,7 +2,7 @@ import { printable } from './simple';
 import { swietaFileName } from './figurines/swieta';
 import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
-import { StateIcon, ToolIcon, WizardIcon } from './ui/KindIcons';
+import { LogoMark, StateIcon, ToolIcon, WizardIcon } from './ui/KindIcons';
 import { Library, PrinterPicker, Properties } from './ui/Panels';
 import { MeasurePanel } from './ui/MeasurePanel';
 import { WizardDialog } from './ui/WizardDialog';
@@ -160,7 +160,7 @@ function Toolbar() {
   return (
     <header className="toolbar">
       <a className="brand" href="#start" title="Strona startowa: gotowe projekty i kreatory">
-        <span className="logo">◆</span> Modelowanie 3D
+        <LogoMark className="logo" /> Modelowanie 3D
       </a>
       <div className="tabs" role="tablist">
         {(['tech', 'fig'] as Tab[]).map((t) => (

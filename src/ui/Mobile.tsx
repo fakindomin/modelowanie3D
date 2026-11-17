@@ -1,6 +1,6 @@
 import { MotionBar } from './MotionBar';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { StateIcon, ToolIcon, type ToolIconId, WizardIcon } from './KindIcons';
+import { LogoMark, StateIcon, ToolIcon, type ToolIconId, WizardIcon } from './KindIcons';
 import { Viewport } from '../scene/Viewport';
 import { Library, PrinterPicker, Properties } from './Panels';
 import { MeasurePanel } from './MeasurePanel';
@@ -119,7 +119,7 @@ function MobileBar({ menu, setMenu }: { menu: boolean; setMenu: (v: boolean) => 
   );
   return (
     <header className="mbar" ref={ref}>
-      <a className="logo" href="#start" aria-label="Strona startowa">◆</a>
+      <a className="logo" href="#start" aria-label="Strona startowa"><LogoMark /></a>
       <div className="tabs" role="tablist">
         {(['tech', 'fig'] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={st.tab === t} className={st.tab === t ? 'on' : ''} onClick={() => st.setTab(t)}>

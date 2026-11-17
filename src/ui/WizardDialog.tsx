@@ -1,4 +1,4 @@
-import { StateIcon } from './KindIcons';
+import { LogoMark, StateIcon } from './KindIcons';
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
@@ -39,7 +39,7 @@ export function WizardDialog() {
     <div className="wiz" role="dialog" aria-label="Kreator projektu">
       <header className="wiz-bar">
         <a className="brand" href="#start" title="Strona startowa" onClick={() => openWizard(null)}>
-          <span className="logo">◆</span> Modelowanie 3D
+          <LogoMark className="logo" size={22} /> Modelowanie 3D
         </a>
         <span className="wiz-crumb">
           <button className="linklike" onClick={() => openWizard({ id: null })} disabled={!wz || !!w.run}>

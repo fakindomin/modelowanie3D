@@ -953,3 +953,8 @@ button > .sicon:only-child { display: block; margin: auto; }
 .dim-sub[open] > summary::before { transform: rotate(90deg); }
 .dim-sub > summary .count { margin-left: auto; font-weight: 500; color: var(--muted); font-size: 11px; }
 .dim-sub:not([open]) { margin-bottom: 2px; }
+/* Brand mark (nozzle + L filament) replaces the old ◆ disc. */
+.toolbar .logo.logomark, .mbar .logomark { display: block; width: 28px; height: 28px; background: none; border-radius: 0 !important; margin-right: 4px; flex: none; }
+.logomark { display: inline-block; vertical-align: middle; }
+.mbar a.logo { background: none; border-radius: 0 !important; width: auto; height: auto; padding: 0; }
+.brand:has(> .logomark) { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
