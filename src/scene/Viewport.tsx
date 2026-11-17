@@ -502,8 +502,10 @@ function Scene() {
     // Touch has no hover: if the gizmo turns out to take this press, it undoes this pick (see Gizmo).
     gizmo.pick = { prev: sel };
     setTimeout(() => (gizmo.pick = null), 0);
-    const target = sel && cands.includes(sel) ? sel : cands[0];
     const zh = zoneHit(e);
+    // A named place or moving element (a drawer in front of the selected body) is picked itself; elsewhere a click on
+    // the selection keeps it (repeated clicks cycle through what lies under the pointer).
+    const target = zh ? (cands.includes(zh.part) ? zh.part : cands[0]) : sel && cands.includes(sel) ? sel : cands[0];
     const was = useMotion.getState().picked;
     st.select(target);
     pickZone(zh);
