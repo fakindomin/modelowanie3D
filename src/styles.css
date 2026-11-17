@@ -918,3 +918,8 @@ button > .sicon:only-child { display: block; margin: auto; }
 .mmenu-grid button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
 .mmenu-grid button .kicon { display: block; }
 .mtabs .mt-icon .kicon { display: block; margin: 0 auto; }
+/* Panel buttons: icons sit next to the label. */
+.manual-bar .primary { display: inline-flex; align-items: center; gap: 6px; }
+.facesel-head .kicon, .field > span .kicon { margin-right: 6px; color: var(--army-text, currentColor); }
+.tex-slot .chip .kicon { margin-left: 4px; }
+.linkbar .kicon { flex: none; }

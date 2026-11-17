@@ -1,3 +1,4 @@
+import { OptIcon } from './KindIcons';
 import { printable } from '../simple';
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
@@ -45,7 +46,7 @@ export function Manual() {
         <b>Instrukcja projektu</b>
         <span className="muted">Drukuj albo wybierz „Zapisz jako PDF” w oknie drukowania.</span>
         <button className="primary" disabled={!m} onClick={() => window.print()}>
-          🖨 Drukuj / PDF
+          <OptIcon id="printdoc" /> Drukuj / PDF
         </button>
         <button onClick={() => setManual(false)}>Zamknij</button>
       </div>

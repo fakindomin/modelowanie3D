@@ -541,7 +541,7 @@ function Helpers({ part }: { part: Part }) {
   const wz = part.wiz && WIZARDS[part.wiz.w] ? part.wiz : undefined;
   if (wz) {
     out.push(b(`Edytuj w kreatorze „${WIZARDS[wz.w].label}”`, () => st.openWizard({ id: wz.w, values: wz.recipe?.values, run: wz.run }), INFO.wizard, 'wiz'));
-    out.push(b('📖 Instrukcja projektu', () => st.setManual(true), INFO.manual));
+    out.push(b('Instrukcja projektu', () => st.setManual(true), INFO.manual, 'manual'));
   }
   if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id), INFO.drawers));
   if (part.type === 'box') out.push(b('+ Dodaj pasującą pokrywkę', () => st.addLid(part.id), INFO.lid));
@@ -567,7 +567,7 @@ function Helpers({ part }: { part: Part }) {
     // Wrap around the largest round part in the model, otherwise a 40 mm cylinder (changed in Gięcie).
     const round = st.parts.filter((p) => !p.hole && ['cylinder', 'tube', 'pipeEnd', 'rod'].includes(p.type)).sort((a, c) => Number(c.params.D) - Number(a.params.D))[0];
     const D = round ? Number(round.params.D) : 40;
-    out.push(b(`↪ Owiń napis na walec (Ø ${D} mm)`, () => st.setBend(part.id, { ...DEFAULT_BEND, axis: 'x', dir: 'down', D, luz: 0 }), INFO.wrapText));
+    out.push(b(`Owiń napis na walec (Ø ${D} mm)`, () => st.setBend(part.id, { ...DEFAULT_BEND, axis: 'x', dir: 'down', D, luz: 0 }), INFO.wrapText, 'wrap'));
   }
   if (part.type === 'bolt') {
     out.push(b('+ Dodaj pasującą nakrętkę', () => st.matchingNut(part.id), INFO.nut));
@@ -576,7 +576,7 @@ function Helpers({ part }: { part: Part }) {
   if (part.type === 'pipeFitting' || part.type === 'profileFitting') {
     const has = st.parts.some((p) => p.armOf?.of === part.id);
     const what = part.type === 'profileFitting' ? 'profile' : 'rury';
-    out.push(b(has ? `↻ Wstaw pasujące ${what} od nowa` : `+ Dodaj pasujące ${what}`, () => st.matchingPipes(part.id), INFO.pipes));
+    out.push(b(has ? `Wstaw pasujące ${what} od nowa` : `+ Dodaj pasujące ${what}`, () => st.matchingPipes(part.id), INFO.pipes, has ? 'redo' : undefined));
   }
   if (part.type === 'tube')
     out.push(
@@ -592,13 +592,13 @@ function Helpers({ part }: { part: Part }) {
     out.push(b('+ Dodaj o-ring do druku', () => st.addOrings(part.id), INFO.oringPart));
   const armFit = part.armOf ? st.parts.find((p) => p.id === part.armOf!.of) : undefined;
   if (armFit) {
-    out.push(b(`→ Przejdź do łącznika „${armFit.name}”`, () => st.select(armFit.id), INFO.armOf));
+    out.push(b(`Przejdź do łącznika „${armFit.name}”`, () => st.select(armFit.id), INFO.armOf, 'goto'));
     out.push(b('Odepnij od łącznika', () => st.update(part.id, { armOf: undefined }), INFO.armOf, 'unlink'));
   }
   const fitBox = part.fitTo ? st.parts.find((p) => p.id === part.fitTo) : undefined;
   if (fitBox && part.type !== 'boxHinge') out.push(b(`Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit, 'unlink'));
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
-    out.push(b(`⧉ Pokaż gotowy element (bryła ${part.body})`, () => st.merge(part.body), INFO.merge));
+    out.push(b(`Pokaż gotowy element (bryła ${part.body})`, () => st.merge(part.body), INFO.merge, 'merge'));
   if (!out.length) return null;
   return (
     <div className="quick">
@@ -845,7 +845,7 @@ function TextureTool({ part, face: fixed }: { part: Part; face?: TextureFace }) 
               {slots.map((sl) => (
                 <div key={sl} className="tex-slot">
                   <button className={edit === sl ? 'chip on' : 'chip'} onClick={() => setEdit(edit === sl ? null : sl)} title="Ustawienia tej faktury">
-                    <b>{sl}</b> {TEXTURE_LABELS[def(sl).pattern]} ✎
+                    <b>{sl}</b> {TEXTURE_LABELS[def(sl).pattern]} <OptIcon id="texedit" size={14} />
                   </button>
                   <span className="desc">{list.filter((t) => t.slot === sl).map((t) => label(t.face)).join(', ')}</span>
                   {edit === sl && <TextureSettings t={def(sl)} onChange={(patch) => editSlot(sl, patch)} />}
@@ -910,7 +910,7 @@ function FaceSection({ part }: { part: Part }) {
     <div className="facesel">
       <div className="facesel-head">
         <span>
-          ▣ Wybrana ścianka: <b>{name}</b>
+          <OptIcon id="face" /> Wybrana ścianka: <b>{name}</b>
         </span>
         <button className="mini" onClick={() => setFaceSel(null)} title="Zamknij (dwuklik w inną ściankę wybiera ją)">
           <StateIcon id="close" />
@@ -1217,7 +1217,7 @@ function FitPipeTo({ part }: { part: Part }) {
   return (
     <label className="field" title={INFO.fitPipe}>
       <span>
-        ⇄ Dopasuj do łącznika <Info text={INFO.fitPipe} />
+        <OptIcon id="fit" /> Dopasuj do łącznika <Info text={INFO.fitPipe} />
       </span>
       <select
         value={now}
@@ -1296,7 +1296,7 @@ function PartProperties({ part }: { part: Part }) {
   if (linked > 0 || patterned > 0)
     status.push(
       <div key="link" className="linkbar">
-        🔗 {linked > 0 ? `Powiązany z ${linked} ${linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.` : ''}
+        <OptIcon id="copies" size={14} /> {linked > 0 ? `Powiązany z ${linked} ${linked === 1 ? 'kopią' : 'kopiami'}: zmiana wymiarów zmienia wszystkie.` : ''}
         {patterned > 0 && ` Szyk (${PATTERN_LABEL[part.pattern!.kind]}): przesuń ten element, a ${patterned === 1 ? 'druga kopia przesunie się' : `${patterned} pozostałe przesuną się`} ${part.pattern!.kind === 'linear' ? 'razem z nim' : 'symetrycznie'}.`}
         <button className="small" onClick={() => st.unlink(part.id)}>
           Odłącz

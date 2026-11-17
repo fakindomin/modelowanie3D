@@ -138,6 +138,16 @@ const OPT_ICONS = {
   link: { line: 'M2 12l3-4h6l3 4-3 4H5zM10 12l3-4h6l3 4-3 4h-6z' },
   unlock: { line: 'M5 11h14v10H5zM8 11V6l2-2h4l2 2v1', block: 'M10.5 14h3v4h-3z' },
   unlink: { line: 'M1.5 12 4 8.5h4l2.5 3.5L8 15.5H4zM13.5 12 16 8.5h4l2.5 3.5-2.5 3.5h-4z' },
+  manual: { line: 'M2 5h7l3 2 3-2h7v14h-7l-3 2-3-2H2zM12 7v14' },
+  wrap: { line: 'M6 3h12v18H6z', block: 'M6 10h12v4H6z' },
+  redo: { line: 'M20 13v3l-4 4H8l-4-4V8l4-4h8l3 3', block: 'M14.5 8.5H21V2z' },
+  goto: { line: 'M2 12h11M8 7l5 5-5 5', block: 'M16 6.5h5v11h-5z' },
+  merge: { line: 'M3 3h12v12H3zM9 9h12v12H9z' },
+  fit: { line: 'M1 12h6M4 9l3 3-3 3M23 12h-6M20 9l-3 3 3 3', block: 'M10.5 10.5h3v3h-3z' },
+  copies: { line: 'M10 2h12v12M6 6h12v12', block: 'M2 10h12v12H2z' },
+  texedit: { line: 'M2 21l3-3 3 3 3-3 3 3 3-3 3 3M9 13 18 4l2 2-9 9', block: 'M7 17l2-4 2 2z' },
+  face: { line: 'M12 2l9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10', block: 'M12 12l9-5v10l-9 5z' },
+  printdoc: { line: 'M6 9V2h12v7M6 18H2V9h20v9h-4M6 14h12v8H6z', block: 'M16 11h3v2h-3z' },
 } as const;
 export type OptIconId = keyof typeof OPT_ICONS;
 
