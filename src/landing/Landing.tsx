@@ -4,7 +4,7 @@ import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
 import { CatIcon, MenuIcon, ReadyIcon, StateIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
-import { thumb, thumbNow, type ThumbKey } from './thumbs';
+import { onThumb, thumb, thumbKey, thumbNow, type ThumbKey } from './thumbs';
 import { ITEM_TAGS, WIZARD_TAGS, matches } from '../searchTags';
 import './landing.css';
 
@@ -311,15 +311,21 @@ function Tile({ k, icon, label, kind, sub, onClick }: { k: ThumbKey; icon: strin
   const [src, setSrc] = useState<string | null>(() => thumbNow(k));
   const [fresh, setFresh] = useState(false);
   useEffect(() => {
-    if (src) return;
     let live = true;
+    const key = thumbKey(k);
+    const off = onThumb((kk, url) => {
+      if (live && kk === key) setSrc(url);
+    });
+    const t0 = performance.now();
     void thumb(k).then((u) => {
-      if (!live) return;
-      setFresh(true);
+      if (!live || !u) return;
+      // Fade in only a picture that had to be drawn now, not one read back from the browser.
+      if (performance.now() - t0 > 150) setFresh(true);
       setSrc(u);
     });
     return () => {
       live = false;
+      off();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [label]);

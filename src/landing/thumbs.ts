@@ -12,51 +12,58 @@ export type ThumbKey = { item: ProjectItem } | { wizard: string };
 
 const W = 320, H = 240;
 const MODEL = 0x8f9a6a;
-const cache = new Map<string, Promise<string | null>>();
 let queue: Promise<unknown> = Promise.resolve();
 let renderer: THREE.WebGLRenderer | null = null;
 
 const keyOf = (k: ThumbKey) => ('wizard' in k ? 'wiz:' + k.wizard : 'item:' + k.item.label);
-const idle = () => new Promise((r) => setTimeout(r, 16));
-
-/** Pictures ready now, so a tile opened again shows its picture at once. */
-const ready = new Map<string, string>();
+const idle = (ms = 16) => new Promise((r) => setTimeout(r, ms));
 
 /*
- * Pictures are also saved in the browser (IndexedDB), so a later visit shows them at once. They are
- * tied to the build: after an update the models may have changed, so the old ones are dropped.
+ * Pictures live in memory and in the browser (IndexedDB), so a tile shows its picture at once, also
+ * after a reload or on a later visit. Each saved picture remembers the build it was drawn in: after
+ * an update of the site the old picture still shows at once, and a fresh one is drawn quietly in the
+ * background and swapped in only if the model changed.
  */
 declare const __BUILD_ID__: string;
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
-const DB = 'modelowanie3d-thumbs', STORE = 'thumbs';
+type Saved = { url: string; build: string };
+const ready = new Map<string, Saved>();
+const drawing = new Map<string, Promise<string | null>>();
+const listeners = new Set<(key: string, url: string) => void>();
+
+const DB = 'modelowanie3d-thumbs', STORE = 'pics';
 let dbp: Promise<IDBDatabase | null> | null = null;
 function db(): Promise<IDBDatabase | null> {
   dbp ??= new Promise((res) => {
     try {
-      const r = indexedDB.open(DB, 1);
-      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      const r = indexedDB.open(DB, 2);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        if (d.objectStoreNames.contains('thumbs')) d.deleteObjectStore('thumbs');
+        if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE);
+      };
       r.onsuccess = () => res(r.result);
       r.onerror = () => res(null);
+      r.onblocked = () => res(null);
     } catch {
       res(null);
     }
   });
   return dbp;
 }
-/** Loads this build's saved pictures into memory and clears ones from older builds. */
-const loaded: Promise<void> = (async () => {
+
+/** Resolves once the saved pictures are in memory (at most a moment after the page opens). */
+export const thumbsLoaded: Promise<void> = (async () => {
   const d = await db();
   if (!d) return;
   await new Promise<void>((res) => {
     try {
-      const st = d.transaction(STORE, 'readwrite').objectStore(STORE);
-      const cur = st.openCursor();
+      const cur = d.transaction(STORE, 'readonly').objectStore(STORE).openCursor();
       cur.onsuccess = () => {
         const c = cur.result;
         if (!c) return res();
-        const k = String(c.key);
-        if (k.startsWith(BUILD + '|')) ready.set(k.slice(BUILD.length + 1), String(c.value));
-        else c.delete();
+        const v = c.value as Saved;
+        if (v && typeof v.url === 'string') ready.set(String(c.key), v);
         c.continue();
       };
       cur.onerror = () => res();
@@ -65,47 +72,62 @@ const loaded: Promise<void> = (async () => {
     }
   });
 })();
-async function save(key: string, url: string) {
+
+async function save(key: string, v: Saved) {
   const d = await db();
   try {
-    d?.transaction(STORE, 'readwrite').objectStore(STORE).put(url, BUILD + '|' + key);
+    d?.transaction(STORE, 'readwrite').objectStore(STORE).put(v, key);
   } catch {
     /* storage full or blocked: the picture is just drawn again next time */
   }
 }
 
+/** Tells a tile when its picture was redrawn after an update. */
+export function onThumb(fn: (key: string, url: string) => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+export const thumbKey = keyOf;
+
 /** The picture if it is already at hand (no waiting), else null. */
-export const thumbNow = (k: ThumbKey) => ready.get(keyOf(k)) ?? null;
+export const thumbNow = (k: ThumbKey) => ready.get(keyOf(k))?.url ?? null;
+
+/** Draws the picture in the queue (one at a time); `quiet` ones wait longer so they never slow the page. */
+function draw(k: ThumbKey, quiet: boolean): Promise<string | null> {
+  const key = keyOf(k);
+  let p = drawing.get(key);
+  if (p) return p;
+  p = queue.then(async () => {
+    await initManifold();
+    await idle(quiet ? 120 : 16);
+    try {
+      const url = 'wizard' in k ? await wizardShot(k.wizard) : await itemShot(k.item);
+      if (url) {
+        const old = ready.get(key)?.url;
+        ready.set(key, { url, build: BUILD });
+        void save(key, { url, build: BUILD });
+        if (old !== url) listeners.forEach((fn) => fn(key, url));
+      }
+      return url;
+    } catch (err) {
+      console.warn('thumb', key, err);
+      return null;
+    }
+  });
+  queue = p;
+  drawing.set(key, p);
+  return p;
+}
 
 /** The picture of a project or wizard (a data URL), or null when it can't be drawn. */
-export function thumb(k: ThumbKey): Promise<string | null> {
-  const key = keyOf(k);
-  let p = cache.get(key);
-  if (!p) {
-    p = loaded.then(() => {
-      const have = ready.get(key);
-      if (have) return have;
-      const job = queue.then(async () => {
-        await initManifold();
-        await idle();
-        try {
-          const url = 'wizard' in k ? await wizardShot(k.wizard) : await itemShot(k.item);
-          if (url) {
-            ready.set(key, url);
-            void save(key, url);
-          }
-          return url;
-        } catch (err) {
-          console.warn('thumb', key, err);
-          return null;
-        }
-      });
-      queue = job;
-      return job;
-    });
-    cache.set(key, p);
+export async function thumb(k: ThumbKey): Promise<string | null> {
+  await thumbsLoaded;
+  const have = ready.get(keyOf(k));
+  if (have) {
+    if (have.build !== BUILD) void draw(k, true);
+    return have.url;
   }
-  return p;
+  return draw(k, false);
 }
 
 async function itemShot(i: ProjectItem): Promise<string | null> {
