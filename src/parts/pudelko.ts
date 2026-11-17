@@ -468,11 +468,26 @@ export function pudelkoZones(p: Params): Zone[] {
   const gFloor = L.Z_CH0 - L.gH - GRINDER_GAP;
   const gX1 = x0 + GRIP_GAP + L.gD + CL + GRIP_GAP, lx0 = gX1 + SEP;
   const pad = 0.6;
+  const gx = x0 + GRIP_GAP + (L.gD + CL) / 2, gy = yB0 + (L.gD + CL) / 2;
+  const lFloor = L.Z_TOP_ITEMS - L.lT - 0.4;
+  const by0 = WALL_Y + (L.A_Y - (L.bookT + CL)) / 2;
+  // Kształty miejsc = te same bryły, które korpus wycina (bez zatoki pod pokrywą), więc obrys pasuje do wymiarów.
+  const grinder = () => cylZ(gx, gy, (L.gD + CL) / 2, gFloor, gFloor + RING_H, 96);
+  const lighter = () => {
+    const box = bb(lx0, lx0 + L.lighterLen, yB0, yB0 + L.lW + CL, lFloor, L.Z_BAY0);
+    const rs = ramp(p, L);
+    if (!rs) return box;
+    const pts: P2[] = rs.side === 'right'
+      ? [[rs.xe - rs.len, lFloor + EPS], [rs.xe, lFloor - rs.depth], [rs.xe, lFloor + EPS]]
+      : [[rs.xe + rs.len, lFloor + EPS], [rs.xe, lFloor - rs.depth], [rs.xe, lFloor + EPS]];
+    return U([box, prismY(pts, yB0, yB0 + L.lW + CL)]);
+  };
+  const books = () => U([bb(x0, x0 + L.bookL + CL, by0, by0 + L.bookT + CL, L.BOOK_FLOOR, L.Z_BAY0), bb(x0, x0 + L.bookL + CL, WALL_Y, WALL_Y + L.A_Y, L.BOOK_SHELF, L.Z_BAY0)]);
   const z: Zone[] = [
     { label: 'Pudełko', group: 'Pudełko i pokrywa', box: [[-5, -5, -5], [X + 5, Y + 5, H + 5]] },
-    { label: 'Gniazdo młynka', group: 'Wnętrze › Młynek', box: [[x0 - pad, yB0 - pad, gFloor - pad], [gX1 + pad, yB0 + L.B_Y + pad, H + 1]] },
-    { label: 'Gniazdo zapalniczki', group: 'Wnętrze › Zapalniczka', box: [[lx0 - pad, yB0 - SEP - pad, L.Z_TOP_ITEMS - L.lT - 5.4 - pad], [lx0 + L.lighterLen + pad, yB0 + L.lW + CL + pad, H + 1]] },
-    { label: 'Szczelina na bibułki', group: 'Wnętrze › Bibułki', box: [[x0 - pad, WALL_Y - pad, L.BOOK_FLOOR - pad], [x0 + L.bookL + CL + pad, WALL_Y + L.A_Y + pad, H + 1]] },
+    { label: 'Gniazdo młynka', group: 'Wnętrze › Młynek', box: [[x0 - pad, yB0 - pad, gFloor - pad], [gX1 + pad, yB0 + L.B_Y + pad, H + 1]], solid: grinder },
+    { label: 'Gniazdo zapalniczki', group: 'Wnętrze › Zapalniczka', box: [[lx0 - pad, yB0 - SEP - pad, L.Z_TOP_ITEMS - L.lT - 5.4 - pad], [lx0 + L.lighterLen + pad, yB0 + L.lW + CL + pad, H + 1]], solid: lighter },
+    { label: 'Szczelina na bibułki', group: 'Wnętrze › Bibułki', box: [[x0 - pad, WALL_Y - pad, L.BOOK_FLOOR - pad], [x0 + L.bookL + CL + pad, WALL_Y + L.A_Y + pad, H + 1]], solid: books },
   ];
   const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
   D.bays.forEach(({ xa, xb }, i) => z.push({ label: names[i], group: 'Szuflady', motion: i === 0 ? 'drOpen' : 'drOpen2', box: [[xa - pad, -3, -2], [xb + pad, D.yEnd + pad, D.c + pad]] }));

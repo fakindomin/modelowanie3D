@@ -6,7 +6,7 @@ import type { Part, Vec3 } from '../types';
 /**
  * Preview of the moving elements (a lid sliding out, drawers): only in the editor, the print stays closed.
  * `base` is what the bar under the model set, `shown` is drawn (it eases towards the target), and hovering
- * an element slides it out on top of `base`.
+ * hovering or clicking an element only outlines it; a picked element can be dragged along its track.
  */
 export interface ZoneHover {
   part: string;
@@ -16,6 +16,8 @@ export interface ZoneHover {
   motion: string | null;
   /** Static place on the piece (part frame) to outline; moving elements are outlined themselves. */
   box: [Vec3, Vec3] | null;
+  /** The place has its own shape (a round socket): outlined by that shape instead of the box. */
+  solid: boolean;
   x: number;
   y: number;
 }
@@ -24,13 +26,13 @@ interface MotionState {
   base: Record<string, Record<string, number>>;
   shown: Record<string, Record<string, number>>;
   hover: ZoneHover | null;
-  /** The element slid out by hovering: it stays out while the pointer is over the model (until another one is hovered). */
-  hoverOpen: { rig: string; key: string } | null;
+  /** The clicked place or element (outlined until another click; a picked element can be dragged along its track). */
+  picked: ZoneHover | null;
   /** Group of sizes to open in the panel (n changes on every click, so the same group opens again). */
   focus: { group: string; n: number } | null;
 }
 
-export const useMotion = create<MotionState>(() => ({ base: {}, shown: {}, hover: null, hoverOpen: null, focus: null }));
+export const useMotion = create<MotionState>(() => ({ base: {}, shown: {}, hover: null, picked: null, focus: null }));
 
 /** Pieces of one model share their motions. */
 export const rigOf = (p: Part) => p.rigid ?? p.id;
@@ -44,7 +46,7 @@ export function zonesOf(part: Part): Zone[] {
   return DEFS[part.type]?.zones?.(part.params) ?? [];
 }
 
-const target = (s: MotionState, rig: string, key: string) => (s.hoverOpen?.rig === rig && s.hoverOpen.key === key ? 1 : (s.base[rig]?.[key] ?? 0));
+const target = (s: MotionState, rig: string, key: string) => s.base[rig]?.[key] ?? 0;
 
 let raf = 0;
 let last = 0;
@@ -53,11 +55,11 @@ function tick(t: number) {
   const dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016;
   last = t;
   const s = useMotion.getState();
-  const rigs = new Set([...Object.keys(s.base), ...Object.keys(s.shown), ...(s.hoverOpen ? [s.hoverOpen.rig] : [])]);
+  const rigs = new Set([...Object.keys(s.base), ...Object.keys(s.shown)]);
   let moving = false;
   const shown: MotionState['shown'] = {};
   for (const rig of rigs) {
-    const keys = new Set([...Object.keys(s.base[rig] ?? {}), ...Object.keys(s.shown[rig] ?? {}), ...(s.hoverOpen?.rig === rig ? [s.hoverOpen.key] : [])]);
+    const keys = new Set([...Object.keys(s.base[rig] ?? {}), ...Object.keys(s.shown[rig] ?? {})]);
     const row: Record<string, number> = {};
     for (const k of keys) {
       const cur = s.shown[rig]?.[k] ?? 0, to = target(s, rig, k);
@@ -106,29 +108,20 @@ export function play(rig: string, keys: string[]) {
     }, 2200);
 }
 
-let leaveTimer = 0;
-/** Pointer over a place of the model (or off the model: null). A moving element slides out and stays out a moment after leaving. */
+/** Pointer over a place of the model (or off the model: null): only the outline and the name, nothing moves. */
 export function hoverZone(h: ZoneHover | null) {
   const s = useMotion.getState();
-  if (h) {
-    clearTimeout(leaveTimer);
-    leaveTimer = 0;
-    const same = s.hover && s.hover.part === h.part && s.hover.label === h.label && s.hover.box === h.box;
-    let hoverOpen = s.hoverOpen;
-    if (h.motion) hoverOpen = { rig: h.rig, key: h.motion };
-    else if (hoverOpen && hoverOpen.rig !== h.rig) hoverOpen = null;
-    const changed = hoverOpen?.key !== s.hoverOpen?.key || hoverOpen?.rig !== s.hoverOpen?.rig;
-    useMotion.setState({ hover: same ? { ...s.hover!, x: h.x, y: h.y } : h, hoverOpen });
-    if (changed) run();
+  if (!h) {
+    if (s.hover) useMotion.setState({ hover: null });
     return;
   }
-  if (s.hover) useMotion.setState({ hover: null });
-  if (s.hoverOpen && !leaveTimer)
-    leaveTimer = window.setTimeout(() => {
-      leaveTimer = 0;
-      useMotion.setState({ hoverOpen: null });
-      run();
-    }, 400);
+  const same = s.hover && s.hover.part === h.part && s.hover.label === h.label;
+  useMotion.setState({ hover: same ? { ...s.hover!, x: h.x, y: h.y } : h });
+}
+
+/** Clicked place: its outline stays until another click. */
+export function pickZone(h: ZoneHover | null) {
+  useMotion.setState({ picked: h });
 }
 
 let focusN = 0;

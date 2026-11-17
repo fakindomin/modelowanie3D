@@ -1593,6 +1593,10 @@ function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]
       /* not stored */
     }
   };
+  // Named sub-groups (Młynek, Bibułki…) fold too: closed at first, one open at a time inside their group.
+  const [openSub, setOpenSubMap] = useState<Record<string, string | null>>({});
+  const setOpenSub = (group: string, sub: string | null) => setOpenSubMap((m) => ({ ...m, [`${type}/${group}`]: sub }));
+  const subOpen = (group: string, sub: string) => openSub[`${type}/${group}`] === sub;
   const focus = useMotion((s) => s.focus);
   const [lit, setLit] = useState<{ g: string; s: string | null } | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -1603,6 +1607,7 @@ function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]
     const [top, sub = null] = focus.group.split('›').map((x) => x.trim());
     if (!groups.some((g) => g.name === top)) return;
     setOpen(top);
+    if (sub) setOpenSub(top, sub);
     setLit({ g: top, s: sub });
     const t = setTimeout(() => setLit(null), 1600);
     requestAnimationFrame(() => {
@@ -1623,12 +1628,23 @@ function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]
           >
             {g.name} <span className="count">{g.count}</span>
           </summary>
-          {g.subs.map((s) => (
-            <div key={s.name ?? ''} data-sub={`${g.name}/${s.name ?? ''}`} className={s.name ? (lit?.g === g.name && lit.s === s.name ? 'dim-sub focus' : 'dim-sub') : undefined}>
-              {s.name && <h5>{s.name}</h5>}
-              {s.fields.map((p) => field(p, s.name ?? g.name))}
-            </div>
-          ))}
+          {g.subs.map((s) =>
+            s.name ? (
+              <details key={s.name} data-sub={`${g.name}/${s.name}`} className={lit?.g === g.name && lit.s === s.name ? 'dim-sub focus' : 'dim-sub'} open={subOpen(g.name, s.name)}>
+                <summary
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setOpenSub(g.name, subOpen(g.name, s.name!) ? null : s.name);
+                  }}
+                >
+                  {s.name} <span className="count">{s.fields.length}</span>
+                </summary>
+                {s.fields.map((p) => field(p, s.name))}
+              </details>
+            ) : (
+              <div key="">{s.fields.map((p) => field(p, g.name))}</div>
+            ),
+          )}
         </details>
       ))}
     </div>

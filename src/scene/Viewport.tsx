@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { DEFS } from '../catalog';
 import { assembly, bodyBox, groupBody, groupId, isLocked, useStore } from '../store';
 import { built, buildBodies, partMatrix, segments, worldBox, type BodyResult } from '../geom/parts';
-import { focusGroup, hoverZone, rigOf, useMotion, zoneAt, motionsOf, type ZoneHover } from '../ui/motion';
+import { focusGroup, hoverZone, pickZone, rigOf, setMotion, useMotion, zoneAt, zonesOf, motionsOf, type ZoneHover } from '../ui/motion';
+import { toGeometry } from '../geom/manifold';
 import { finishing, warped } from '../geom/modify';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, TextureFace, Vec3 } from '../types';
@@ -67,7 +68,9 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
   const segs = segments(part);
   const rig = rigOf(part);
   const shown = useMotion((s) => s.shown[rig]);
-  const zh = useMotion((s) => (s.hover && s.hover.rig === rig ? s.hover : null));
+  const hov = useMotion((s) => (s.hover && s.hover.rig === rig ? s.hover : null));
+  const picked = useMotion((s) => (s.picked && s.picked.rig === rig ? s.picked : null));
+  const zh = hov ?? picked;
   const sec = useSection();
   const zoned = !!(DEFS[part.type]?.motions || DEFS[part.type]?.zones);
   // A model with named places outlines the place under the pointer, not the whole piece.
@@ -77,7 +80,7 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
       {segs.map((sg, i) => {
         const { geometry } = sg;
         const heavy = geometry.attributes.position.count > EDGE_LIMIT;
-        const zone = !!(zh && sg.motion && zh.motion === sg.motion);
+        const zone = !!sg.motion && (hov?.motion === sg.motion || picked?.motion === sg.motion);
         const edge = heavy ? null : zone ? '#ff7a2e' : look.selected ? '#ffffff' : look.snap ? '#8a9440' : hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
         const tint = zone && heavy ? '#7a3a12' : look.selected && heavy ? '#5a3c22' : hovered ? '#3e3a36' : '#000000';
         const v = sg.motion ? (shown?.[sg.motion] ?? 0) : 0;
@@ -107,8 +110,38 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
           </mesh>
         );
       })}
-      {zh && zh.part === part.id && zh.box && <ZoneBox box={zh.box} />}
+      {[hov, picked].map((z, i) =>
+        z && z.part === part.id && z.box && !(i === 1 && hov && hov.part === z.part && hov.label === z.label) ? (
+          z.solid ? <ZoneShape key={i} part={part} label={z.label} /> : <ZoneBox key={i} box={z.box} />
+        ) : null,
+      )}
     </group>
+  );
+}
+
+const shapeCache = new Map<string, THREE.BufferGeometry>();
+/** A place's own shape (the grinder's round socket): orange edges plus a faint fill of the recess. */
+function ZoneShape({ part, label }: { part: Part; label: string }) {
+  const k = part.type + JSON.stringify(part.params) + label;
+  let geo = shapeCache.get(k);
+  if (!geo) {
+    const z = zonesOf(part).find((q) => q.label === label);
+    const m = z?.solid?.();
+    if (!m) return null;
+    geo = toGeometry(m);
+    m.delete();
+    shapeCache.set(k, geo);
+    if (shapeCache.size > 60) {
+      const first = shapeCache.keys().next().value!;
+      shapeCache.get(first)!.dispose();
+      shapeCache.delete(first);
+    }
+  }
+  return (
+    <mesh geometry={geo} raycast={noRaycast} renderOrder={10}>
+      <meshBasicMaterial color="#ff7a2e" transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} />
+      <Edges threshold={25} color="#ff7a2e" lineWidth={2} renderOrder={11} />
+    </mesh>
   );
 }
 
@@ -253,7 +286,7 @@ function zoneHit(e: ThreeEvent<PointerEvent>): ZoneHover | null {
   const seg = it.object.userData.seg as string | null;
   if (seg) {
     const m = motionsOf(part).find((q) => q.key === seg);
-    if (m) return { part: part.id, rig: rigOf(part), label: m.label, group: m.group, motion: m.key, box: null, x, y };
+    if (m) return { part: part.id, rig: rigOf(part), label: m.label, group: m.group, motion: m.key, box: null, solid: false, x, y };
   }
   const l = it.object.worldToLocal(it.point.clone());
   const z = zoneAt(part, [l.x, l.y, l.z]);
@@ -261,10 +294,12 @@ function zoneHit(e: ThreeEvent<PointerEvent>): ZoneHover | null {
   // The catch-all place (the whole box) outlines the piece itself.
   const bb = built(part).box;
   const whole = z.box[0].every((v, i) => v <= bb.min.getComponent(i)) && z.box[1].every((v, i) => v >= bb.max.getComponent(i));
-  return { part: part.id, rig: rigOf(part), label: z.label, group: z.group, motion: z.motion ?? null, box: whole ? null : z.box, x, y };
+  return { part: part.id, rig: rigOf(part), label: z.label, group: z.group, motion: z.motion ?? null, box: whole ? null : z.box, solid: !!z.solid, x, y };
 }
 
 let cancelDrag = () => {};
+/** Sliding a picked lid or drawer with the pointer: screen travel `sv` (px) is 100 %. */
+let mdrag: { rig: string; key: string; start: number; sv: THREE.Vector2; x0: number; y0: number } | null = null;
 
 interface Drag {
   /** Part id, or group id for a whole body. */
@@ -294,6 +329,12 @@ function Scene() {
     const ray = new THREE.Raycaster();
     const hit = new THREE.Vector3();
     const move = (ev: PointerEvent) => {
+      if (mdrag) {
+        const md = mdrag;
+        const t = md.start + ((ev.clientX - md.x0) * md.sv.x + (ev.clientY - md.y0) * md.sv.y) / md.sv.lengthSq();
+        setMotion(md.rig, { [md.key]: Math.min(1, Math.max(0, t)) });
+        return;
+      }
       const d = drag.current;
       if (!d) return;
       if (!d.moved) {
@@ -343,6 +384,10 @@ function Scene() {
     window.addEventListener('pointerup', lift, true);
     window.addEventListener('pointercancel', lift, true);
     const up = () => {
+      if (mdrag) {
+        mdrag = null;
+        if (controls) (controls as unknown as { enabled: boolean }).enabled = true;
+      }
       const d = drag.current;
       drag.current = null;
       if (controls) (controls as unknown as { enabled: boolean }).enabled = true;
@@ -410,9 +455,32 @@ function Scene() {
     gizmo.pick = { prev: sel };
     setTimeout(() => (gizmo.pick = null), 0);
     const target = sel && cands.includes(sel) ? sel : cands[0];
-    st.select(target);
     const zh = zoneHit(e);
+    const was = useMotion.getState().picked;
+    st.select(target);
+    pickZone(zh);
     if (zh) focusGroup(zh.group);
+    // A picked moving element (lid, drawer) pressed again slides along its track with the pointer.
+    if (zh?.motion && was && was.rig === zh.rig && was.motion === zh.motion) {
+      const part = st.parts.find((p) => p.id === zh.part)!;
+      const m = motionsOf(part).find((q) => q.key === zh.motion);
+      if (m) {
+        const mat = partMatrix(part.position, part.rotation);
+        const a = e.point.clone();
+        const b = a.clone().add(new THREE.Vector3(...m.move).transformDirection(mat).multiplyScalar(new THREE.Vector3(...m.move).length()));
+        const rect = gl.domElement.getBoundingClientRect();
+        const scr = (v: THREE.Vector3) => {
+          const q = v.clone().project(camera);
+          return new THREE.Vector2(((q.x + 1) / 2) * rect.width, ((1 - q.y) / 2) * rect.height);
+        };
+        const sv = scr(b).sub(scr(a));
+        if (sv.lengthSq() > 25) {
+          mdrag = { rig: zh.rig, key: m.key, start: useMotion.getState().base[zh.rig]?.[m.key] ?? 0, sv, x0: e.nativeEvent.clientX, y0: e.nativeEvent.clientY };
+          if (controls) (controls as unknown as { enabled: boolean }).enabled = false;
+          return;
+        }
+      }
+    }
     // Ready-made models stay where they are: a click only picks (sizes change with the handles and the panel).
     if (FIXED) return;
     if (isLocked(st.parts, target)) return;
@@ -853,7 +921,7 @@ export function Viewport() {
       shadows
       frameloop="demand"
       camera={{ position: [160, -220, 180], fov: 40, near: 1, far: 10000, up: [0, 0, 1] }}
-      onPointerMissed={(e) => e.button === 0 && !gizmoBusy() && select(null)}
+      onPointerMissed={(e) => { if (e.button === 0 && !gizmoBusy()) { select(null); pickZone(null); } }}
       gl={{ antialias: true, preserveDrawingBuffer: true, localClippingEnabled: true }}
     >
       <color attach="background" args={['#1a1c19']} />

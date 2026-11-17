@@ -21,11 +21,10 @@ export function MotionBar() {
   const rig = part ? rigOf(part) : '';
   const base = useMotion((s) => s.base[rig]);
   const shown = useMotion((s) => s.shown[rig]);
-  const hoverKey = useMotion((s) => (s.hoverOpen?.rig === rig ? s.hoverOpen.key : null));
   if (!part || preview) return null;
   const ms = motionsOf(part);
   const keys = ms.map((m) => m.key);
-  const all = Math.round((keys.reduce((a, k) => a + (k === hoverKey ? (base?.[k] ?? 0) : (shown?.[k] ?? 0)), 0) / keys.length) * 100);
+  const all = Math.round((keys.reduce((a, k) => a + (shown?.[k] ?? 0), 0) / keys.length) * 100);
   const set = (v: number) => setMotion(rig, Object.fromEntries(keys.map((k) => [k, v])));
   return (
     <div className="motion-bar" onPointerDown={(e) => e.stopPropagation()}>
@@ -79,7 +78,7 @@ export function ZoneTip() {
   return (
     <div className="zone-tip" style={{ left: h.x + 14, top: h.y + 16 }}>
       {h.label}
-      <small>kliknij: wymiary</small>
+      <small>{h.motion ? 'kliknij: zaznacz, potem przeciągnij' : 'kliknij: wymiary'}</small>
     </div>
   );
 }

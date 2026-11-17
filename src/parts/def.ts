@@ -58,8 +58,10 @@ export interface Zone {
   label: string;
   group: string;
   box: [Vec3, Vec3];
-  /** Hovering it slides this element out (a drawer's bay). */
+  /** The moving element this place belongs to (a drawer's bay): outlined with it. */
   motion?: string;
+  /** Exact shape of the place (the socket's cut), outlined instead of the box. */
+  solid?: () => Manifold;
 }
 
 export interface PartDef {

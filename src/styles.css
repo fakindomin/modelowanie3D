@@ -944,3 +944,12 @@ button > .sicon:only-child { display: block; margin: auto; }
 .app.mobile .motion-bar { bottom: 10px; gap: 8px; padding: 6px 8px; }
 .app.mobile .motion-bar .mb-main input { width: 120px; }
 .app.mobile .motion-bar .mb-note { display: none; }
+/* Podgrupy wymiarów (Młynek, Bibułki…): zwijane, jedna otwarta w grupie. */
+.dim-sub > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 5px 0; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.dim-sub > summary::-webkit-details-marker { display: none; }
+.dim-sub > summary::before { content: ''; width: 8px; height: 8px; flex: none; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l9-7z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l9-7z'/%3E%3C/svg%3E") center / contain no-repeat; }
+.dim-sub[open] > summary::before { transform: rotate(90deg); }
+.dim-sub > summary .count { margin-left: auto; font-weight: 500; color: var(--muted); font-size: 11px; }
+.dim-sub:not([open]) { margin-bottom: 2px; }
