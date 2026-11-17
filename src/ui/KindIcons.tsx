@@ -106,7 +106,7 @@ const CAT_ICONS: Record<string, { line: string; block?: string }> = {
   workshop: { line: 'M9.4 11.5 11.5 9.4 17.7 15.6 15.6 17.7z', block: 'M2.4 10.9 8.1 5.2 12.3 3.1 13.3 4.1 11.2 8.3 5.5 14zM15.7 18.4 18.4 15.7 21.8 19.1 19.1 21.8z' },
   desk: { line: 'M2 8h20M4 8v13M20 8v13M12 8v7h8', block: 'M14.5 10.5h3v2h-3z' },
   electronics: { line: 'M6 6h12v12H6zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4', block: 'M10 10h4v4h-4z' },
-  kids: { line: 'M8 2h8l6 6v8l-6 6H8l-6-6V8zM6.5 8 5 11v2l1.5 3M17.5 8l1.5 3v2l-1.5 3', block: 'M12 2l4 6v8l-4 6-4-6V8z' },
+  kids: { line: 'M12 3v3M5 11l3-5h8l3 5-7 11z', block: 'M10 1.5h4v2.5h-4z' },
   printer: { line: 'M12 2v5M8 7h8v5l-4 4-4-4zM3 21h18', block: 'M10.5 18h3v3h-3z' },
   pets: { line: 'M7 15l2.5-2.5h5L17 15v4l-2 2H9l-2-2z', block: 'M3 9h3v3H3zM8 4.5h3v3H8zM13 4.5h3v3h-3zM18 9h3v3h-3z' },
   vehicle: { line: 'M2 15l2-2h2l2 2v2l-2 2H4l-2-2zM16 15l2-2h2l2 2v2l-2 2h-2l-2-2zM5 16l4-7h7l3 7M9 9l3 7M8 6h3', block: 'M10.5 14.5h3v3h-3z' },
