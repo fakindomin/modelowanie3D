@@ -409,7 +409,8 @@ function magnetCatch(p: Params) {
     if (sd) for (const x of [-L / 2 + sd + 2.5, L / 2 - sd - 2.5]) m = m.subtract(csHole(x, 0, H, sd));
     return m;
   };
-  return row([one(), one()], 6);
+  // A wizard that already has the pockets in the door asks for the cabinet's block only.
+  return p.single ? settle(one()) : row([one(), one()], 6);
 }
 
 /** Vent grille: round (with a spigot for the duct) or rectangular, slots or holes. */
@@ -648,7 +649,7 @@ export const USEFUL2_DEFS: PartDef[] = [
   {
     type: 'magnetCatch', label: 'Zatrzask magnetyczny', category: 'useful', hole: false,
     description: 'Para klocków z gniazdami na magnesy walcowe: jeden na korpus, drugi na drzwiczki. Magnes wklej na kropli kleju.',
-    params: [n('d', 'Średnica magnesu', 8, 3, 25, 0.5), n('h', 'Grubość magnesu', 3, 1, 10, 0.5), ...scr],
+    params: [n('d', 'Średnica magnesu', 8, 3, 25, 0.5), n('h', 'Grubość magnesu', 3, 1, 10, 0.5), ...scr, { key: 'single', label: 'Tylko klocek do szafki', type: 'bool', def: false, show: (p) => !!p.single }],
     build: magnetCatch,
   },
   {

@@ -834,7 +834,77 @@ function stackBin(p: Params): Manifold {
   return settle(m);
 }
 
+/**
+ * A door with a piano hinge: the door plate and a screw-on strip share one hinge axis along the door's left edge,
+ * their knuckles take turns and a 1.75 mm filament is the pin. Both lie flat as built and print together, already
+ * assembled. Magnet pockets on the inside face hold it shut against a magnet catch in the cabinet.
+ */
+export function doorSizes(p: Params) {
+  const W = num(p, 'W'), H = num(p, 'H'), T = nv(p, 'T', 4), g = nv(p, 'luz', 0.4);
+  const R = Math.max(T / 2 + 0.6, 3.5);
+  const xa = -W / 2 - R - g; // hinge axis
+  const Wf = nv(p, 'strip', 18);
+  let n = Math.max(3, Math.min(25, Math.round(H / 22)));
+  if (n % 2 === 0) n++;
+  return { W, H, T, g, R, xa, Wf, n, xs: xa - R - g };
+}
+
+function hingedDoor(p: Params): Manifold {
+  const { W, H, T, g, R, xa, Wf, n, xs } = doorSizes(p);
+  const door = p.piece !== 'strip';
+  const sl = (H - (n - 1) * g) / n;
+  const seg = (i: number) => [-H / 2 + i * (sl + g), -H / 2 + i * (sl + g) + sl] as const;
+  const knuck = (y0: number, y1: number, r: number) => M().Manifold.cylinder(y1 - y0, r, r, 48).rotate([-90, 0, 0]).translate([xa, y0, R]);
+  const mine: Manifold[] = [], theirs: Manifold[] = [];
+  for (let i = 0; i < n; i++) {
+    const [y0, y1] = seg(i);
+    if ((i % 2 === 0) === door) {
+      mine.push(knuck(y0, y1, R));
+      mine.push(door ? box(xa, y0, 0, -W / 2 + 0.01, y1, T) : box(xs - 0.01, y0, 0, xa, y1, T));
+    } else theirs.push(knuck(y0 - g, y1 + g, R + g));
+  }
+  let m = union([door ? box(-W / 2, -H / 2, 0, W / 2, H / 2, T) : box(xs - Wf, -H / 2, 0, xs, H / 2, T), ...mine]);
+  m = m.subtract(union(theirs));
+  m = m.subtract(M().Manifold.cylinder(H + 2, 1, 1, 24).rotate([-90, 0, 0]).translate([xa, -H / 2 - 1, R]));
+  if (door) {
+    // Magnets near the free edge, top and bottom (one in the middle on a short door), open on the inside face.
+    const d = nv(p, 'magD', 8) + 0.2, h = nv(p, 'magH', 3) + 0.2;
+    const ys = H > 120 ? [H / 2 - 20, -H / 2 + 20] : [H / 2 - Math.min(20, H / 4)];
+    if (p.magnets !== false) for (const y of ys) m = m.subtract(cyl(h + 1, d / 2).translate([W / 2 - 6 - d / 2, y, Math.max(0.8, T - h)]));
+    if (p.handle === 'knob') m = m.subtract(cyl(T + 2, 2.25).translate([W / 2 - 25, 0, -1]));
+    if (p.handle === 'notch') m = m.subtract(rblock(16, Math.min(50, H * 0.4), T + 2, 7.9, W / 2 - 20, 0, -1));
+  } else {
+    // Countersunk screw holes from the outside (the face on the bed).
+    const sd = nv(p, 'screwD', 4), k = Math.max(2, Math.round(H / 90) + 1);
+    for (let i = 0; i < k; i++) {
+      const y = -H / 2 + 15 + ((H - 30) * i) / (k - 1);
+      const x = xs - Wf / 2;
+      m = m.subtract(cyl(T + 2, sd / 2 + 0.2).translate([x, y, -1]));
+      m = m.subtract(cyl(sd / 2 + 0.01, sd, sd / 2 + 0.2).translate([x, y, -0.01]));
+    }
+  }
+  return m;
+}
+
 export const USEFUL4_DEFS: PartDef[] = [
+  {
+    type: 'hingedDoor', label: 'Drzwiczki z zawiasem', category: 'useful', hole: false,
+    description: 'Drzwiczki i listwa z zawiasem na całej długości, drukowane razem, od razu złożone. Oś: filament 1,75 mm. Listwę przykręcasz obok otworu, gniazda na magnesy trzymają drzwiczki zamknięte.',
+    params: [
+      select('piece', 'Element', 'door', [['door', 'Drzwiczki'], ['strip', 'Listwa zawiasu']]),
+      n('W', 'Szerokość drzwiczek', 150, 40, 300),
+      n('H', 'Wysokość drzwiczek', 200, 40, 300),
+      { ...select('handle', 'Uchwyt', 'knob', [['none', 'Bez'], ['knob', 'Otwór na gałkę M4'], ['notch', 'Wycięcie na palec']]), show: (p) => p.piece !== 'strip' },
+      { ...bool('magnets', 'Gniazda na magnesy', true), show: (p) => p.piece !== 'strip' },
+      { ...n('magD', 'Magnes: średnica', 8, 4, 15), show: (p) => p.piece !== 'strip' && p.magnets !== false, more: true },
+      { ...n('magH', 'Magnes: wysokość', 3, 1, 5, 0.5), show: (p) => p.piece !== 'strip' && p.magnets !== false, more: true },
+      { ...n('screwD', 'Średnica wkrętu', 4, 3, 5, 0.5), show: (p) => p.piece === 'strip' },
+      adv('T', 'Grubość', 4, 3, 8, 0.5),
+      adv('strip', 'Szerokość listwy', 18, 12, 40, 1),
+      adv('luz', 'Luz zawiasu', 0.4, 0.3, 0.8, 0.05),
+    ],
+    build: hingedDoor,
+  },
   {
     type: 'stackBin', label: 'Pojemnik piętrowy', category: 'useful', hole: false,
     description: 'Pojemnik ze stopką od spodu, która wchodzi w górę pojemnika niżej: stawiasz je jeden na drugim i się nie zsuwają. Ta sama podstawa dla wszystkich pięter, wysokość dowolna. Jako „Pokrywka” zamyka górny.',

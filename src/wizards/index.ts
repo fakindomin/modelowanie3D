@@ -6,9 +6,10 @@ import { DOME_WIZARD } from './dome';
 import { GEARBOX_WIZARD } from './gearbox';
 import { STACK_WIZARD } from './stack';
 import { HOLDERS_WIZARD } from './holders';
+import { DOOR_WIZARD } from './door';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD, STACK_WIZARD, HOLDERS_WIZARD].map((w) => [w.id, w]));
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD, STACK_WIZARD, HOLDERS_WIZARD, DOOR_WIZARD].map((w) => [w.id, w]));
 const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
 
 const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
@@ -45,7 +46,7 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
     label: 'Mechanizmy',
     items: [
       ready(GEARBOX_WIZARD),
-      soon('door', 'Drzwiczki z zawiasem', 'Zawias, zamknięcie na magnes.'),
+      ready(DOOR_WIZARD),
       soon('slide', 'Prowadnica liniowa', 'Wózek na rurach albo profilu.'),
     ],
   },
