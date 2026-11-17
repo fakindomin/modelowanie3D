@@ -219,21 +219,6 @@ function freeBody(b: BodyResult) {
   b.manifold.delete();
 }
 
-function PreviewBodies() {
-  const parts = useStore((s) => s.parts);
-  const bodies = useBodies(parts, undefined, 'all');
-  const shown = (body: number) => parts.some((p) => p.body === body && !p.hole && !p.hidden);
-  return (
-    <>
-      {bodies.filter((b) => shown(b.body)).map((b) => (
-        <mesh key={b.body} geometry={b.geometry} castShadow receiveShadow>
-          <meshStandardMaterial color={b.color} roughness={0.5} />
-        </mesh>
-      ))}
-    </>
-  );
-}
-
 function MergedBodies({ selectedBody, hoveredBody }: { selectedBody: number | null; hoveredBody: number | null }) {
   const parts = useStore((s) => s.parts);
   const sec = useSection();
@@ -350,7 +335,9 @@ interface Drag {
 
 function Scene() {
   const parts = useStore((s) => s.parts);
-  const selectedId = useStore((s) => s.selectedId);
+  // Podgląd: the finished model, nothing picked; only the moving elements (lid, drawers) can still be moved.
+  const preview = useStore((s) => s.preview);
+  const selectedId = useStore((s) => (s.preview ? null : s.selectedId));
   const hoveredId = useStore((s) => s.hoveredId);
   const snapTargets = useStore((s) => s.snapTargets);
   const { camera, gl, controls } = useThree();
@@ -503,16 +490,19 @@ function Scene() {
     gizmo.pick = { prev: sel };
     setTimeout(() => (gizmo.pick = null), 0);
     const zh = zoneHit(e);
+    if (st.preview && !zh?.motion) return;
     // A named place or moving element (a drawer in front of the selected body) is picked itself; elsewhere a click on
     // the selection keeps it (repeated clicks cycle through what lies under the pointer).
     const target = zh ? (cands.includes(zh.part) ? zh.part : cands[0]) : sel && cands.includes(sel) ? sel : cands[0];
     const was = useMotion.getState().picked;
-    st.select(target);
-    pickZone(zh);
-    if (zh) focusGroup(zh.group);
+    if (!st.preview) {
+      st.select(target);
+      pickZone(zh);
+      if (zh) focusGroup(zh.group);
+    }
     // A moving element (lid, drawer) under the pointer slides along its track right away; on a touch screen
     // (no hover) only once it is picked, so the view can still be turned over it.
-    if (zh?.motion && (e.nativeEvent.pointerType !== 'touch' || (was && was.rig === zh.rig && was.motion === zh.motion))) {
+    if (zh?.motion && (e.nativeEvent.pointerType !== 'touch' || st.preview || (was && was.rig === zh.rig && was.motion === zh.motion))) {
       const part = st.parts.find((p) => p.id === zh.part)!;
       const ms = motionsOf(part);
       const m = ms.find((q) => q.key === zh.motion && q.world) ?? ms.find((q) => q.key === zh.motion);
@@ -554,7 +544,7 @@ function Scene() {
   /** Double click on a face: pick the part and that face (texture, label and magnets in the panel). */
   const onDouble = (e: ThreeEvent<MouseEvent>) => {
     const st = useStore.getState();
-    if (st.measure || gizmoBusy()) return;
+    if (st.measure || st.preview || gizmoBusy()) return;
     const it = e.intersections.find((i) => i.object instanceof THREE.Mesh && i.faceIndex != null && i.face && !i.object.userData.sketchHandle && !i.object.userData.handle);
     if (!it) return;
     e.stopPropagation();
@@ -595,10 +585,12 @@ function Scene() {
       useStore.getState().setHover(f ? f.pick : null);
       return;
     }
+    const zh = zoneHit(e);
+    if (useStore.getState().preview) return hoverZone(zh?.motion ? zh : null);
     const cands = candidates(e);
     const sel = useStore.getState().selectedId;
     useStore.getState().setHover(cands.length ? (sel && cands.includes(sel) ? sel : cands[0]) : null);
-    hoverZone(zoneHit(e));
+    hoverZone(zh);
   };
 
   const multi = useStore((s) => s.multi);
@@ -626,7 +618,7 @@ function Scene() {
       }}
     >
       {parts.map((p) =>
-        p.hidden && p.id !== selectedId ? null : // A bent body's flat holes would float beside the bent shape: shown only when picked.
+        p.hidden && p.id !== selectedId ? null : preview && p.hole ? null : // A bent body's flat holes would float beside the bent shape: shown only when picked.
         bentBodies.has(p.body) && p.hole && p.id !== selectedId ? null : FIXED && p.hole && mergedBodies.has(p.body) ? null : mergedBodies.has(p.body) && !p.hole ? (
           <MergedMember key={p.id} part={p} look={look(p)} />
         ) : (
@@ -1029,7 +1021,7 @@ export function Viewport() {
       <color attach="background" args={['#1a1c19']} />
       {lights}
       <Bed />
-      {preview ? <PreviewBodies /> : <Scene />}
+      <Scene />
       {!preview && !measure && !FIXED && <Gizmo />}
       {!preview && !measure && !FIXED && <SketchHandles />}
       {!preview && !measure && !mobile && <DimHandles />}
