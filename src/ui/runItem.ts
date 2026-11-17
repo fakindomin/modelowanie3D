@@ -18,5 +18,6 @@ export function runProjectItem(i: ProjectItem) {
     const f = FAMILIES.find((x) => x.id === i.family)!;
     useStore.getState().addVariant(f, f.variants.find((v) => v.label === i.variant)!, 'M');
   }
+  useStore.getState().centerOnBed();
   setTimeout(() => useStore.getState().fit(), 80);
 }

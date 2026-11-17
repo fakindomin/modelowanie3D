@@ -227,6 +227,8 @@ interface State {
   openWizard(w: { id: string | null; values?: WizValues; run?: string } | null): void;
   /** Puts what a wizard planned into the model (replacing that run's parts when editing). */
   applyWizard(id: string, values: WizValues, run?: string): void;
+  /** Moves a new project so it stands in the middle of the printer's bed (no undo step of its own). */
+  centerOnBed(): void;
   /** Project manual (what to print, buy and how to assemble) shown over the editor. */
   manual: boolean;
   setManual(v: boolean): void;
@@ -921,8 +923,25 @@ export const useStore = create<State>((set, get) => {
         );
       }
       commit(next, { selectedId: null, fitRequest: get().fitRequest + 1, wizard: null, suggest: null });
+      if (!run) get().centerOnBed();
       const n = plan.parts ? new Set(plan.parts.map((p) => p.body)).size : plan.placements.length;
       get().notify(`${run ? 'Zaktualizowano' : 'Utworzono'} „${wz.label}”: ${n} ${n === 1 ? 'element' : few(n) ? 'elementy' : 'elementów'}. Zaznacz dowolny i kliknij „Edytuj w kreatorze”, żeby zmienić odpowiedzi.`);
+    },
+    centerOnBed() {
+      const parts = get().parts;
+      const box = new THREE.Box3();
+      for (const p of parts) if (!p.hole && !p.hidden) box.union(worldBox(p));
+      if (box.isEmpty()) return;
+      const dx = round(-(box.min.x + box.max.x) / 2), dy = round(-(box.min.y + box.max.y) / 2);
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+      const shift = (v: Vec3): Vec3 => r3([v[0] + dx, v[1] + dy, v[2]]);
+      set({
+        parts: parts.map((p) => ({
+          ...p,
+          position: shift(p.position),
+          wiz: p.wiz?.recipe ? { ...p.wiz, recipe: { ...p.wiz.recipe, origin: shift(p.wiz.recipe.origin) } } : p.wiz,
+        })),
+      });
     },
     pins: [],
     fit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),

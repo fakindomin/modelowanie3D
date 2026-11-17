@@ -17,6 +17,7 @@ import { slopeFace } from '../geom/texture';
 import { SketchHandles } from './SketchHandles';
 import { DimHandles } from './DimHandles';
 import { useMobile } from '../ui/Mobile';
+import { PRINTERS } from '../wizards/frame';
 
 const DEG = Math.PI / 180;
 const BED = 220;
@@ -905,7 +906,10 @@ function CameraFit() {
     const parts = useStore.getState().parts;
     const box = new THREE.Box3();
     parts.forEach((p) => box.union(worldBox(p)));
-    if (box.isEmpty()) box.set(new THREE.Vector3(-BED / 2, -BED / 2, 0), new THREE.Vector3(BED / 2, BED / 2, 20));
+    if (box.isEmpty()) {
+      const [bw, bd] = useStore.getState().bed;
+      box.set(new THREE.Vector3(-bw / 2, -bd / 2, 0), new THREE.Vector3(bw / 2, bd / 2, 20));
+    }
     const center = box.getCenter(new THREE.Vector3());
     const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 30);
     const dist = radius / Math.sin(((camera as THREE.PerspectiveCamera).fov * DEG) / 2);
@@ -919,7 +923,42 @@ function CameraFit() {
   return null;
 }
 
+/** Name of the bed lying on the scene's floor in front of the bed's front edge (a texture, so it stays put and never covers the model). */
+function BedLabel({ text, y }: { text: string; y: number }) {
+  const tex = useMemo(() => {
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d')!;
+    const font = "700 56px Manrope, system-ui, sans-serif";
+    ctx.font = font;
+    c.width = Math.ceil(ctx.measureText(text).width) + 48;
+    c.height = 84;
+    ctx.font = font;
+    ctx.fillStyle = '#b3b6aa';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 24, 44);
+    const t = new THREE.CanvasTexture(c);
+    t.anisotropy = 8;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [text]);
+  useEffect(() => () => tex.dispose(), [tex]);
+  const h = 16, w = (h * tex.image.width) / tex.image.height;
+  return (
+    <mesh position={[0, y, -0.02]} raycast={noRaycast}>
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={tex} transparent toneMapped={false} depthWrite={false} />
+    </mesh>
+  );
+}
+
+/** The printer's bed (size of the printer picked on the top bar): a plate with a border and its name at the front edge. */
 function Bed() {
+  const printer = useStore((s) => s.printer);
+  const bed = useStore((s) => s.bed);
+  const show = printer !== 'none';
+  const [w, d] = show ? [bed[0], bed[1]] : [BED, BED];
+  const name = PRINTERS[printer]?.label ?? 'własna drukarka';
+  const e = 1.2;
   return (
     <group>
       <Grid
@@ -935,10 +974,26 @@ function Bed() {
         fadeDistance={2000}
         infiniteGrid
       />
-      <mesh position={[0, 0, -0.05]} receiveShadow raycast={noRaycast}>
-        <planeGeometry args={[BED, BED]} />
-        <meshStandardMaterial color="#252628" roughness={1} />
-      </mesh>
+      {show && (
+        <group raycast={noRaycast}>
+          <mesh position={[0, 0, -0.05]} receiveShadow raycast={noRaycast}>
+            <planeGeometry args={[w, d]} />
+            <meshStandardMaterial color="#3a3d34" roughness={1} transparent opacity={0.55} />
+          </mesh>
+          {[
+            [0, -d / 2, w + e, e],
+            [0, d / 2, w + e, e],
+            [-w / 2, 0, e, d + e],
+            [w / 2, 0, e, d + e],
+          ].map(([x, y, sx, sy], i) => (
+            <mesh key={i} position={[x, y, -0.03]} raycast={noRaycast}>
+              <planeGeometry args={[sx, sy]} />
+              <meshBasicMaterial color="#6b7530" toneMapped={false} />
+            </mesh>
+          ))}
+          <BedLabel text={`Stół drukarki: ${name} · ${w} × ${d} mm`} y={-d / 2 - 12} />
+        </group>
+      )}
     </group>
   );
 }
@@ -962,7 +1017,7 @@ export function Viewport() {
     <Canvas
       shadows
       frameloop="demand"
-      camera={{ position: [160, -220, 180], fov: 40, near: 1, far: 10000, up: [0, 0, 1] }}
+      camera={{ position: [125, -175, 140], fov: 40, near: 1, far: 10000, up: [0, 0, 1] }}
       onPointerMissed={(e) => { if (e.button === 0 && !gizmoBusy()) { select(null); pickZone(null); } }}
       gl={{ antialias: true, preserveDrawingBuffer: true, localClippingEnabled: true }}
     >
