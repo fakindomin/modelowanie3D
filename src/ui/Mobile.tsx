@@ -1,3 +1,4 @@
+import { MotionBar } from './MotionBar';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { StateIcon, ToolIcon, type ToolIconId, WizardIcon } from './KindIcons';
 import { Viewport } from '../scene/Viewport';
@@ -60,6 +61,7 @@ export function MobileApp() {
       <MobileBar menu={menu} setMenu={setMenu} />
       <main className="viewport">
         <Viewport />
+        <MotionBar />
         {toast && <div className="toast">{toast}</div>}
         <MeasurePanel />
         <CornerSuggest />

@@ -1,6 +1,6 @@
 import type { CrossSection, Manifold } from 'manifold-3d';
 import { M } from '../geom/manifold';
-import type { ParamDef, Params, PartDef } from './def';
+import type { Motion, ParamDef, Params, PartDef, Zone } from './def';
 import { num, select } from './util';
 import { markOutline, markWidth } from '../lite/mark';
 
@@ -449,6 +449,36 @@ function lidShift(p: Params): number {
   return (-park * Math.min(100, Math.max(0, Number(p.lidOpen ?? 0)))) / 100;   // pokrywa wysuwa się w stronę −X (kanał otwarty z lewej)
 }
 
+/** Ruchome elementy w edytorze: pokrywa (z napisem) i każda szuflada (ze znakiem) osobno. */
+export function pudelkoMotions(p: Params): Motion[] {
+  const L = layout(p), D = drawerPlan(p, L);
+  const out: Motion[] = [{ key: 'lidOpen', label: 'Pokrywa', group: 'Pudełko i pokrywa', pieces: ['pokrywa', 'napis'], move: [lidShift({ ...p, lidOpen: 100 }), 0, 0] }];
+  const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
+  D.bays.forEach(({ xa, xb }, i) =>
+    out.push({ key: i === 0 ? 'drOpen' : 'drOpen2', label: names[i], group: 'Szuflady', pieces: ['szuflady', 'znak'], move: [0, -D.pull, 0], region: [[xa - 0.1, -4, -2], [xb + 0.1, L.Y + 1, D.Hd + 2]] }),
+  );
+  return out;
+}
+
+/** Miejsca w korpusie: gniazda młynka, bibułek i zapalniczki, wnęki szuflad; reszta to pudełko. */
+export function pudelkoZones(p: Params): Zone[] {
+  if (p.piece !== undefined && p.piece !== 'korpus') return [];
+  const L = layout(p), D = drawerPlan(p, L);
+  const { x0, yB0, H, X, Y } = L;
+  const gFloor = L.Z_CH0 - L.gH - GRINDER_GAP;
+  const gX1 = x0 + GRIP_GAP + L.gD + CL + GRIP_GAP, lx0 = gX1 + SEP;
+  const pad = 0.6;
+  const z: Zone[] = [
+    { label: 'Pudełko', group: 'Pudełko i pokrywa', box: [[-5, -5, -5], [X + 5, Y + 5, H + 5]] },
+    { label: 'Gniazdo młynka', group: 'Wnętrze › Młynek', box: [[x0 - pad, yB0 - pad, gFloor - pad], [gX1 + pad, yB0 + L.B_Y + pad, H + 1]] },
+    { label: 'Gniazdo zapalniczki', group: 'Wnętrze › Zapalniczka', box: [[lx0 - pad, yB0 - SEP - pad, L.Z_TOP_ITEMS - L.lT - 5.4 - pad], [lx0 + L.lighterLen + pad, yB0 + L.lW + CL + pad, H + 1]] },
+    { label: 'Szczelina na bibułki', group: 'Wnętrze › Bibułki', box: [[x0 - pad, WALL_Y - pad, L.BOOK_FLOOR - pad], [x0 + L.bookL + CL + pad, WALL_Y + L.A_Y + pad, H + 1]] },
+  ];
+  const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
+  D.bays.forEach(({ xa, xb }, i) => z.push({ label: names[i], group: 'Szuflady', motion: i === 0 ? 'drOpen' : 'drOpen2', box: [[xa - pad, -3, -2], [xb + pad, D.yEnd + pad, D.c + pad]] }));
+  return z;
+}
+
 export function buildPudelko(p: Params): Manifold {
   switch (p.piece) {
     case 'pokrywa': return lidInBox(p).lid.translate([lidShift(p), 0, 0]);
@@ -655,5 +685,7 @@ export const PUDELKO_DEFS: PartDef[] = [
     paramsFor: dynamicParams,
     normalize: repairParams,
     build: buildPudelko,
+    motions: pudelkoMotions,
+    zones: pudelkoZones,
   },
 ];

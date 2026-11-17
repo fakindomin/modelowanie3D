@@ -18,6 +18,7 @@ import { encodeMeshes } from './geom/meshes';
 import type { Part, Project, Tab } from './types';
 import { MobileApp, useMobile } from './ui/Mobile';
 import { ReviewBar, useReview } from './ui/Review';
+import { MotionBar, ZoneTip } from './ui/MotionBar';
 
 function projectOf(): Project {
   const s = useStore.getState();
@@ -363,6 +364,8 @@ export function App() {
         <MeasurePanel />
         <CornerSuggest />
         <ReviewBar />
+        <MotionBar />
+        <ZoneTip />
       </main>
       <Properties />
       <WizardDialog />

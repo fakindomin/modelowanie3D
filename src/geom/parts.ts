@@ -22,9 +22,18 @@ export function texturesOf(part: Part): Texture[] {
   return [...(part.texture ? [part.texture] : []), ...(part.textures ?? [])];
 }
 
+/** Preview motions (a lid slid out) are drawn by moving the closed piece, so the build never sees them. */
+function buildParams(part: Part) {
+  const ms = DEFS[part.type]?.motions?.(part.params);
+  if (!ms?.length) return part.params;
+  const p = { ...part.params };
+  for (const m of ms) delete p[m.key];
+  return p;
+}
+
 function key(part: Part) {
   const tex = texturesOf(part);
-  return part.type + JSON.stringify(part.params) + (tex.length ? JSON.stringify(tex) : '') + (part.edges ? JSON.stringify(part.edges) : '');
+  return part.type + JSON.stringify(buildParams(part)) + (tex.length ? JSON.stringify(tex) : '') + (part.edges ? JSON.stringify(part.edges) : '');
 }
 
 /** Local geometry of a part (centred in X/Y, resting on Z = 0), cached per type + params. */
@@ -35,7 +44,7 @@ export function built(part: Part): Built {
     let manifold: Manifold;
     let bad = false;
     try {
-      manifold = DEFS[part.type].build(part.params);
+      manifold = DEFS[part.type].build(buildParams(part));
       if (!part.hole)
         for (const t of texturesOf(part)) {
           try {
@@ -63,7 +72,9 @@ export function built(part: Part): Built {
     cache.set(k, b);
     if (cache.size > 400) {
       const first = cache.keys().next().value!;
-      cache.get(first)!.geometry.dispose();
+      const old = cache.get(first)!;
+      segCache.get(old)?.forEach((g) => g.geometry !== old.geometry && g.geometry.dispose());
+      old.geometry.dispose();
       cache.delete(first);
     }
   }
@@ -163,5 +174,41 @@ export function buildBodies(parts: Part[], only?: number[]): BodyResult[] {
     if (xform) step((m) => applyXform(m, xform), 'xform');
     out.push({ body, manifold: result, geometry: toGeometry(result), color: solids[0].color });
   }
+  return out;
+}
+
+/** One drawn piece of a part: the part's geometry, or (with preview motions) the part split into what moves and what stays. */
+export interface Segment {
+  geometry: THREE.BufferGeometry;
+  /** Key of the motion moving it, or null. */
+  motion: string | null;
+  move: [number, number, number];
+}
+
+const segCache = new WeakMap<Built, Segment[]>();
+
+/** The part as drawn pieces: a lid moves whole, two drawers of one piece move each on its own. */
+export function segments(part: Part): Segment[] {
+  const b = built(part);
+  const hit = segCache.get(b);
+  if (hit) return hit;
+  const ms = b.failed ? [] : (DEFS[part.type]?.motions?.(part.params) ?? []).filter((m) => m.pieces.includes(String(part.params.piece ?? '')));
+  let out: Segment[];
+  if (!ms.length) out = [{ geometry: b.geometry, motion: null, move: [0, 0, 0] }];
+  else if (!ms.some((m) => m.region)) out = [{ geometry: b.geometry, motion: ms[0].key, move: ms[0].move }];
+  else {
+    out = [];
+    const boxes = ms.map((m) => M().Manifold.cube([m.region![1][0] - m.region![0][0], m.region![1][1] - m.region![0][1], m.region![1][2] - m.region![0][2]]).translate(m.region![0]));
+    ms.forEach((m, i) => {
+      const part = b.manifold.intersect(boxes[i]);
+      if (!part.isEmpty()) out.push({ geometry: toGeometry(part), motion: m.key, move: m.move });
+      part.delete();
+    });
+    const rest = b.manifold.subtract(M().Manifold.union(boxes));
+    if (!rest.isEmpty()) out.push({ geometry: toGeometry(rest), motion: null, move: [0, 0, 0] });
+    rest.delete();
+    boxes.forEach((x) => x.delete());
+  }
+  segCache.set(b, out);
   return out;
 }

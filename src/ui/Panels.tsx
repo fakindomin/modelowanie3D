@@ -25,6 +25,7 @@ import { runProjectItem } from './runItem';
 import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../simple';
 import { PRINTERS } from '../wizards/frame';
 import { groupFields, shortLabel, type FieldGroup } from './paramGroups';
+import { motionsOf, useMotion } from './motion';
 
 const XMAS_ICON: Record<string, string> = { etykieta: 'xmasLabel', czubek: 'xmasTopper', foremka: 'xmasCutter', taca: 'xmasTray' };
 type LibMode = 'projects' | 'parts';
@@ -1244,7 +1245,9 @@ function PartProperties({ part }: { part: Part }) {
   const patterned = part.pattern ? st.parts.filter((p) => p.pattern?.id === part.pattern!.id && p.id !== part.id).length : 0;
   const pieces = part.rigid ? st.parts.filter((p) => p.rigid === part.rigid).length : 1;
   const [height, setHeight] = useState(150);
-  const fields = paramsOf(def, part.params).filter((p) => !p.show || p.show(part.params));
+  // Moving elements (lid, drawers) are shown with the bar under the model, not as sizes.
+  const moving = new Set(motionsOf(part).map((m) => m.key));
+  const fields = paramsOf(def, part.params).filter((p) => (!p.show || p.show(part.params)) && !moving.has(p.key));
   const ends = fields.filter((p) => p.end && p.type === 'select');
   const main = fields.filter((p) => !p.end && !isMore(p));
   const more = fields.filter((p) => !p.end && isMore(p));
@@ -1564,43 +1567,70 @@ export function PrinterPicker() {
   );
 }
 
-/** The sizes of a model in named, foldable groups (folding is remembered per model and group). */
+const focusDone = { n: 0 };
+
+/**
+ * The sizes of a model in named, foldable groups: one group open at a time (opening another closes it), remembered per
+ * model. A click on a place of the model (a drawer, the grinder socket) opens its group and shows it.
+ */
 function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]; field: (p: ParamDef, sub?: string | null) => React.ReactNode }) {
-  const KEY = 'modelowanie3d.dimGroups';
-  const [closed, setClosed] = useState<string[]>(() => {
+  const KEY = 'modelowanie3d.dimOpen';
+  const read = (): Record<string, string | null> => {
     try {
-      return JSON.parse(localStorage.getItem(KEY) ?? '[]');
+      return JSON.parse(localStorage.getItem(KEY) ?? '{}');
     } catch {
-      return [];
+      return {};
     }
-  });
-  const toggle = (id: string, open: boolean) => {
-    const next = open ? closed.filter((x) => x !== id) : [...new Set([...closed, id])];
-    setClosed(next);
+  };
+  const [openMap, setOpenMap] = useState<Record<string, string | null>>(read);
+  const open = type in openMap ? openMap[type] : (groups[0]?.name ?? null);
+  const setOpen = (name: string | null) => {
+    const next = { ...openMap, [type]: name };
+    setOpenMap(next);
     try {
       localStorage.setItem(KEY, JSON.stringify(next));
     } catch {
       /* not stored */
     }
   };
+  const focus = useMotion((s) => s.focus);
+  const [lit, setLit] = useState<{ g: string; s: string | null } | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The click may also pick another piece, so the panel opens anew: the request waits until a panel takes it.
+    if (!focus || focus.n === focusDone.n) return;
+    focusDone.n = focus.n;
+    const [top, sub = null] = focus.group.split('›').map((x) => x.trim());
+    if (!groups.some((g) => g.name === top)) return;
+    setOpen(top);
+    setLit({ g: top, s: sub });
+    const t = setTimeout(() => setLit(null), 1600);
+    requestAnimationFrame(() => {
+      const el = root.current?.querySelector(sub ? `[data-sub="${CSS.escape(top + '/' + sub)}"]` : `[data-group="${CSS.escape(top)}"]`);
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    return () => clearTimeout(t);
+  }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="dim-groups">
-      {groups.map((g) => {
-        const id = `${type}/${g.name}`;
-        return (
-          <details key={g.name} className="dim-group" open={!closed.includes(id)} onToggle={(e) => toggle(id, (e.currentTarget as HTMLDetailsElement).open)}>
-            <summary>
-              {g.name} <span className="count">{g.count}</span>
-            </summary>
-            {g.subs.map((s) => (
-              <div key={s.name ?? ''} className={s.name ? 'dim-sub' : undefined}>
-                {s.name && <h5>{s.name}</h5>}
-                {s.fields.map((p) => field(p, s.name ?? g.name))}
-              </div>
-            ))}
-          </details>
-        );
-      })}
+    <div className="dim-groups" ref={root}>
+      {groups.map((g) => (
+        <details key={g.name} data-group={g.name} className={lit?.g === g.name && !lit.s ? 'dim-group focus' : 'dim-group'} open={open === g.name}>
+          <summary
+            onClick={(e) => {
+              e.preventDefault();
+              setOpen(open === g.name ? null : g.name);
+            }}
+          >
+            {g.name} <span className="count">{g.count}</span>
+          </summary>
+          {g.subs.map((s) => (
+            <div key={s.name ?? ''} data-sub={`${g.name}/${s.name ?? ''}`} className={s.name ? (lit?.g === g.name && lit.s === s.name ? 'dim-sub focus' : 'dim-sub') : undefined}>
+              {s.name && <h5>{s.name}</h5>}
+              {s.fields.map((p) => field(p, s.name ?? g.name))}
+            </div>
+          ))}
+        </details>
+      ))}
     </div>
   );
 }

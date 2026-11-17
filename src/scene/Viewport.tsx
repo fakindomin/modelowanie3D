@@ -4,7 +4,8 @@ import { Edges, GizmoHelper, GizmoViewport, Grid, Html, OrbitControls, Transform
 import * as THREE from 'three';
 import { DEFS } from '../catalog';
 import { assembly, bodyBox, groupBody, groupId, isLocked, useStore } from '../store';
-import { built, buildBodies, partMatrix, worldBox, type BodyResult } from '../geom/parts';
+import { built, buildBodies, partMatrix, segments, worldBox, type BodyResult } from '../geom/parts';
+import { focusGroup, hoverZone, rigOf, useMotion, zoneAt, motionsOf, type ZoneHover } from '../ui/motion';
 import { finishing, warped } from '../geom/modify';
 import { moverFor, snapMover, snapPosition } from '../geom/snap';
 import type { Part, TextureFace, Vec3 } from '../types';
@@ -63,36 +64,69 @@ function shownCut(parts: Part[]): Set<number> {
 }
 
 function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolean }) {
-  const { geometry } = built(part);
+  const segs = segments(part);
+  const rig = rigOf(part);
+  const shown = useMotion((s) => s.shown[rig]);
+  const zh = useMotion((s) => (s.hover && s.hover.rig === rig ? s.hover : null));
   const sec = useSection();
-  const heavy = geometry.attributes.position.count > EDGE_LIMIT;
-  const edge = heavy ? null : look.selected ? '#ffffff' : look.snap ? '#8a9440' : look.hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
-  const tint = look.selected && heavy ? '#5a3c22' : look.hovered ? '#3e3a36' : '#000000';
+  const zoned = !!(DEFS[part.type]?.motions || DEFS[part.type]?.zones);
+  // A model with named places outlines the place under the pointer, not the whole piece.
+  const hovered = look.hovered && !(zoned && zh && (zh.box || zh.motion));
   return (
     <group name={part.id} position={part.position} rotation={part.rotation.map((r) => r * DEG) as Vec3}>
-      <mesh geometry={geometry} castShadow={!part.hole} receiveShadow renderOrder={part.hole ? 2 : 1} userData={{ pick: part.id }}>
-        {part.hole ? (
-          <meshStandardMaterial color={look.hovered || look.selected ? '#d6d8da' : part.color} transparent opacity={ghost ? (look.hovered || look.selected ? 0.3 : 0.1) : look.hovered ? 0.6 : 0.42} depthWrite={false} roughness={0.6} />
-        ) : (
-          <meshStandardMaterial
-            key={part.noPrint ? 'off' : 'on'}
-            color={part.color}
-            roughness={0.55}
-            metalness={0.05}
-            emissive={tint}
-            emissiveIntensity={tint === '#000000' ? 0 : 0.55}
-            // Switched off with „drukuj”: see-through, so it is clear it will not be printed.
-            transparent={!!part.noPrint}
-            opacity={part.noPrint ? 0.22 : 1}
-            depthWrite={!part.noPrint}
-            clippingPlanes={sec.planes}
-            side={sec.side}
-          />
-        )}
-        {edge && !sec.planes && <Edges threshold={20} color={edge} lineWidth={look.selected ? 2 : 1.5} />}
-        {!edge && ghost && !heavy && <Edges threshold={20} color="#8b939e" lineWidth={1} />}
-      </mesh>
+      {segs.map((sg, i) => {
+        const { geometry } = sg;
+        const heavy = geometry.attributes.position.count > EDGE_LIMIT;
+        const zone = !!(zh && sg.motion && zh.motion === sg.motion);
+        const edge = heavy ? null : zone ? '#ff7a2e' : look.selected ? '#ffffff' : look.snap ? '#8a9440' : hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
+        const tint = zone && heavy ? '#7a3a12' : look.selected && heavy ? '#5a3c22' : hovered ? '#3e3a36' : '#000000';
+        const v = sg.motion ? (shown?.[sg.motion] ?? 0) : 0;
+        const at: Vec3 = [sg.move[0] * v, sg.move[1] * v, sg.move[2] * v];
+        return (
+          <mesh key={i} position={at} geometry={geometry} castShadow={!part.hole} receiveShadow renderOrder={part.hole ? 2 : 1} userData={{ pick: part.id, seg: sg.motion }}>
+            {part.hole ? (
+              <meshStandardMaterial color={look.hovered || look.selected ? '#d6d8da' : part.color} transparent opacity={ghost ? (look.hovered || look.selected ? 0.3 : 0.1) : look.hovered ? 0.6 : 0.42} depthWrite={false} roughness={0.6} />
+            ) : (
+              <meshStandardMaterial
+                key={part.noPrint ? 'off' : 'on'}
+                color={part.color}
+                roughness={0.55}
+                metalness={0.05}
+                emissive={tint}
+                emissiveIntensity={tint === '#000000' ? 0 : 0.55}
+                // Switched off with „drukuj”: see-through, so it is clear it will not be printed.
+                transparent={!!part.noPrint}
+                opacity={part.noPrint ? 0.22 : 1}
+                depthWrite={!part.noPrint}
+                clippingPlanes={sec.planes}
+                side={sec.side}
+              />
+            )}
+            {edge && !sec.planes && <Edges threshold={20} color={edge} lineWidth={zone || look.selected ? 2 : 1.5} />}
+            {!edge && ghost && !heavy && <Edges threshold={20} color="#8b939e" lineWidth={1} />}
+          </mesh>
+        );
+      })}
+      {zh && zh.part === part.id && zh.box && <ZoneBox box={zh.box} />}
     </group>
+  );
+}
+
+/** Outline of a named place of the model (a grinder socket) under the pointer. */
+function ZoneBox({ box }: { box: [Vec3, Vec3] }) {
+  const geo = useMemo(() => {
+    const [a, b] = box;
+    const g = new THREE.BoxGeometry(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+    const e = new THREE.EdgesGeometry(g);
+    g.dispose();
+    return e;
+  }, [box]);
+  useEffect(() => () => geo.dispose(), [geo]);
+  return (
+    <lineSegments geometry={geo} raycast={noRaycast} renderOrder={10}>
+      <lineBasicMaterial color="#ff7a2e" depthTest={false} transparent opacity={0.9} />
+    </lineSegments>
   );
 }
 
@@ -206,6 +240,28 @@ function candidates(e: ThreeEvent<PointerEvent>): string[] {
   const isHole = (id: string) => byId.get(id)?.hole === true;
   const preferred = hits.filter((h) => isHole(h.id) && bodyOf(h.id) === front);
   return [...preferred.map((h) => h.id), ...hits.filter((h) => !preferred.includes(h)).map((h) => h.id)];
+}
+
+/** The named place (or moving element) of the model under the pointer, from the first surface hit. */
+function zoneHit(e: ThreeEvent<PointerEvent>): ZoneHover | null {
+  const it = e.intersections.find((i) => i.object instanceof THREE.Mesh && i.object.userData.pick !== undefined);
+  if (!it) return null;
+  const part = useStore.getState().parts.find((p) => p.id === it.object.userData.pick);
+  const def = part && DEFS[part.type];
+  if (!part || !def || !(def.motions || def.zones)) return null;
+  const x = e.nativeEvent.clientX, y = e.nativeEvent.clientY;
+  const seg = it.object.userData.seg as string | null;
+  if (seg) {
+    const m = motionsOf(part).find((q) => q.key === seg);
+    if (m) return { part: part.id, rig: rigOf(part), label: m.label, group: m.group, motion: m.key, box: null, x, y };
+  }
+  const l = it.object.worldToLocal(it.point.clone());
+  const z = zoneAt(part, [l.x, l.y, l.z]);
+  if (!z) return null;
+  // The catch-all place (the whole box) outlines the piece itself.
+  const bb = built(part).box;
+  const whole = z.box[0].every((v, i) => v <= bb.min.getComponent(i)) && z.box[1].every((v, i) => v >= bb.max.getComponent(i));
+  return { part: part.id, rig: rigOf(part), label: z.label, group: z.group, motion: z.motion ?? null, box: whole ? null : z.box, x, y };
 }
 
 let cancelDrag = () => {};
@@ -355,6 +411,8 @@ function Scene() {
     setTimeout(() => (gizmo.pick = null), 0);
     const target = sel && cands.includes(sel) ? sel : cands[0];
     st.select(target);
+    const zh = zoneHit(e);
+    if (zh) focusGroup(zh.group);
     // Ready-made models stay where they are: a click only picks (sizes change with the handles and the panel).
     if (FIXED) return;
     if (isLocked(st.parts, target)) return;
@@ -424,6 +482,7 @@ function Scene() {
     const cands = candidates(e);
     const sel = useStore.getState().selectedId;
     useStore.getState().setHover(cands.length ? (sel && cands.includes(sel) ? sel : cands[0]) : null);
+    hoverZone(zoneHit(e));
   };
 
   const multi = useStore((s) => s.multi);
@@ -446,6 +505,7 @@ function Scene() {
       onPointerMove={onMove}
       onPointerOut={() => {
         useStore.getState().setHover(null);
+        hoverZone(null);
         useStore.getState().setMeasureHover(null);
       }}
     >

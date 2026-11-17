@@ -38,6 +38,30 @@ export interface PieceDef {
   printWith?: string;
 }
 
+/** A moving element shown in the editor (a lid sliding out, a drawer): only a preview, the print stays closed. */
+export interface Motion {
+  /** Parameter of the model that held this preview before (kept for other pages); the editor builds it closed. */
+  key: string;
+  label: string;
+  /** Group of sizes in the panel that belongs to this element (clicking it opens that group). */
+  group: string;
+  /** Pieces that move. */
+  pieces: string[];
+  /** Travel at 100 %, in the part's own frame (mm). */
+  move: Vec3;
+  /** Only this box of the piece moves (two drawers printed as one piece). */
+  region?: [Vec3, Vec3];
+}
+
+/** A named place on the model (a grinder socket): hover shows its name, a click opens its group of sizes. */
+export interface Zone {
+  label: string;
+  group: string;
+  box: [Vec3, Vec3];
+  /** Hovering it slides this element out (a drawer's bay). */
+  motion?: string;
+}
+
 export interface PartDef {
   type: string;
   label: string;
@@ -62,4 +86,8 @@ export interface PartDef {
   notes?: (p: Params) => { level: 'ok' | 'warn' | 'error'; text: string }[];
   /** Where the letters of the ends (A, B…) stand on the built part, in its own frame (bb = built box). */
   endMarks?: (p: Params, bb: THREE.Box3) => { l: string; at: Vec3 }[];
+  /** Moving elements, previewed with the bar under the model. */
+  motions?: (p: Params) => Motion[];
+  /** Named places of each piece (in the piece's built frame), for hover names and clicks. */
+  zones?: (p: Params) => Zone[];
 }

@@ -923,3 +923,24 @@ button > .sicon:only-child { display: block; margin: auto; }
 .facesel-head .kicon, .field > span .kicon { margin-right: 6px; color: var(--army-text, currentColor); }
 .tex-slot .chip .kicon { margin-left: 4px; }
 .linkbar .kicon { flex: none; }
+
+/* Pasek ruchu pod modelem (pokrywa, szuflady): tylko podgląd w edytorze. */
+.motion-bar { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
+  width: max-content; max-width: calc(100% - 24px); padding: 8px 12px; background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line); border-top: 2px solid var(--army, #6b7530); box-shadow: 0 8px 24px #0007; }
+.motion-bar .mb-play { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: var(--on-accent); border: 0; border-radius: 50%; cursor: pointer; }
+.motion-bar .mb-play:hover { filter: brightness(1.1); }
+.motion-bar .mb-main { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+.motion-bar .mb-main input { width: 180px; }
+.motion-bar .mb-main output { min-width: 3.2em; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
+.motion-bar .mb-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.motion-bar .mb-chip { padding: 5px 10px; font-size: 12.5px; background: var(--gray-3, #2e312a); border: 1px solid var(--gray-1, #4a4e44); color: var(--text); cursor: pointer; }
+.motion-bar .mb-chip:hover { border-color: var(--army-text, #a3ad6a); }
+.motion-bar .mb-chip.on { background: var(--army, #6b7530); border-color: var(--army, #6b7530); color: var(--on-army, #eef0e2); }
+.motion-bar .mb-note { font-size: 11px; color: var(--muted); }
+.zone-tip { position: fixed; z-index: 40; pointer-events: none; padding: 5px 9px; background: var(--panel-2); border: 1px solid var(--accent); border-left: 3px solid var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; box-shadow: 0 6px 18px #0008; }
+.zone-tip small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.dim-group.focus > summary { color: var(--accent); }
+.dim-sub.focus { outline: 1px solid var(--accent); outline-offset: 4px; }
+.app.mobile .motion-bar { bottom: 10px; gap: 8px; padding: 6px 8px; }
+.app.mobile .motion-bar .mb-main input { width: 120px; }
+.app.mobile .motion-bar .mb-note { display: none; }
