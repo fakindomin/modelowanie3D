@@ -90,8 +90,8 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
         const heavy = geometry.attributes.position.count > EDGE_LIMIT;
         const segKey = w ? w.key : sg.motion;
         const zone = !!segKey && (hov?.motion === segKey || picked?.motion === segKey);
-        // A picked or pointed place of a model with named places is the only thing lit (no outline of the piece or its set).
-        const quiet = zoned && !!zh;
+        // In a model with named places only the pointed or clicked place is lit, never the whole piece or its set.
+        const quiet = zoned;
         const edge = heavy ? null : zone ? '#ff7a2e' : quiet ? null : look.selected ? '#ffffff' : look.snap ? '#8a9440' : hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
         const tint = zone && heavy ? '#7a3a12' : quiet ? '#000000' : look.selected && heavy ? '#5a3c22' : hovered ? '#3e3a36' : '#000000';
         const pose = sg.m ? motionPose(sg.m, shown?.[sg.m.key] ?? 0) : null;
