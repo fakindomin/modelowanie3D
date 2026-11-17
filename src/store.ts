@@ -316,7 +316,22 @@ function mates(parts: Part[], part: Part) {
 }
 
 function sanitize(parts: unknown): Part[] {
-  return Array.isArray(parts) ? (parts as Part[]).filter((x) => x && DEFS[x.type]) : [];
+  return addMissingPieces(Array.isArray(parts) ? (parts as Part[]).filter((x) => x && DEFS[x.type]) : []);
+}
+
+/** A model saved before it got a new printed piece (the accessory box's tamper) gets that piece on opening. */
+function addMissingPieces(parts: Part[]): Part[] {
+  let next = parts;
+  const sets = new Map<string, Part[]>();
+  for (const p of parts) if (p.rigid && p.type !== 'figurine' && DEFS[p.type].pieces?.every((q) => q.body === 'new' && !q.hole)) sets.set(p.rigid, [...(sets.get(p.rigid) ?? []), p]);
+  for (const group of sets.values()) {
+    const def = DEFS[group[0].type];
+    const have = new Set(group.map((p) => String(p.params.piece)));
+    const base = group[0].name.replace(/:[^:]*$/, '');
+    for (const piece of def.pieces!.filter((q) => !have.has(q.value)))
+      next = [...next, { ...group[0], id: uid(), name: `${base}: ${piece.label}`, params: { ...group[0].params, piece: piece.value }, body: nextBody(next), color: PALETTE[(next.length + 1) % PALETTE.length], merged: false, texture: undefined, textures: undefined, noPrint: undefined, hidden: undefined }];
+  }
+  return next;
 }
 
 function loadSaved(): { tech: Part[]; fig: Part[] } {

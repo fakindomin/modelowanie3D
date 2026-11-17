@@ -320,6 +320,23 @@ export function drawers(p: Params): Manifold | null {
   return U(parts);
 }
 
+// ---------- ubijak ----------
+/** Oś ubijaka w lewym przednim narożniku (jak w v11). */
+const tamperAxis = (L: Lay) => ({ TZ_AX: L.Z_CH0 - 14.0, TX_AX: 4.2, T_Y0: 0.2 });
+
+/** Ubijak (osobny wydruk) w złożeniu: rączka = wycinek obrysu z żebrami (równo z korpusem) + trzpień ø5 w tulei, magnes od +X. */
+export function tamper(p: Params): Manifold {
+  const L = layout(p);
+  const { TZ_AX, TX_AX, T_Y0 } = tamperAxis(L);
+  const rp = TAMP_PIN_D / 2, PIN_Z = TZ_AX - 1.0;
+  const z0 = TZ_AX - TAMP_SQ / 2, z1 = TZ_AX + TAMP_SQ / 2;
+  const x1 = TX_AX + TAMP_SQ / 2, y1 = T_Y0 + TAMP_HANDLE_L;
+  const plug = ext(outline(L.X, L.Y), z0, z1).intersect(bb(-2.0, x1, -2.0, y1, z0 - 1, z1 + 1));
+  const ya = y1 - 1.0, yTip = T_Y0 + TAMPER_L;
+  const pin = U([cylYa(TX_AX, PIN_Z, rp, ya, yTip - 0.4), Mf().cylinder(0.4, rp, rp - 0.4, 48).rotate([-90, 0, 0]).translate([TX_AX, yTip - 0.4, PIN_Z])]);
+  return U([plug, pin]).subtract(cylXa(T_Y0 + TAMP_HANDLE_L / 2, TZ_AX, MAG_R, x1 - MAG_T - 0.2, x1 + 0.1));
+}
+
 // ---------- korpus ----------
 export function korpus(p: Params): Manifold {
   const L = layout(p);
@@ -341,7 +358,7 @@ export function korpus(p: Params): Manifold {
   const lx0 = gX1 + SEP;
   cut.push(bb(lx0, lx0 + L.lighterLen, yB0, yB0 + lW + CL, Z_TOP_ITEMS - lT - 0.4, Z_CH0 + EPS));
   // ubijak (lewy przód)
-  const TZ_AX = Z_CH0 - 14.0, TX_AX = 4.2, T_Y0 = 0.2;
+  const { TZ_AX, TX_AX, T_Y0 } = tamperAxis(L);
   const seatH = TAMP_SQ + 0.4;
   cut.push(bb(-1.5, TX_AX + TAMP_SQ / 2 + 0.2, -1.5, T_Y0 + TAMP_HANDLE_L + 0.2, TZ_AX - seatH / 2, TZ_AX + seatH / 2));
   const PIN_Z = TZ_AX - 1.0;
@@ -452,10 +469,15 @@ function lidShift(p: Params): number {
 /** Ruchome elementy w edytorze: pokrywa (z napisem) i każda szuflada (ze znakiem) osobno. */
 export function pudelkoMotions(p: Params): Motion[] {
   const L = layout(p), D = drawerPlan(p, L);
-  const out: Motion[] = [{ key: 'lidOpen', label: 'Pokrywa', group: 'Pudełko i pokrywa', pieces: ['pokrywa', 'napis'], move: [lidShift({ ...p, lidOpen: 100 }), 0, 0] }];
+  const park = -lidShift({ ...p, lidOpen: 100 });
+  // 100 % = do magnesów (pozycja robocza); dalej można wyjąć element całkiem z pudełka (widać gniazda magnesów).
+  const out: Motion[] = [
+    { key: 'lidOpen', label: 'Pokrywa', group: 'Pudełko i pokrywa', pieces: ['pokrywa', 'napis'], move: [-park, 0, 0], max: (L.X + 15) / park },
+    { key: 'tamperOut', label: 'Ubijak', group: 'Pudełko i pokrywa', pieces: ['ubijak'], move: [0, -(TAMPER_L + 15), 0], max: 1 },
+  ];
   const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
   D.bays.forEach(({ xa, xb }, i) =>
-    out.push({ key: i === 0 ? 'drOpen' : 'drOpen2', label: names[i], group: 'Szuflady', pieces: ['szuflady', 'znak'], move: [0, -D.pull, 0], region: [[xa - 0.1, -4, -2], [xb + 0.1, L.Y + 1, D.Hd + 2]] }),
+    out.push({ key: i === 0 ? 'drOpen' : 'drOpen2', label: names[i], group: 'Szuflady', pieces: ['szuflady', 'znak'], move: [0, -D.pull, 0], max: (D.Ld + 15) / Math.max(1, D.pull), region: [[xa - 0.1, -4, -2], [xb + 0.1, L.Y + 1, D.Hd + 2]] }),
   );
   return out;
 }
@@ -489,6 +511,8 @@ export function pudelkoZones(p: Params): Zone[] {
     { label: 'Gniazdo zapalniczki', group: 'Wnętrze › Zapalniczka', box: [[lx0 - pad, yB0 - SEP - pad, L.Z_TOP_ITEMS - L.lT - 5.4 - pad], [lx0 + L.lighterLen + pad, yB0 + L.lW + CL + pad, H + 1]], solid: lighter },
     { label: 'Szczelina na bibułki', group: 'Wnętrze › Bibułki', box: [[x0 - pad, WALL_Y - pad, L.BOOK_FLOOR - pad], [x0 + L.bookL + CL + pad, WALL_Y + L.A_Y + pad, H + 1]], solid: books },
   ];
+  const T = tamperAxis(L);
+  z.push({ label: 'Ubijak', group: 'Pudełko i pokrywa', motion: 'tamperOut', box: [[-2, -2, T.TZ_AX - 5], [T.TX_AX + TAMP_SQ / 2 + 2.6, T.T_Y0 + TAMPER_L + 1, T.TZ_AX + 5]] });
   const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
   D.bays.forEach(({ xa, xb }, i) => z.push({ label: names[i], group: 'Szuflady', motion: i === 0 ? 'drOpen' : 'drOpen2', box: [[xa - pad, -3, -2], [xb + pad, D.yEnd + pad, D.c + pad]] }));
   return z;
@@ -500,6 +524,7 @@ export function buildPudelko(p: Params): Manifold {
     case 'napis': return (lidInBox(p).text ?? Mf().cube([0.01, 0.01, 0.01]).translate([0, 0, layout(p).Z_LID0])).translate([lidShift(p), 0, 0]);
     case 'szuflady': return drawers(p) ?? Mf().cube([0.01, 0.01, 0.01]);
     case 'znak': return drawerMarks(p) ?? Mf().cube([0.01, 0.01, 0.01]);
+    case 'ubijak': return tamper(p);
     default: return korpus(p);
   }
 }
@@ -693,6 +718,7 @@ export const PUDELKO_DEFS: PartDef[] = [
       { value: 'napis', label: 'napis (inny kolor)', hole: false, body: 'new', printWith: 'pokrywa' },
       { value: 'szuflady', label: 'szuflady', hole: false, body: 'new' },
       { value: 'znak', label: 'znak f (inny kolor)', hole: false, body: 'new', printWith: 'szuflady' },
+      { value: 'ubijak', label: 'ubijak', hole: false, body: 'new' },
     ],
     notes: pudelkoNotes,
     printTurn: (p) => (p.piece === 'pokrywa' || p.piece === 'napis' ? [0, 180] : null),

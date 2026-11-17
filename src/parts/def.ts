@@ -47,8 +47,10 @@ export interface Motion {
   group: string;
   /** Pieces that move. */
   pieces: string[];
-  /** Travel at 100 %, in the part's own frame (mm). */
+  /** Travel at 100 % (the working stop, e.g. on the magnets), in the part's own frame (mm). */
   move: Vec3;
+  /** How far past 100 % it can go (taken right out of the box), as a multiple of `move`; default 1. */
+  max?: number;
   /** Only this box of the piece moves (two drawers printed as one piece). */
   region?: [Vec3, Vec3];
 }

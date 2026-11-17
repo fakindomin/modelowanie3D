@@ -299,7 +299,7 @@ function zoneHit(e: ThreeEvent<PointerEvent>): ZoneHover | null {
 
 let cancelDrag = () => {};
 /** Sliding a picked lid or drawer with the pointer: screen travel `sv` (px) is 100 %. */
-let mdrag: { rig: string; key: string; start: number; sv: THREE.Vector2; x0: number; y0: number } | null = null;
+let mdrag: { rig: string; key: string; start: number; max: number; sv: THREE.Vector2; x0: number; y0: number } | null = null;
 
 interface Drag {
   /** Part id, or group id for a whole body. */
@@ -332,7 +332,7 @@ function Scene() {
       if (mdrag) {
         const md = mdrag;
         const t = md.start + ((ev.clientX - md.x0) * md.sv.x + (ev.clientY - md.y0) * md.sv.y) / md.sv.lengthSq();
-        setMotion(md.rig, { [md.key]: Math.min(1, Math.max(0, t)) });
+        setMotion(md.rig, { [md.key]: Math.min(md.max, Math.max(0, t)) });
         return;
       }
       const d = drag.current;
@@ -475,7 +475,7 @@ function Scene() {
         };
         const sv = scr(b).sub(scr(a));
         if (sv.lengthSq() > 25) {
-          mdrag = { rig: zh.rig, key: m.key, start: useMotion.getState().base[zh.rig]?.[m.key] ?? 0, sv, x0: e.nativeEvent.clientX, y0: e.nativeEvent.clientY };
+          mdrag = { rig: zh.rig, key: m.key, start: useMotion.getState().base[zh.rig]?.[m.key] ?? 0, max: m.max ?? 1, sv, x0: e.nativeEvent.clientX, y0: e.nativeEvent.clientY };
           if (controls) (controls as unknown as { enabled: boolean }).enabled = false;
           return;
         }

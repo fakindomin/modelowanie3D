@@ -24,7 +24,7 @@ export function MotionBar() {
   if (!part || preview) return null;
   const ms = motionsOf(part);
   const keys = ms.map((m) => m.key);
-  const all = Math.round((keys.reduce((a, k) => a + (shown?.[k] ?? 0), 0) / keys.length) * 100);
+  const all = Math.round((keys.reduce((a, k) => a + Math.min(1, shown?.[k] ?? 0), 0) / keys.length) * 100);
   const set = (v: number) => setMotion(rig, Object.fromEntries(keys.map((k) => [k, v])));
   return (
     <div className="motion-bar" onPointerDown={(e) => e.stopPropagation()}>
@@ -66,6 +66,16 @@ export function MotionBar() {
           );
         })}
       </div>
+      <button
+        className="mb-chip mb-out"
+        title="Wyjmij wszystko z pudełka (widać gniazda magnesów)"
+        onClick={() => {
+          const out = ms.every((m) => (base?.[m.key] ?? 0) >= (m.max ?? 1));
+          setMotion(rig, Object.fromEntries(ms.map((m) => [m.key, out ? 0 : (m.max ?? 1)])), true);
+        }}
+      >
+        {ms.every((m) => (base?.[m.key] ?? 0) >= (m.max ?? 1)) ? 'Włóż' : 'Wyjmij'}
+      </button>
       <span className="mb-note">tylko podgląd, wydruk bez zmian</span>
     </div>
   );

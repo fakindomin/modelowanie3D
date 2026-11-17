@@ -48,7 +48,7 @@ function resize() {
 new ResizeObserver(resize).observe(stage); resize();
 (function loop() { orbit.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
 
-const COLORS: Record<string, string> = { korpus: '--oak', pokrywa: '--lidc', szuflady: '--drw', napis: '--ink3d', znak: '--ink3d' };
+const COLORS: Record<string, string> = { korpus: '--oak', pokrywa: '--lidc', szuflady: '--drw', napis: '--ink3d', znak: '--ink3d', ubijak: '--drw' };
 const meshes = new Map<string, THREE.Mesh>();
 const cache = new Map<string, string>();
 const OPENS: Record<string, string[]> = { pokrywa: ['lidOpen'], napis: ['lidOpen'], szuflady: ['drOpen', 'drOpen2'], znak: ['drOpen', 'drOpen2'] };
