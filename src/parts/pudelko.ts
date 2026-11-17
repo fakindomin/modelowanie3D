@@ -2,6 +2,7 @@ import type { CrossSection, Manifold } from 'manifold-3d';
 import { M } from '../geom/manifold';
 import type { Motion, ParamDef, Params, PartDef, Zone } from './def';
 import { num, select } from './util';
+import { textOutline } from './text';
 import { markOutline, markWidth } from '../lite/mark';
 
 /**
@@ -168,6 +169,22 @@ function textShape(s: string, height: number, spacing = 2.0): CrossSection {
   }
   const k = height / 10;
   return C().union(parts).scale([k, k]);
+}
+
+const SQUARE = new Set(['F', 'K', 'N', 'D', 'M']);
+/**
+ * Napis na pokrywie: litery F K N D M kwadratową czcionką z v11, każdy inny tekst czcionką bezszeryfową (pogrubioną).
+ * Za długi napis zmniejsza się tak, by zmieścił się między gniazdami magnesów.
+ */
+function lidLetters(p: Params, lxa: number, lxb: number, yc: number): CrossSection | null {
+  const txt = String(p.lidText ?? TEXT).trim();
+  if (!txt) return null;
+  let cs = [...txt].every((c) => SQUARE.has(c)) ? textShape(txt, TEXT_H_LID) : textOutline(txt, 'sans-bold', TEXT_H_LID, 0.8);
+  if (!cs) return null;
+  const b = cs.bounds(), w = b.max[0] - b.min[0];
+  const room = lxb - lxa - 2 * (WALL_L + 4);
+  if (w > room) cs = cs.scale([room / w, room / w]);
+  return centered(cs, (lxa + lxb) / 2, yc);
 }
 
 /** Kształt przesunięty tak, by jego środek (bbox) był w (cx, cy). */
@@ -455,7 +472,8 @@ export function lidInBox(p: Params): LidParts {
   const mode = String(p.textMode);
   if (mode === 'none') return { lid, text: null };
   const td = mode === 'engrave' ? TEXT_DEPTH_BOT : val(p, 'textDepth');
-  const letters = centered(textShape(TEXT, TEXT_H_LID), (lxa + lxb) / 2, yc);
+  const letters = lidLetters(p, lxa, lxb, yc);
+  if (!letters) return { lid, text: null };
   lid = lid.subtract(ext(letters, z1l - td, z1l + 0.3));
   return { lid, text: mode === 'inlay' ? ext(letters, z1l - td, z1l) : null };
 }
@@ -613,7 +631,8 @@ const PARAMS: ParamDef[] = [
   { key: 'lidT', label: 'Grubość pokrywy', type: 'number', def: DEF.lidT, min: 2.8, max: 6, step: 0.1, unit: 'mm', group: 'Pudełko i pokrywa', hint: 'Podnosi też wysokość pudełka (H = … + grubość + 0,2). Kąt jaskółczego ogona maleje przy grubszej pokrywie.' },
   { key: 'trayDepth', label: 'Głębokość tacki', type: 'number', def: DEF.trayDepth, min: 0, max: 3, step: 0.1, unit: 'mm', hint: '0 = bez wgłębienia. Wgłębienie jest płynne (bez ścianek), na dolnej stronie pokrywy.' },
   { key: 'traySlope', label: 'Szerokość skosu tacki', type: 'number', def: DEF.traySlope, min: 8, max: 30, step: 1, unit: 'mm', more: true, hint: 'Im szerszy skos, tym łagodniejsze nachylenie (maks. nachylenie ≈ 1,5·głębokość / szerokość).' },
-  select('textMode', 'Napis FKNDMN', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['none', 'bez napisu']]),
+  select('textMode', 'Napis na pokrywie', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['none', 'bez napisu']]),
+  { key: 'lidText', label: 'Tekst napisu', type: 'text', def: TEXT, max: 24, show: (p) => p.textMode !== 'none', hint: 'Litery F, K, N, D, M mają kwadratową czcionkę jak w oryginale, inny tekst zwykłą pogrubioną. Za długi napis sam się zmniejsza.' },
   { key: 'textDepth', label: 'Głębokość wkładki napisu', type: 'number', def: DEF.textDepth, min: 0.4, max: 1.6, step: 0.2, unit: 'mm', show: (p) => p.textMode === 'inlay' },
   { key: 'baseExtra', label: 'Dno: dodatkowa wysokość', type: 'number', def: 0, min: 0, max: 20, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) === 0, hint: 'Bez szuflad dno ma minimalną wysokość dla młynka i bibułek; tu można je podnieść.' },
   { key: 'lidOpen', label: 'Pokrywa: wysunięcie (podgląd)', type: 'number', def: 0, min: 0, max: 100, step: 5, unit: '%', hint: '0 = zasunięta, 100 = wysunięta na magnesach. Tylko podgląd w edytorze, nie zmienia wydruku.' },

@@ -133,7 +133,7 @@ function refresh() {
   for (const d of defs) {
     const c = ctls.get(d.key); if (!c) continue;
     c.d = d;
-    const vis = d.type !== 'bool' && !(d.show && !d.show(state));
+    const vis = d.type !== 'bool' && d.type !== 'text' && !(d.show && !d.show(state));
     c.row.hidden = !vis; c.set(d);
   }
   const L = (def.notes?.(state) ?? []);
