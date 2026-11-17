@@ -918,7 +918,36 @@ function boardJoint(p: Params): Manifold {
   return union(solids).subtract(union(cuts));
 }
 
+/**
+ * Drip stake for a thin irrigation tube: a barbed inlet, a stem with a channel and a small side outlet, and a point
+ * that goes into the soil. Lies on its side with a flat underside, prints without supports. The outlet sets the flow.
+ */
+function dripStake(p: Params): Manifold {
+  const d = nv(p, 'd', 4), L = nv(p, 'L', 70), out = nv(p, 'out', 1), La = Math.max(10, d * 2.5);
+  const R = Math.max(3.5, d / 2 + 1.5), r0 = d / 2 - 0.2, bore = Math.max(1.2, d - 2.2);
+  const along = (m: Manifold, x: number) => m.rotate([0, 90, 0]).translate([x, 0, 0]);
+  const seg = Math.max(3.5, d * 0.9), k = Math.max(1, Math.floor((La - 2) / seg));
+  const parts: Manifold[] = [along(cyl(La, r0, r0, 40), 0)];
+  for (let i = 0; i < k; i++) parts.push(along(cyl(seg, d / 2 + 0.6, r0, 40), 2 + i * seg));
+  // Stem with a collar under the barb, then the point.
+  const stem = along(cyl(L * 0.65, R, R, 40), -L * 0.65);
+  const point = along(cyl(L * 0.35, 0.6, R, 40), -L);
+  const collar = along(cyl(2, R + 2, R + 2, 40), -2);
+  let m = union([...parts, stem, point, collar]);
+  m = m.subtract(along(cyl(La + L * 0.55 + 1, bore / 2, bore / 2, 24), -L * 0.55));
+  // The outlet: a small hole through the side at the end of the channel.
+  m = m.subtract(cyl(2 * R + 2, out / 2, out / 2, 16).rotate([90, 0, 0]).translate([-L * 0.55 + bore / 2, R + 1, 0]));
+  m = m.subtract(box(-L - 5, -R - 5, -R - 5, La + 5, R + 5, -Math.min(R, r0) * 0.78));
+  return settle(m);
+}
+
 export const USEFUL4_DEFS: PartDef[] = [
+  {
+    type: 'dripStake', label: 'Kroplownik na wężyk (szpilka)', category: 'useful', hole: false,
+    description: 'Wbijasz w ziemię przy roślinie, wężyk nasuwasz na karby. Woda wypływa małym otworem z boku: im mniejszy, tym wolniej kapie. Drukuj z PETG.',
+    params: [n('d', 'Wężyk: średnica wewnętrzna', 4, 3, 8, 0.5), n('L', 'Długość szpilki', 70, 40, 150), n('out', 'Otwór wypływu', 1, 0.6, 2, 0.1)],
+    build: dripStake,
+  },
   {
     type: 'boardJoint', label: 'Złączka do płyt (regał)', category: 'useful', hole: false,
     description: 'Łączy płyty kupnego regału (sklejka, MDF, płyta meblowa): rdzeń z ramionami, w które wsuwasz płyty. Narożnik, trójnik albo krzyżak. Dwie na każdy węzeł: z przodu i z tyłu.',

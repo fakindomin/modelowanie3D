@@ -50,6 +50,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   wiz('stand', ['desk'], 'wedge'),
   wiz('gearbox', ['workshop', 'kids'], 'gear'),
   wiz('dome', ['garden', 'kids'], 'pipeEnd'),
+  wiz('irrigation', ['garden'], 'dripStake'),
   wiz('profileFrame', ['home', 'workshop', 'garden'], 'profileFitting'),
   wiz('rack', ['home', 'workshop'], 'boardJoint'),
   wiz('door', ['home', 'workshop'], 'hingedDoor'),
@@ -77,6 +78,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
   part('penCup', ['desk']),
   part('phoneStand', ['desk', 'electronics']),
   part('stackBin', ['workshop', 'home']),
+  part('dripStake', ['garden']),
   part('spinningTop', ['kids']),
   // Cables and desk.
   part('cableComb', ['electronics', 'desk', 'workshop']),
