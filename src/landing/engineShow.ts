@@ -12,7 +12,7 @@ import type { Part } from '../types';
 
 export type Key = 'W' | 'D' | 'H';
 export type ShowState = { W: number; D: number; H: number; lid: string; text: boolean; tex: boolean; active: Key | null };
-export type ShowView = { draw(st: ShowState): void; handle(k: Key): [number, number] | null; stop(): void };
+export type ShowView = { ready: Promise<void>; draw(st: ShowState): void; handle(k: Key): [number, number] | null; stop(): void };
 
 const NS = 'http://www.w3.org/2000/svg';
 const FOV = 28;
@@ -124,19 +124,28 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
     return { st: { ...s }, group, meshes: list, box, all, bent: false };
   }
 
-  // Every stop of the script, built before the show starts (one at a time, letting the page breathe between).
+  // Every stop of the script is built once: the first one before anything shows (so the very first picture is
+  // the real box), the others right after it, before the show starts moving.
   const cache = new Map<string, Model>();
-  for (const s of plan) {
+  const life = { alive: true };
+  const prepare = (s: ShowState) => {
     const k = keyOf(s);
-    if (cache.has(k)) continue;
+    if (cache.has(k)) return;
     try {
       cache.set(k, build(s));
     } catch (e) {
       // A stop that fails is built (or stretched to) while the show plays instead.
-      console.warn('show stop', keyOf(s), e);
+      console.warn('show stop', k, e);
     }
-    await new Promise((r) => setTimeout(r, 0));
-  }
+  };
+  prepare(plan[0]);
+  const ready = (async () => {
+    for (const s of plan.slice(1)) {
+      await new Promise((r) => setTimeout(r, 0));
+      if (!life.alive) return;
+      prepare(s);
+    }
+  })();
 
   const canvas = document.createElement('canvas');
   canvas.className = 'eng';
@@ -315,10 +324,11 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
   view.appendChild(over);
 
   return {
+    ready,
     draw(s) {
       st = { ...s };
       pending = st;
-      // The first picture right away, so the flat drawing can be hidden in the same frame.
+      // The first picture right away.
       if (first) tick();
       else if (!raf && alive && onScreen) raf = requestAnimationFrame(tick);
     },
@@ -330,6 +340,7 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
     },
     stop() {
       alive = false;
+      life.alive = false;
       cancelAnimationFrame(raf);
       io.disconnect();
       for (const m of cache.values())

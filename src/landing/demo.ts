@@ -198,6 +198,8 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
       }
   }
 
+  // The flat drawing is only the fallback without WebGL: the view stays empty until the engine draws the real box.
+  svg.style.visibility = 'hidden';
   draw();
   let stopped = false;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -214,36 +216,20 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
     const last = stops[stops.length - 1];
     stops.push('k' in step ? { ...last, [step.k]: step.to } : 'lid' in step ? { ...last, lid: step.lid } : { ...last, [step.add]: !last[step.add] });
   }
-  // The show starts once the engine has drawn the real box; without WebGL it plays on the flat drawing.
-  // TEMPORARY diagnostics (2026-11-17): why the engine show does not start for the user.
-  const diag = (msg: string) => {
-    cfg.dataset.engine = msg;
-    const d = document.createElement('div');
-    d.className = 'diag';
-    d.textContent = msg;
-    d.style.cssText = 'position:absolute;left:8px;right:8px;bottom:44px;z-index:5;font:600 12px/1.3 monospace;background:#fff;color:#b00;border:1px solid #b00;padding:6px;white-space:pre-wrap';
-    cfg.appendChild(d);
-  };
-  const t0 = performance.now();
-  const slow = setTimeout(() => diag('silnik: brak gotowości po 15 s'), 15000);
+  // The show starts once the engine has built every stop; without WebGL it plays on the flat drawing.
   engineView($<HTMLElement>('.view'), stops)
-    .then((v) => {
-      clearTimeout(slow);
+    .then(async (v) => {
       if (stopped) return v.stop();
       eng = v;
-      try {
-        draw();
-      } catch (e) {
-        diag('rysowanie: ' + String((e as Error)?.stack ?? e).slice(0, 400));
-        throw e;
-      }
-      svg.style.visibility = 'hidden';
+      draw();
+      await v.ready;
       go();
     })
     .catch((e) => {
       console.warn('show engine', e);
-      clearTimeout(slow);
-      diag('silnik: ' + String((e as Error)?.stack ?? e).slice(0, 400) + ' (' + Math.round(performance.now() - t0) + ' ms)');
+      eng = null;
+      svg.style.visibility = '';
+      draw();
       go();
     });
   return () => {

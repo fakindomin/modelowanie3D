@@ -338,3 +338,5 @@
 @keyframes lnav-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes lnav-pop { from { transform: scale(0); } to { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .landing .nav ul a:hover .kl, .landing .nav ul a:hover .kb { animation: none; } }
+.landing .view canvas.eng { animation: leng-in .25s ease-out; }
+@keyframes leng-in { from { opacity: 0; } to { opacity: 1; } }
