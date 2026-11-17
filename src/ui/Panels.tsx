@@ -25,7 +25,7 @@ import { runProjectItem } from './runItem';
 import { GEAR_PAIR, REMOVED_TYPES, TECH_GROUPS, mainOf, printable } from '../simple';
 import { PRINTERS } from '../wizards/frame';
 import { groupFields, shortLabel, type FieldGroup } from './paramGroups';
-import { motionsOf, useMotion } from './motion';
+import { motionsOf, rigFor, setMotion, useMotion } from './motion';
 
 const XMAS_ICON: Record<string, string> = { etykieta: 'xmasLabel', czubek: 'xmasTopper', foremka: 'xmasCutter', taca: 'xmasTray' };
 type LibMode = 'projects' | 'parts';
@@ -1317,13 +1317,12 @@ function PartProperties({ part }: { part: Part }) {
   return (
     <div className="props">
       <FaceSection part={part} />
-      {status.length > 0 && <div className="statusbar">{status}</div>}
       <Helpers part={part} />
 
       <h4>
         Wymiary <Info text={INFO.dims} />
       </h4>
-      {groups && <DimGroups type={part.type} groups={groups} field={field} />}
+      {groups && <DimGroups part={part} groups={groups} field={field} />}
       {!groups && main.map((p) => field(p))}
       {!groups && more.length > 0 && (
         <details className="more-dims" open={moreOpen} onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
@@ -1365,6 +1364,12 @@ function PartProperties({ part }: { part: Part }) {
       <OpSection part={part} op="texture" title={<><OptIcon id="tex" /> Faktura powierzchni</>} open={texturesOf(part).length > 0} info={INFO.texture}>
         <TextureTool part={part} />
       </OpSection>
+      {status.length > 0 && (
+        <details className="desc-bar">
+          <summary>Opis</summary>
+          <div className="statusbar">{status}</div>
+        </details>
+      )}
 
     </div>
   );
@@ -1537,7 +1542,8 @@ const focusDone = { n: 0 };
  * The sizes of a model in named, foldable groups: one group open at a time (opening another closes it), remembered per
  * model. A click on a place of the model (a drawer, the grinder socket) opens its group and shows it.
  */
-function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]; field: (p: ParamDef, sub?: string | null) => React.ReactNode }) {
+function DimGroups({ part, groups, field }: { part: Part; groups: FieldGroup[]; field: (p: ParamDef, sub?: string | null) => React.ReactNode }) {
+  const type = part.type;
   const KEY = 'modelowanie3d.dimOpen';
   const read = (): Record<string, string | null> => {
     try {
@@ -1588,6 +1594,9 @@ function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]
             onClick={(e) => {
               e.preventDefault();
               setOpen(open === g.name ? null : g.name);
+              // Sizes of the inside: the lid slides out of the way so they can be seen.
+              if (open !== g.name)
+                for (const m of motionsOf(part)) if (m.reveals?.includes(g.name)) setMotion(rigFor(part, m), { [m.key]: 1 }, true);
             }}
           >
             {g.name} <span className="count">{g.count}</span>

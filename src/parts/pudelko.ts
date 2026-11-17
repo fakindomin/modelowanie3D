@@ -496,7 +496,7 @@ export function pudelkoMotions(p: Params): Motion[] {
   const park = -lidShift({ ...p, lidOpen: 100 });
   // 100 % = do magnesów (pozycja robocza); dalej można wyjąć element całkiem z pudełka (widać gniazda magnesów).
   const out: Motion[] = [
-    { key: 'lidOpen', label: 'Pokrywa', group: 'Pudełko i pokrywa', pieces: ['pokrywa', 'napis'], move: [-park, 0, 0], max: (L.X + 15) / park },
+    { key: 'lidOpen', label: 'Pokrywa', group: 'Pokrywa', pieces: ['pokrywa', 'napis'], move: [-park, 0, 0], max: (L.X + 15) / park, reveals: ['Wnętrze'] },
     { key: 'tamperOut', label: 'Ubijak', group: 'Wnętrze › Ubijak', pieces: ['ubijak'], move: [0, -(tamperDims(p).Lt + 15), 0], max: 1 },
   ];
   const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
@@ -530,7 +530,7 @@ export function pudelkoZones(p: Params): Zone[] {
   };
   const books = () => U([bb(x0, x0 + L.bookL + CL, by0, by0 + L.bookT + CL, L.BOOK_FLOOR, L.Z_BAY0), bb(x0, x0 + L.bookL + CL, WALL_Y, WALL_Y + L.A_Y, L.BOOK_SHELF, L.Z_BAY0)]);
   const z: Zone[] = [
-    { label: 'Pudełko', group: 'Pudełko i pokrywa', box: [[-5, -5, -5], [X + 5, Y + 5, H + 5]] },
+    { label: 'Pudełko', group: 'Pudełko', box: [[-5, -5, -5], [X + 5, Y + 5, H + 5]] },
     { label: 'Gniazdo młynka', group: 'Wnętrze › Młynek', box: [[x0 - pad, yB0 - pad, gFloor - pad], [gX1 + pad, yB0 + L.B_Y + pad, H + 1]], solid: grinder },
     { label: 'Gniazdo zapalniczki', group: 'Wnętrze › Zapalniczka', box: [[lx0 - pad, yB0 - SEP - pad, L.Z_TOP_ITEMS - L.lT - 5.4 - pad], [lx0 + L.lighterLen + pad, yB0 + L.lW + CL + pad, H + 1]], solid: lighter },
     { label: 'Szczelina na bibułki', group: 'Wnętrze › Bibułki', box: [[x0 - pad, WALL_Y - pad, L.BOOK_FLOOR - pad], [x0 + L.bookL + CL + pad, WALL_Y + L.A_Y + pad, H + 1]], solid: books },
@@ -628,13 +628,13 @@ export function pudelkoNotes(p: Params): Note[] {
 }
 
 const PARAMS: ParamDef[] = [
-  { key: 'lidT', label: 'Grubość pokrywy', type: 'number', def: DEF.lidT, min: 2.8, max: 6, step: 0.1, unit: 'mm', group: 'Pudełko i pokrywa', hint: 'Podnosi też wysokość pudełka (H = … + grubość + 0,2). Kąt jaskółczego ogona maleje przy grubszej pokrywie.' },
+  { key: 'lidT', label: 'Grubość pokrywy', type: 'number', def: DEF.lidT, min: 2.8, max: 6, step: 0.1, unit: 'mm', group: 'Pokrywa', hint: 'Podnosi też wysokość pudełka (H = … + grubość + 0,2). Kąt jaskółczego ogona maleje przy grubszej pokrywie.' },
   { key: 'trayDepth', label: 'Głębokość tacki', type: 'number', def: DEF.trayDepth, min: 0, max: 3, step: 0.1, unit: 'mm', hint: '0 = bez wgłębienia. Wgłębienie jest płynne (bez ścianek), na dolnej stronie pokrywy.' },
   { key: 'traySlope', label: 'Szerokość skosu tacki', type: 'number', def: DEF.traySlope, min: 8, max: 30, step: 1, unit: 'mm', more: true, hint: 'Im szerszy skos, tym łagodniejsze nachylenie (maks. nachylenie ≈ 1,5·głębokość / szerokość).' },
   select('textMode', 'Napis na pokrywie', 'inlay', [['inlay', 'wkładka (inny kolor)'], ['engrave', 'wgłębiony'], ['none', 'bez napisu']]),
   { key: 'lidText', label: 'Tekst napisu', type: 'text', def: TEXT, max: 24, show: (p) => p.textMode !== 'none', hint: 'Litery F, K, N, D, M mają kwadratową czcionkę jak w oryginale, inny tekst zwykłą pogrubioną. Za długi napis sam się zmniejsza.' },
   { key: 'textDepth', label: 'Głębokość wkładki napisu', type: 'number', def: DEF.textDepth, min: 0.4, max: 1.6, step: 0.2, unit: 'mm', show: (p) => p.textMode === 'inlay' },
-  { key: 'baseExtra', label: 'Dno: dodatkowa wysokość', type: 'number', def: 0, min: 0, max: 20, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) === 0, hint: 'Bez szuflad dno ma minimalną wysokość dla młynka i bibułek; tu można je podnieść.' },
+  { key: 'baseExtra', label: 'Dno: dodatkowa wysokość', type: 'number', def: 0, min: 0, max: 20, step: 0.5, unit: 'mm', group: 'Pudełko', show: (p) => Number(p.nDr ?? 2) === 0, hint: 'Bez szuflad dno ma minimalną wysokość dla młynka i bibułek; tu można je podnieść.' },
   { key: 'lidOpen', label: 'Pokrywa: wysunięcie (podgląd)', type: 'number', def: 0, min: 0, max: 100, step: 5, unit: '%', hint: '0 = zasunięta, 100 = wysunięta na magnesach. Tylko podgląd w edytorze, nie zmienia wydruku.' },
   { key: 'gD', label: 'Młynek: średnica', type: 'number', def: DEF.gD, min: 20, max: 80, step: 0.5, unit: 'mm', group: 'Wnętrze › Młynek', hint: 'Wyznacza szerokość gniazda i głębokość (Y) pudełka.' },
   { key: 'gH', label: 'Młynek: wysokość', type: 'number', def: DEF.gH, min: 15, max: 80, step: 0.5, unit: 'mm', hint: 'Wyznacza wysokość pudełka (H = warstwa szuflad + wysokość + 5 + luz + pokrywa).' },

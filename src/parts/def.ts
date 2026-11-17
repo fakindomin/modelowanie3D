@@ -65,6 +65,8 @@ export interface Motion {
   hidden?: boolean;
   /** How far past 100 % it can go (taken right out of the box), as a multiple of `move`; default 1. */
   max?: number;
+  /** Groups of sizes that lie under this element: opening one in the panel moves the element out (the lid, for the inside). */
+  reveals?: string[];
   /** Only this box of the piece moves (two drawers printed as one piece). */
   region?: [Vec3, Vec3];
 }

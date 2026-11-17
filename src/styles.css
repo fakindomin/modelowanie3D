@@ -999,3 +999,10 @@ button > .sicon:only-child { display: block; margin: auto; }
   .toolbar .printer-pick .fit svg { font-size: 12px; }
   .toolbar .group.right > button:not(.primary) { padding-left: 6px; padding-right: 6px; }
 }
+
+/* Opis modelu zwinięty w belkę na dole prawego panelu. */
+.desc-bar { margin-top: 14px; border: 1px solid var(--line); }
+.desc-bar > summary { cursor: pointer; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--army-text, var(--muted)); list-style: none; display: flex; align-items: center; gap: 6px; }
+.desc-bar > summary::before { content: '▸'; font-size: 10px; }
+.desc-bar[open] > summary::before { content: '▾'; }
+.desc-bar .statusbar { padding: 0 8px 8px; }

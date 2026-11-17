@@ -81,7 +81,10 @@ export function DimHandles() {
     const gb = groupBody(x) ?? parts.find((p) => p.id === x && (p.hole || REMOVED_TYPES.has(p.type)) && !p.wiz)?.body ?? null;
     return gb !== null ? (mainOf(parts, gb)?.id ?? null) : x;
   };
-  const ids = [...new Set([held, resolve(hoveredId), resolve(selectedId)].filter((x): x is string => !!x))];
+  // A model with moving elements and named places (the accessory box): the pointer only outlines, sizes show on a click.
+  const hov = parts.find((p) => p.id === hoveredId);
+  const quiet = !!hov && !!(DEFS[hov.type]?.motions || DEFS[hov.type]?.zones || motionsOf(hov).some((m) => m.world));
+  const ids = [...new Set([held, quiet ? null : resolve(hoveredId), resolve(selectedId)].filter((x): x is string => !!x))];
   return (
     <>
       {ids.map((id) => {
