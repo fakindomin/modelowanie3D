@@ -79,6 +79,27 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
   const projects = PROJECT_ITEMS.filter((i) => i.kind !== 'figurines' && i.kind !== 'wizard');
   const wizardCount = Object.keys(WIZARDS).length;
 
+  const themeBtn = (
+    <button
+      type="button"
+      className={dark ? 'theme-toggle is-dark' : 'theme-toggle'}
+      aria-label={dark ? 'Przełącz na tryb jasny' : 'Przełącz na tryb ciemny'}
+      onClick={() => {
+        const t = dark ? 'light' : 'dark';
+        setTheme(t);
+        write(THEME_KEY, t);
+      }}
+    >
+      <svg className="i-moon" viewBox="0 0 24 24" aria-hidden>
+        <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z" />
+      </svg>
+      <svg className="i-sun" viewBox="0 0 24 24" aria-hidden>
+        <circle cx="12" cy="12" r="4.2" />
+        <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+      </svg>
+    </button>
+  );
+
   return (
     <div className="landing lpage" data-theme={theme ?? undefined}>
       <header className="nav">
@@ -86,8 +107,11 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
           <a className="llogo" href="#start" aria-label="Modelowanie 3D, start">
             <LogoMark className="disc" />
           </a>
-          <button className="menu-btn" type="button" aria-expanded={menu} aria-controls="lmenu" onClick={() => setMenu(!menu)}>
-            Menu
+          <span className="m-theme">{themeBtn}</span>
+          <button className="menu-btn" type="button" aria-label="Menu" aria-expanded={menu} aria-controls="lmenu" onClick={() => setMenu(!menu)}>
+            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+              {menu ? <path d="M5 5l14 14M19 5L5 19" /> : <path d="M3 6h18M3 12h18M3 18h18" />}
+            </svg>
           </button>
           <ul id="lmenu" className={menu ? 'open' : ''}>
             {MENU.map(([id, label]) => (
@@ -104,24 +128,7 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
 
       <main>
         <div className="ltop">
-          <button
-            type="button"
-            className={dark ? 'theme-toggle is-dark' : 'theme-toggle'}
-            aria-label={dark ? 'Przełącz na tryb jasny' : 'Przełącz na tryb ciemny'}
-            onClick={() => {
-              const t = dark ? 'light' : 'dark';
-              setTheme(t);
-              write(THEME_KEY, t);
-            }}
-          >
-            <svg className="i-moon" viewBox="0 0 24 24" aria-hidden>
-              <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z" />
-            </svg>
-            <svg className="i-sun" viewBox="0 0 24 24" aria-hidden>
-              <circle cx="12" cy="12" r="4.2" />
-              <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
-            </svg>
-          </button>
+          {themeBtn}
         </div>
         {view === 'start' && <Start projects={projects.length} wizards={wizardCount} onOpen={onOpen} />}
         {view === 'projekty' && <Projects items={projects} onOpen={onOpen} />}
