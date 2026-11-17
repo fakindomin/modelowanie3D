@@ -185,13 +185,13 @@ export function StateIcon({ id, size = 14, className }: { id: StateIconId; size?
   );
 }
 
-/** Brand mark (same as the browser-tab icon): olive flat-top hexagon, orange nozzle laying an L-shaped filament line on a layer. */
+/** Brand mark (same as the browser-tab icon): olive square with cut corners, orange nozzle laying an L-shaped filament line on a layer. */
 export function LogoMark({ size = 28, className }: { size?: number; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className={'logomark' + (className ? ' ' + className : '')} aria-hidden>
-      <path fill="#4b5320" d="M6 1.6h12L24 12l-6 10.4H6L0 12z" />
+      <path fill="#4b5320" d="M3.5 0h17L24 3.5v17L20.5 24h-17L0 20.5v-17z" />
       <path fill="#f26419" d="M8 3h8v4.5l-4 4-4-4z" />
-      <path d="M12 10.5v5.5H19.5M6.5 20h11" fill="none" stroke="#e4e5df" strokeWidth={2.6} strokeLinejoin="miter" />
+      <path d="M12 10.5v5.5H18M3 20h18" fill="none" stroke="#e4e5df" strokeWidth={2.6} strokeLinejoin="miter" />
     </svg>
   );
 }

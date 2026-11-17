@@ -273,7 +273,7 @@
 .landing .lsearch .n { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .landing .lsearch .clear { border: 0; background: transparent; color: var(--ink); font: 700 22px/1 var(--f); cursor: pointer; padding: 4px; }
 .landing .noresult { color: var(--muted); margin: 8px 0 20px; }
-/* Brand mark (nozzle + L filament in a hexagon), like the browser-tab icon. */
+/* Brand mark (nozzle + L filament, square with cut corners), like the browser-tab icon. */
 .landing .llogo .disc.logomark { background: none; border-radius: 0; display: block; }
 
 /* Top right of the page: open the app (the main action) and the light/dark switch, icon only */
