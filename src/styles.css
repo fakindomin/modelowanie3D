@@ -896,3 +896,5 @@ body { -webkit-font-smoothing: antialiased; }
 /* Kreatory oddzielone od Projektów / Części wyraźną przerwą i linią. */
 .lib-sep { height: 0; border-top: 2px solid var(--army, #6b7530); margin: 16px 0 14px; opacity: .8; }
 .library .lib-sep + .lib-mode { margin-top: 0; }
+.section > summary .kicon, h4 .kicon, h5 .kicon, .field > span .kicon, .linkbar .kicon, .action .kicon { margin-right: 6px; color: var(--army-text, currentColor); }
+.action:has(> .kicon) { display: inline-flex; align-items: center; }

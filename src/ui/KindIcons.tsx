@@ -122,3 +122,31 @@ export function CatIcon({ id, size = 18, className }: { id: string; size?: numbe
     </svg>
   );
 }
+
+/** Option icons in the dimensions panel (dividers, magnets, lattice, texture, text, print, colour, lock…). */
+const OPT_ICONS = {
+  div: { line: 'M3 3h18v18H3zM12 3v18M3 12h9', block: 'M14.5 14.5h4v4h-4z' },
+  mag: { line: 'M5 6v7l3 4h8l3-4V6M9 6v6l1 1h4l1-1V6', block: 'M4 2h6v4H4zM14 2h6v4h-6z' },
+  infill: { line: 'M3 3h18v18H3zM3 12l9-9 9 9-9 9z' },
+  tex: { line: 'M2 8l3-3 3 3 3-3 3 3 3-3 3 3M2 16l3-3 3 3 3-3 3 3 3-3 3 3' },
+  text: { line: 'M4 7V3h16v4M12 3v16', block: 'M8.5 19h7v3h-7z' },
+  print: { line: 'M4 2h8v5l-4 4-4-4zM2 21h20M13 16l2.5 2.5L21 13' },
+  color: { line: 'M12 2l6 8v6l-3 4H9l-3-4v-6z', block: 'M6 13h12v3l-3 4H9l-3-4z' },
+  lock: { line: 'M5 11h14v10H5zM8 11V6l2-2h4l2 2v5', block: 'M10.5 14h3v4h-3z' },
+  wiz: { line: 'M6 20 18 8l-2-2L4 18M16 6l2-2 2 2-2 2', block: 'M2.5 21.5 4 18l2 2z' },
+  ends: { line: 'M3 7v10M21 7v10M3 12h18', block: 'M7 9.5 4.5 12 7 14.5zM17 9.5l2.5 2.5-2.5 2.5z' },
+  link: { line: 'M2 12l3-4h6l3 4-3 4H5zM10 12l3-4h6l3 4-3 4h-6z' },
+  unlock: { line: 'M5 11h14v10H5zM8 11V6l2-2h4l2 2v1', block: 'M10.5 14h3v4h-3z' },
+  unlink: { line: 'M1.5 12 4 8.5h4l2.5 3.5L8 15.5H4zM13.5 12 16 8.5h4l2.5 3.5-2.5 3.5h-4z' },
+} as const;
+export type OptIconId = keyof typeof OPT_ICONS;
+
+export function OptIcon({ id, size = 16, className }: { id: OptIconId; size?: number; className?: string }) {
+  const ic: { line: string; block?: string } = OPT_ICONS[id];
+  return (
+    <svg {...base(size, className)} aria-hidden>
+      <path d={ic.line} />
+      {ic.block && <path d={ic.block} fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}

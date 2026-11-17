@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { CatIcon, ReadyIcon, ToolIcon, WizardIcon } from './KindIcons';
+import { CatIcon, OptIcon, type OptIconId, ReadyIcon, ToolIcon, WizardIcon } from './KindIcons';
 import { CATALOG, CATEGORIES, DEFS, MAGNETS, paramsOf, type Category, type ParamDef } from '../catalog';
 import { findLid, type FaceMagnetOptions, type MagnetOptions } from '../geom/magnets';
 import { bodyRisk, opOff, type Op } from './ops';
@@ -561,9 +561,10 @@ function XYZ({ value, onChange, step, unit }: { value: Vec3; onChange: (i: numbe
 
 function Helpers({ part }: { part: Part }) {
   const st = useStore();
-  const b = (label: string, fn: () => void, info?: string) => (
+  const b = (label: string, fn: () => void, info?: string, icon?: OptIconId) => (
     <div key={label} className="action-row">
       <button className="action" onClick={fn}>
+        {icon && <OptIcon id={icon} />}
         {label}
       </button>
       {info && <Info text={info} />}
@@ -572,7 +573,7 @@ function Helpers({ part }: { part: Part }) {
   const out = [];
   const wz = part.wiz && WIZARDS[part.wiz.w] ? part.wiz : undefined;
   if (wz) {
-    out.push(b(`✎ Edytuj w kreatorze „${WIZARDS[wz.w].label}”`, () => st.openWizard({ id: wz.w, values: wz.recipe?.values, run: wz.run }), INFO.wizard));
+    out.push(b(`Edytuj w kreatorze „${WIZARDS[wz.w].label}”`, () => st.openWizard({ id: wz.w, values: wz.recipe?.values, run: wz.run }), INFO.wizard, 'wiz'));
     out.push(b('📖 Instrukcja projektu', () => st.setManual(true), INFO.manual));
   }
   if (part.type === 'cabinet') out.push(b('+ Dodaj dopasowane szuflady', () => st.addDrawers(part.id), INFO.drawers));
@@ -587,7 +588,7 @@ function Helpers({ part }: { part: Part }) {
   if (part.type === 'worm') out.push(b('+ Dodaj ślimacznicę', () => st.matingGear(part.id, 'wheel'), INFO.mateGear));
   if (part.type === 'wormWheel') out.push(b('+ Dodaj ślimak', () => st.matingGear(part.id, 'worm'), INFO.mateGear));
   const driver = part.gearMate ? st.parts.find((p) => p.id === part.gearMate!.of) : undefined;
-  if (driver) out.push(b(`⛓ Odepnij od „${driver.name}”`, () => st.update(part.id, { gearMate: undefined }), INFO.mateGear));
+  if (driver) out.push(b(`Odepnij od „${driver.name}”`, () => st.update(part.id, { gearMate: undefined }), INFO.mateGear, 'unlink'));
   if (driver && driver.type === 'gear' && part.type === 'gear')
     out.push(
       <label key="mate-angle" className="field">
@@ -612,12 +613,12 @@ function Helpers({ part }: { part: Part }) {
   }
   if (part.type === 'tube')
     out.push(
-      b('⇄ Końce A i B do łączników (gwint, bagnet, klik)', () =>
+      b('Końce A i B do łączników (gwint, bagnet, klik)', () =>
         st.update(part.id, {
           type: 'pipeEnd',
           name: part.name,
           params: { ...Object.fromEntries(DEFS.pipeEnd.params.map((d) => [d.key, d.def])), std: 'custom', D: part.params.D, T: part.params.T, L: part.params.H, end: 'socket', bell: 'none' },
-        }), INFO.pipeEnds),
+        }), INFO.pipeEnds, 'ends'),
     );
   if (part.type === 'pipeEnd' || part.type === 'tube' || part.type === 'rhs') out.push(<FitPipeTo key="fit-pipe" part={part} />);
   if (part.type === 'oring' || ((part.type === 'pipeFitting') && part.params.oring === 'yes'))
@@ -625,10 +626,10 @@ function Helpers({ part }: { part: Part }) {
   const armFit = part.armOf ? st.parts.find((p) => p.id === part.armOf!.of) : undefined;
   if (armFit) {
     out.push(b(`→ Przejdź do łącznika „${armFit.name}”`, () => st.select(armFit.id), INFO.armOf));
-    out.push(b('⛓ Odepnij od łącznika', () => st.update(part.id, { armOf: undefined }), INFO.armOf));
+    out.push(b('Odepnij od łącznika', () => st.update(part.id, { armOf: undefined }), INFO.armOf, 'unlink'));
   }
   const fitBox = part.fitTo ? st.parts.find((p) => p.id === part.fitTo) : undefined;
-  if (fitBox && part.type !== 'boxHinge') out.push(b(`⛓ Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit));
+  if (fitBox && part.type !== 'boxHinge') out.push(b(`Odłącz od pudełka „${fitBox.name}”`, () => st.unfitLid(part.id), INFO.lidFit, 'unlink'));
   if (part.hole && !isMerged(st.parts, part.body) && st.parts.some((p) => p.body === part.body && !p.hole))
     out.push(b(`⧉ Pokaż gotowy element (bryła ${part.body})`, () => st.merge(part.body), INFO.merge));
   if (!out.length) return null;
@@ -727,7 +728,7 @@ function MagnetTool({ target, body }: { target: string; body: number }) {
         </label>
       )}
       <button className="action" onClick={() => st.addMagnets(target, { ...opt, layout })}>
-        🧲 Dodaj miejsca na magnesy
+        <OptIcon id="mag" /> Dodaj miejsca na magnesy
       </button>
     </div>
   );
@@ -1014,7 +1015,7 @@ function FaceSection({ part }: { part: Part }) {
       {off ? null : fs.face ? <TextureTool part={part} face={fs.face} /> : <p className="desc">Fakturę kładę na płaskich ściankach (także skośnych) i bokach walców, a ta ścianka jest zakrzywiona.</p>}
       {fs.side && !part.hole && (
         <>
-          <h5>Napis</h5>
+          <h5><OptIcon id="text" /> Napis</h5>
           <LabelTool part={part} side={fs.side} />
           {!opOff(part, 'magnets') && (
             <>
@@ -1073,7 +1074,7 @@ const isMore = (p: ParamDef) => !!p.more || MORE_KEYS.has(p.key) || /^e\d$/.test
 
 const PATTERN_LABEL = { linear: 'w rzędzie', circle: 'po okręgu', sym: 'symetryczny' } as const;
 
-function Section({ title, children, open = false, info }: { title: string; children: React.ReactNode; open?: boolean; info?: string }) {
+function Section({ title, children, open = false, info }: { title: React.ReactNode; children: React.ReactNode; open?: boolean; info?: string }) {
   return (
     <details className="section" open={open}>
       <summary>
@@ -1085,7 +1086,7 @@ function Section({ title, children, open = false, info }: { title: string; child
 }
 
 /** An operation's section; left out when the operation makes no sense for the element (see ops.ts). */
-function OpSection({ part, op, title, info, open, children }: { part: Part; op: Op; title: string; info?: string; open?: boolean; children?: React.ReactNode }) {
+function OpSection({ part, op, title, info, open, children }: { part: Part; op: Op; title: React.ReactNode; info?: string; open?: boolean; children?: React.ReactNode }) {
   if (opOff(part, op)) return null;
   return (
     <Section title={title} open={open} info={info}>
@@ -1308,7 +1309,7 @@ function EndsSection({ part, fields }: { part: Part; fields: ParamDef[] }) {
   return (
     <div className="ends">
       <h5>
-        Końce <Info text={INFO.ends} />
+        <OptIcon id="ends" /> Końce <Info text={INFO.ends} />
       </h5>
       {fit && <p className="desc">Koniec A dobiera się sam do ramienia {'ABCDEF'[part.armOf!.i]} łącznika „{fit.name}”.</p>}
       {sel.map((f) => {
@@ -1427,7 +1428,7 @@ function PartProperties({ part }: { part: Part }) {
   if (part.locked)
     status.push(
       <div key="lock" className="linkbar">
-        🔒 Zablokowany: nie przesuniesz go ani nie usuniesz.
+        <OptIcon id="lock" /> Zablokowany: nie przesuniesz go ani nie usuniesz.
         <button className="small" onClick={() => st.setFlags([part.id], { locked: false })}>
           Odblokuj
         </button>
@@ -1443,7 +1444,7 @@ function PartProperties({ part }: { part: Part }) {
         </button>
       </div>,
     );
-  if (pieces > 1) status.push(<div key="set" className="linkbar">🧩 Część zestawu ({pieces} elementy): przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</div>);
+  if (pieces > 1) status.push(<div key="set" className="linkbar"><OptIcon id="link" size={14} /> Część zestawu ({pieces} elementy): przesuwają się razem, a zmiana wymiarów dotyczy wszystkich.</div>);
   if (wiz) status.push(<div key="wiz" className="linkbar"><WizardIcon size={14} /> Z kreatora „{wiz.label}”{part.wiz!.role ? `, część ${part.wiz!.role}` : ''}.</div>);
   def.notes?.(part.params).forEach((n, i) =>
     status.push(
@@ -1513,20 +1514,20 @@ function PartProperties({ part }: { part: Part }) {
         </div>
       )}
       {(part.type === 'box' || part.type === 'drawer') && (
-        <Section title="▦ Układ przegródek" info={INFO.dividers} open={typeof part.params.div === 'string' && part.params.div.length > 0}>
+        <Section title={<><OptIcon id="div" /> Układ przegródek</>} info={INFO.dividers} open={typeof part.params.div === 'string' && part.params.div.length > 0}>
           <DividerEditor part={part} />
         </Section>
       )}
       {part.type === 'connector' && <ConnectorWalls part={part} />}
 
       {/* The same operations in the same order; the ones that make no sense for the element are left out. */}
-      <OpSection part={part} op="magnets" title="🧲 Miejsca na magnesy" info={INFO.magnets}>
+      <OpSection part={part} op="magnets" title={<><OptIcon id="mag" /> Miejsca na magnesy</>} info={INFO.magnets}>
         {part.type === 'box' || part.type === 'lid' ? <MagnetTool target={part.id} body={part.body} /> : <FaceMagnetTool part={part} />}
       </OpSection>
-      <OpSection part={part} op="infill" title="▦ Wypełnienie (ażur)" open={st.parts.some((p) => p.body === part.body && p.infill)} info={INFO.infill}>
+      <OpSection part={part} op="infill" title={<><OptIcon id="infill" /> Wypełnienie (ażur)</>} open={st.parts.some((p) => p.body === part.body && p.infill)} info={INFO.infill}>
         <InfillTool body={part.body} prefer={part.id} />
       </OpSection>
-      <OpSection part={part} op="texture" title="Faktura powierzchni" open={texturesOf(part).length > 0} info={INFO.texture}>
+      <OpSection part={part} op="texture" title={<><OptIcon id="tex" /> Faktura powierzchni</>} open={texturesOf(part).length > 0} info={INFO.texture}>
         <TextureTool part={part} />
       </OpSection>
 
@@ -1534,12 +1535,12 @@ function PartProperties({ part }: { part: Part }) {
         Wydruk <Info text={INFO.print} />
       </h4>
       <label className="field" title="Wyłączona część zostaje w podglądzie jako półprzezroczysta, ale nie trafia do eksportu, instrukcji ani wyliczeń.">
-        <span>Drukuj tę część</span>
+        <span><OptIcon id="print" /> Drukuj tę część</span>
         <input type="checkbox" checked={!part.noPrint} onChange={(e) => st.setFlags([groupId(part.body)], { noPrint: !e.target.checked })} />
       </label>
       {!part.hole && (
         <label className="field">
-          <span>Kolor</span>
+          <span><OptIcon id="color" /> Kolor</span>
           <input type="color" value={part.color} onChange={(e) => st.update(part.id, { color: e.target.value })} />
         </label>
       )}
@@ -1562,7 +1563,7 @@ function Flags({ id, hidden, locked }: { id: string; hidden: boolean; locked: bo
         {hidden ? '◌' : '◉'}
       </button>
       <button className={`flag ${locked ? 'set' : ''}`} title={locked ? 'Odblokuj' : 'Zablokuj (nie da się przesunąć ani usunąć)'} onClick={(e) => (e.stopPropagation(), setFlags([id], { locked: !locked }))}>
-        {locked ? '🔒' : '🔓'}
+        <OptIcon id={locked ? 'lock' : 'unlock'} size={14} />
       </button>
     </span>
   );
@@ -1998,7 +1999,7 @@ function GroupProperties({ body }: { body: number }) {
           {merged ? '⧈ Rozdziel (pokaż otwory osobno)' : '⧉ Złącz otwory z bryłą (pokaż gotowy element)'}
         </button>
       )}
-      <Section title="🧲 Miejsca na magnesy (pudełko z płyt)" info={INFO.magnets}>
+      <Section title={<><OptIcon id="mag" /> Miejsca na magnesy (pudełko z płyt)</>} info={INFO.magnets}>
         <MagnetTool target={groupId(body)} body={body} />
       </Section>
       <Section title="↪ Gięcie" open={members.some((p) => p.bend)} info={INFO.bend}>
@@ -2007,7 +2008,7 @@ function GroupProperties({ body }: { body: number }) {
       <Section title="◫ Skorupa (wydrążenie)" open={members.some((p) => p.shell)} info={INFO.shell}>
         <ShellTool body={body} />
       </Section>
-      <Section title="▦ Wypełnienie (ażur)" open={members.some((p) => p.infill)} info={INFO.infill}>
+      <Section title={<><OptIcon id="infill" /> Wypełnienie (ażur)</>} open={members.some((p) => p.infill)} info={INFO.infill}>
         <InfillTool body={body} />
       </Section>
       <Section title="⇋ Lustro i skala" open={members.some((p) => p.xform)} info={INFO.xform}>
