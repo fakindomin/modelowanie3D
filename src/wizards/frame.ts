@@ -44,7 +44,7 @@ const lampFits = (v: WizValues) => v.tpl === 'tent' || v.tpl === 'own';
 const X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1);
 
 /** Euler angles (XYZ, degrees, multiples of 90) that turn every `from` direction onto the matching set of `to`. */
-function eulerFor(from: THREE.Vector3[], to: THREE.Vector3[]): Vec3 {
+export function eulerFor(from: THREE.Vector3[], to: THREE.Vector3[]): Vec3 {
   const steps = [0, 90, 180, -90];
   for (const a of steps)
     for (const b of steps)
@@ -56,7 +56,7 @@ function eulerFor(from: THREE.Vector3[], to: THREE.Vector3[]): Vec3 {
 }
 
 /** Where a part's local origin goes so that its local point `local` lands on `world`. */
-function originFor(rot: Vec3, local: THREE.Vector3, world: THREE.Vector3): Vec3 {
+export function originFor(rot: Vec3, local: THREE.Vector3, world: THREE.Vector3): Vec3 {
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0] * DEG, rot[1] * DEG, rot[2] * DEG));
   const p = world.clone().sub(local.clone().applyQuaternion(q));
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
