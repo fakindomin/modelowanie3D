@@ -1267,7 +1267,6 @@ function PartProperties({ part }: { part: Part }) {
       />
     </div>
   );
-  const [noteFor, setNoteFor] = useState<string | null>(null);
   // Extra sizes open by default; folding them is remembered for all parts.
   const [moreOpen, setMoreOpenState] = useState(() => {
     try {
@@ -1284,7 +1283,6 @@ function PartProperties({ part }: { part: Part }) {
       /* not stored */
     }
   };
-  const showNote = !!part.note || noteFor === part.id;
   const wiz = part.wiz && WIZARDS[part.wiz.w];
   const status = [];
   if (part.locked)
@@ -1318,27 +1316,6 @@ function PartProperties({ part }: { part: Part }) {
 
   return (
     <div className="props">
-      <div className="props-head">
-        <Icon type={part.type} hole={part.hole} />
-        <input className="name" value={part.name} onChange={(e) => st.updateLive(part.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
-        <Info text={def.description} />
-        {!showNote && (
-          <button className="small ghost" title="Notatka trafi do Instrukcji projektu" onClick={() => setNoteFor(part.id)}>
-            + Notatka
-          </button>
-        )}
-      </div>
-      {showNote && (
-        <textarea
-          className="note"
-          rows={2}
-          autoFocus={!part.note}
-          placeholder="Notatka do instrukcji"
-          value={part.note ?? ''}
-          onChange={(e) => st.updateLive(part.id, { note: e.target.value })}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-      )}
       <FaceSection part={part} />
       {status.length > 0 && <div className="statusbar">{status}</div>}
       <Helpers part={part} />
@@ -1357,6 +1334,12 @@ function PartProperties({ part }: { part: Part }) {
         </details>
       )}
       {ends.length > 0 && <EndsSection part={part} fields={ends} />}
+      {!part.hole && (
+        <label className="field">
+          <span><OptIcon id="color" /> Kolor</span>
+          <input type="color" value={part.color} onChange={(e) => st.update(part.id, { color: e.target.value })} />
+        </label>
+      )}
       {part.type === 'figurine' && FIG_MODELS[String(part.params.model)]?.tune && (
         <div className="row">
           <NumberInput value={height} min={30} max={300} unit="mm" onChange={setHeight} />
@@ -1383,25 +1366,6 @@ function PartProperties({ part }: { part: Part }) {
         <TextureTool part={part} />
       </OpSection>
 
-      <h4>
-        Wydruk <Info text={INFO.print} />
-      </h4>
-      <label className="field" title="Wyłączona część zostaje w podglądzie jako półprzezroczysta, ale nie trafia do eksportu, instrukcji ani wyliczeń.">
-        <span><OptIcon id="print" /> Drukuj tę część</span>
-        <input type="checkbox" checked={!part.noPrint} onChange={(e) => st.setFlags([groupId(part.body)], { noPrint: !e.target.checked })} />
-      </label>
-      {!part.hole && (
-        <label className="field">
-          <span><OptIcon id="color" /> Kolor</span>
-          <input type="color" value={part.color} onChange={(e) => st.update(part.id, { color: e.target.value })} />
-        </label>
-      )}
-
-      <div className="row end">
-        <button className="small danger" onClick={() => st.remove(part.id)}>
-          Usuń
-        </button>
-      </div>
     </div>
   );
 }
@@ -1651,8 +1615,8 @@ function DimGroups({ type, groups, field }: { type: string; groups: FieldGroup[]
   );
 }
 
-/** Always-visible list of the printed parts of the model, each with its „drukuj” switch. */
-function Outliner() {
+/** List of the printed parts of the model, each with its „drukuj” switch (the export menu; the phone's list tab). */
+export function Outliner() {
   const parts = useStore((s) => s.parts);
   const selectedId = useStore((s) => s.selectedId);
   const hoveredId = useStore((s) => s.hoveredId);
@@ -1791,7 +1755,7 @@ export function Properties({ show = 'all' }: { show?: 'all' | 'list' | 'props' }
   return (
     <aside className="properties">
       {show !== 'props' && <CheckPanel />}
-      {show !== 'props' && <Outliner />}
+      {show === 'list' && <Outliner />}
       {show === 'list' && empty && <p className="desc pad">Projekt jest pusty. Dodaj element w zakładce ➕ Dodaj albo użyj kreatora.</p>}
       {show === 'list' ? null : part ? <PartProperties key={part.id} part={part} /> : main ? <PartProperties key={main.id} part={main} /> : empty ? <Welcome /> : <p className="desc pad">Kliknij element w modelu albo na liście, żeby zmienić jego wymiary.</p>}
     </aside>

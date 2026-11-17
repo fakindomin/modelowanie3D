@@ -958,3 +958,13 @@ button > .sicon:only-child { display: block; margin: auto; }
 .logomark { display: inline-block; vertical-align: middle; }
 .mbar a.logo { background: none; border-radius: 0 !important; width: auto; height: auto; padding: 0; }
 .brand:has(> .logomark) { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+
+/* Eksport: menu z częściami do druku pod przyciskami. */
+.export-menu { position: relative; display: flex; gap: 8px; }
+.export-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; width: 320px; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--accent); box-shadow: 0 10px 28px #000a; display: flex; flex-direction: column; }
+.export-pop .outliner { border-top: 0; border-bottom: 1px solid var(--line); max-height: 50vh; }
+.export-pop .row { padding: 10px 12px; gap: 8px; margin-top: 0; }
+
+/* Nazwa modelu nad widokiem. */
+.model-title { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 17px; font-weight: 700; color: #e9e9e7; pointer-events: none; white-space: nowrap; max-width: 70%; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 6px #000c; }
+.model-title ~ .toast { top: 48px; }

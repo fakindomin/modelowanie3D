@@ -3,7 +3,9 @@ import { swietaFileName } from './figurines/swieta';
 import { useEffect, useRef, useState } from 'react';
 import { Viewport } from './scene/Viewport';
 import { LogoMark, StateIcon, ToolIcon, WizardIcon } from './ui/KindIcons';
-import { Library, PrinterPicker, Properties } from './ui/Panels';
+import { Library, Outliner, PrinterPicker, Properties } from './ui/Panels';
+import { WIZARDS } from './wizards';
+import { mainOf } from './simple';
 import { MeasurePanel } from './ui/MeasurePanel';
 import { WizardDialog } from './ui/WizardDialog';
 import { Manual } from './ui/Manual';
@@ -212,11 +214,72 @@ function Toolbar() {
         <button onClick={act.manual} title="Co wydrukować, co kupić, co do czego pasuje i jak złożyć. Do wydruku albo PDF">
           <ToolIcon id="manual" /> Instrukcja
         </button>
-        <button className="primary" onClick={() => act.exportAs('stl')}><ToolIcon id="export" /> Eksport STL</button>
-        <button className="primary" onClick={() => act.exportAs('3mf')}><ToolIcon id="export" /> Eksport 3MF</button>
+        <ExportMenu onGo={act.exportAs} />
       </div>
     </header>
   );
+}
+
+/** Eksport STL / 3MF: a menu with the parts to print (each can be left out), then the download. */
+function ExportMenu({ onGo }: { onGo: (fmt: 'stl' | '3mf') => void }) {
+  const [fmt, setFmt] = useState<'stl' | '3mf' | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!fmt) return;
+    const out = (e: PointerEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setFmt(null);
+    };
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setFmt(null);
+    window.addEventListener('pointerdown', out);
+    window.addEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('pointerdown', out);
+      window.removeEventListener('keydown', key);
+    };
+  }, [fmt]);
+  const label = (f: 'stl' | '3mf') => (f === 'stl' ? 'STL' : '3MF');
+  return (
+    <div className="export-menu" ref={box}>
+      {(['stl', '3mf'] as const).map((f) => (
+        <button key={f} className="primary" onClick={() => setFmt(fmt === f ? null : f)}>
+          <ToolIcon id="export" /> Eksport {label(f)}
+        </button>
+      ))}
+      {fmt && (
+        <div className="export-pop" role="dialog" aria-label={`Eksport ${label(fmt)}`}>
+          <Outliner />
+          <div className="row end">
+            <button className="small" onClick={() => setFmt(null)}>
+              Anuluj
+            </button>
+            <button
+              className="primary"
+              onClick={() => {
+                onGo(fmt);
+                setFmt(null);
+              }}
+            >
+              Pobierz {label(fmt)}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Name of the model above the view: the wizard it came from, or the kind of its main part. */
+function ModelTitle() {
+  const name = useStore((s) => {
+    const w = s.parts.find((p) => p.wiz)?.wiz;
+    if (w && WIZARDS[w.w]) return WIZARDS[w.w].label;
+    const bodies = [...new Set(s.parts.filter((p) => !p.hole).map((p) => p.body))];
+    if (!bodies.length) return null;
+    const main = mainOf(s.parts, bodies[0]);
+    return main ? (DEFS[main.type]?.label ?? main.name) : null;
+  });
+  if (!name) return null;
+  return <div className="model-title">{name}</div>;
 }
 
 /** Grid step, snapping and stacking, tucked behind ⚙. */
@@ -359,6 +422,7 @@ export function App() {
       <Library />
       <main className="viewport">
         <Viewport />
+        <ModelTitle />
         <Help />
         {toast && <div className="toast">{toast}</div>}
         <MeasurePanel />
