@@ -5,6 +5,7 @@ import { Icon } from '../ui/Icon';
 import { CatIcon, MenuIcon, ReadyIcon, StateIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
 import { thumb, type ThumbKey } from './thumbs';
+import { ITEM_TAGS, WIZARD_TAGS, matches } from '../searchTags';
 import './landing.css';
 
 /** What the start page asks the app to do when the visitor leaves it for the editor. */
@@ -252,7 +253,11 @@ function Projects({ items, onOpen }: { items: ProjectItem[]; onOpen: (a: StartAc
     setCat(c);
     write(CAT_KEY, c);
   };
-  const list = useMemo(() => (cat === 'all' ? items.slice(0, 12) : items.filter((i) => i.tags.includes(cat as UseCat))), [cat, items]);
+  const [q, setQ] = useState('');
+  const list = useMemo(() => {
+    if (q.trim()) return items.filter((i) => matches(q, [i.label, i.desc, ITEM_TAGS[i.label] ?? '', ...i.tags.map(catLabel)].join(' ')));
+    return cat === 'all' ? items.slice(0, 12) : items.filter((i) => i.tags.includes(cat as UseCat));
+  }, [cat, items, q]);
   return (
     <section className="view-page wrap">
       <div className="sec-head">
@@ -260,18 +265,20 @@ function Projects({ items, onOpen }: { items: ProjectItem[]; onOpen: (a: StartAc
         <h2>Wybierz według miejsca, w którym go użyjesz</h2>
         <p className="lead">Każdy projekt otwiera się w aplikacji z wymiarami do zmiany.</p>
       </div>
+      <SearchBox value={q} onChange={setQ} placeholder="Szukaj: np. haczyk, kable, doniczka, pies…" count={q.trim() ? list.length : null} />
       <div className="lchips" role="toolbar" aria-label="Miejsce użycia">
-        <button className="lchip" type="button" aria-pressed={cat === 'all'} onClick={() => pick('all')}>
+        <button className="lchip" type="button" aria-pressed={!q.trim() && cat === 'all'} onClick={() => { setQ(''); pick('all'); }}>
           Polecane
         </button>
         {USE_CATS.map((c) => (
-          <button key={c.id} className="lchip" type="button" aria-pressed={cat === c.id} onClick={() => pick(c.id)}>
+          <button key={c.id} className="lchip" type="button" aria-pressed={!q.trim() && cat === c.id} onClick={() => { setQ(''); pick(c.id); }}>
             <CatIcon id={c.id} size={16} />
             {c.label}
             <span className="n">{items.filter((i) => i.tags.includes(c.id)).length}</span>
           </button>
         ))}
       </div>
+      {list.length === 0 && <p className="noresult">Nic nie pasuje do „{q.trim()}”. Spróbuj innego słowa albo zajrzyj do kreatorów.</p>}
       <div className="grid">
         {list.map((i) => (
           <Tile key={i.label} k={{ item: i }} icon={i.icon} label={i.label} kind="p" sub={i.tags.map(catLabel).join(' · ')} onClick={() => onOpen({ kind: 'item', item: i })} />
@@ -322,10 +329,31 @@ function Tile({ k, icon, label, kind, sub, onClick }: { k: ThumbKey; icon: strin
   );
 }
 
+/** Search field above the tiles; shows how many match while something is typed. */
+function SearchBox({ value, onChange, placeholder, count }: { value: string; onChange: (v: string) => void; placeholder: string; count: number | null }) {
+  return (
+    <div className="lsearch" role="search">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+        <path d="M10 3h4l4 4v4l-4 4h-4l-4-4V7z" />
+        <path d="M16 15l5 5" />
+      </svg>
+      <input type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label="Szukaj" />
+      {count !== null && <span className="n">{count} {count === 1 ? 'wynik' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'wyniki' : 'wyników'}</span>}
+      {value && (
+        <button type="button" className="clear" onClick={() => onChange('')} aria-label="Wyczyść">
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Wizards({ onOpen }: { onOpen: (a: StartAction) => void }) {
   const all = WIZARD_GROUPS.flatMap((g) => g.items.map((w) => ({ ...w, group: g.label })));
   const ready = all.filter((w) => w.ready);
   const soon = all.filter((w) => !w.ready);
+  const [q, setQ] = useState('');
+  const shown = q.trim() ? ready.filter((w) => matches(q, [w.label, w.desc, w.group, WIZARD_TAGS[w.id] ?? ''].join(' '))) : ready;
   return (
     <section className="view-page wrap">
       <div className="sec-head">
@@ -333,8 +361,10 @@ function Wizards({ onOpen }: { onOpen: (a: StartAction) => void }) {
         <h2>Nie wiesz, od czego zacząć? Odpowiedz na kilka pytań</h2>
         <p className="lead">Kreator pyta o wymiary i sposób użycia, składa model, a potem możesz go dalej zmieniać jak każdy gotowy projekt.</p>
       </div>
+      <SearchBox value={q} onChange={setQ} placeholder="Szukaj: np. szuflada, rama, raspberry, podlewanie…" count={q.trim() ? shown.length : null} />
+      {shown.length === 0 && <p className="noresult">Żaden kreator nie pasuje do „{q.trim()}”. Spróbuj innego słowa albo zajrzyj do gotowych projektów.</p>}
       <div className="grid">
-        {ready.map((w) => (
+        {shown.map((w) => (
           <Tile key={w.id} k={{ wizard: w.id }} icon={WIZ_ICON[w.id] ?? 'box'} label={w.label} kind="w" sub={w.group} onClick={() => onOpen({ kind: 'wizard', id: w.id })} />
         ))}
       </div>
