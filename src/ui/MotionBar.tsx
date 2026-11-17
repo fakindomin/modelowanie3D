@@ -66,16 +66,6 @@ export function MotionBar() {
           );
         })}
       </div>
-      <button
-        className="mb-chip mb-out"
-        title="Wyjmij wszystko z pudełka (widać gniazda magnesów)"
-        onClick={() => {
-          const out = ms.every((m) => (base?.[m.key] ?? 0) >= (m.max ?? 1));
-          setMotion(rig, Object.fromEntries(ms.map((m) => [m.key, out ? 0 : (m.max ?? 1)])), true);
-        }}
-      >
-        {ms.every((m) => (base?.[m.key] ?? 0) >= (m.max ?? 1)) ? 'Włóż' : 'Wyjmij'}
-      </button>
       <span className="mb-note">tylko podgląd, wydruk bez zmian</span>
     </div>
   );
