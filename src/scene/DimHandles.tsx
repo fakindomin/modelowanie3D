@@ -31,6 +31,18 @@ export function axisDims(part: Part): (AxisDim | null)[] {
   const k = part.type + JSON.stringify(part.params);
   const hit = dimCache.get(k);
   if (hit) return hit;
+  const job = dimJob(part);
+  let step = job.next();
+  while (!step.done) step = job.next();
+  return step.value;
+}
+
+/**
+ * The same search one parameter at a time: each try rebuilds the whole part (a big model takes a second or two
+ * for all of them), so it runs between frames and the view never freezes on the first grab.
+ */
+function* dimJob(part: Part): Generator<void, (AxisDim | null)[]> {
+  const k = part.type + JSON.stringify(part.params);
   const def = DEFS[part.type];
   const out: (AxisDim | null)[] = [null, null, null];
   const best = [0, 0, 0];
@@ -42,6 +54,7 @@ export function axisDims(part: Part): (AxisDim | null)[] {
       if (d.unit !== 'mm') continue;
       const v = Number(part.params[d.key]);
       if (!Number.isFinite(v)) continue;
+      yield;
       const step = v + 1 <= d.max ? 1 : -1;
       const s1 = size({ ...part.params, [d.key]: v + step });
       for (let a = 0; a < 3; a++) {
@@ -60,6 +73,59 @@ export function axisDims(part: Part): (AxisDim | null)[] {
   return out;
 }
 
+const running = new Map<string, Promise<(AxisDim | null)[]>>();
+/** Size parameters of a part, found in small steps between frames (at once when already known). */
+function axisDimsLater(part: Part): Promise<(AxisDim | null)[]> {
+  const k = part.type + JSON.stringify(part.params);
+  const hit = dimCache.get(k);
+  if (hit) return Promise.resolve(hit);
+  let pr = running.get(k);
+  if (!pr) {
+    const job = dimJob(part);
+    pr = new Promise((done) => {
+      const tick = () => {
+        // Sizes changed meanwhile (a slider dragged): this part no longer exists, stop.
+        if (!useStore.getState().parts.some((p) => p.type + JSON.stringify(p.params) === k)) {
+          running.delete(k);
+          done([null, null, null]);
+          return;
+        }
+        const t0 = performance.now();
+        let step = job.next();
+        // A few cheap tries per frame; one heavy try at most.
+        while (!step.done && performance.now() - t0 < 8) step = job.next();
+        if (step.done) {
+          running.delete(k);
+          done(step.value);
+        } else setTimeout(tick, 0);
+      };
+      setTimeout(tick, 0);
+    });
+    running.set(k, pr);
+  }
+  return pr;
+}
+
+/** Size handles wait for their parameters (found in the background). */
+function useAxisDims(part: Part): (AxisDim | null)[] {
+  const k = part.type + JSON.stringify(part.params);
+  const [dims, setDims] = useState<{ k: string; d: (AxisDim | null)[] } | null>(() => (dimCache.has(k) ? { k, d: dimCache.get(k)! } : null));
+  useEffect(() => {
+    if (dims?.k === k) return;
+    let live = true;
+    axisDimsLater(part).then((d) => live && setDims({ k, d }));
+    return () => {
+      live = false;
+    };
+  }, [k]); // eslint-disable-line react-hooks/exhaustive-deps
+  return dims?.k === k ? dims.d : (dimCache.get(k) ?? [null, null, null]);
+}
+
+/** Warms the size parameters of the model's parts in the background, so the first grab shows its handles at once. */
+export function warmDims(parts: Part[]) {
+  for (const p of parts) if (!p.hole && !p.hidden && p.type !== 'figurine' && p.type !== 'mesh') void axisDimsLater(p);
+}
+
 interface HandleDef {
   axis: 0 | 1 | 2;
   sign: 1 | -1;
@@ -72,6 +138,10 @@ export function DimHandles() {
   const selectedId = useStore((s) => s.selectedId);
   const hoveredId = useStore((s) => s.hoveredId);
   const [held, setHeld] = useState<string | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => warmDims(parts), 400);
+    return () => clearTimeout(t);
+  }, [parts]);
   // A picked body, a magnet pocket or a label stands for the part the body is known by.
   const resolve = (x: string | null) => {
     if (!x) return null;
@@ -133,7 +203,7 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   }
   const poseMatrix = (mt: { position: Vec3; quaternion: THREE.Quaternion } | null) => (mt ? new THREE.Matrix4().compose(new THREE.Vector3(...mt.position), mt.quaternion, new THREE.Vector3(1, 1, 1)) : new THREE.Matrix4());
   const fullMatrix = () => poseMatrix(wpose).multiply(partMatrix(part.position, part.rotation)).multiply(poseMatrix(lm));
-  const dims = useMemo(() => axisDims(part), [part.type, part.params]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dims = useAxisDims(part);
   // Like a drawing: one dimension line per size, on the sides facing the viewer; its knob moves that side.
   const side = useViewSide(part, box);
   const handles: HandleDef[] = [];
