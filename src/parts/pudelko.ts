@@ -17,8 +17,12 @@ type P2 = [number, number];
 
 // ---------- stałe v11 (mm) ----------
 const SEAT = 5.0;   // materiał pod gniazdem młynka (v11: strefa 38 = młynek 33 + 5)
-const TAMP_PIN_D = 5.0, TAMP_PIN_L = 35.0, TAMP_SQ = 7.0, TAMP_HANDLE_L = 10.0;
-const TAMPER_L = TAMP_PIN_L + TAMP_HANDLE_L;
+const TAMP_HANDLE_L = 10.0;
+/** Ubijak: trzpień ø D, długość całkowita Lt (z rączką 10 mm); kwadratowa rączka min. 7 mm, zawsze o 2 mm szersza od trzpienia. */
+const tamperDims = (p: Params) => {
+  const D = val(p, 'tD'), Lt = val(p, 'tL');
+  return { D, Lt, SQ: Math.max(7.0, D + 2.0) };
+};
 const CL = 0.8, WALL_X = 3.0, WALL_Y = 4.0, SEP = 1.6, FLOOR = 2.0;
 const LID_CLEAR = 0.25, DOVE = 2.0, GAP_PROUD = 6.0, GRIP_GAP = 11.0, RING_H = 14.0;
 const MAG_D = 5.0, MAG_T = 2.0, MAG_CLR = 0.25;
@@ -33,7 +37,7 @@ const EPS = 0.01;
 const MAG_R = (MAG_D + MAG_CLR) / 2;
 
 // ---------- parametry wnętrza (domyślne = v11) ----------
-export const DEF = { lidT: 3.8, gD: 40, gH: 33, bookL: 120, bookT: 13, bookH: 30, bookIn: 0.5, lL: 82, lW: 26, lT: 15, rampLen: 25, rampDepth: 2.0, trayDepth: 2.0, traySlope: 18, textDepth: 0.8, dW: 71.1, dH: 12.8, baseExtra: 0, dL: 70.0, dX: 0, dRampH: 3.0, dRampL: 25, dMarkH: 14 } as const;
+export const DEF = { lidT: 3.8, gD: 40, gH: 33, bookL: 120, bookT: 13, bookH: 30, bookIn: 0.5, lL: 82, lW: 26, lT: 15, rampLen: 25, rampDepth: 2.0, trayDepth: 2.0, traySlope: 18, textDepth: 0.8, dW: 71.1, dH: 12.8, baseExtra: 0, dL: 70.0, dX: 0, dRampH: 3.0, dRampL: 25, dMarkH: 14, tD: 5.0, tL: 45.0 } as const;
 const val = (p: Params, k: keyof typeof DEF) => (p[k] === undefined || Number.isNaN(Number(p[k])) ? DEF[k] : Number(p[k]));
 
 // ---------- układ ----------
@@ -57,7 +61,7 @@ export function layout(p: Params) {
   if (nDr > 0) gFloor = val(p, 'dH') + 7.0;
   else {
     const rampD = p.rampSide === 'off' ? 0 : val(p, 'rampDepth');
-    const need = Math.max(2.0, 2.9 + bookH - gH, 3.3 + lT - gH + rampD, 15.4 + TAMP_SQ / 2 - gH);
+    const need = Math.max(2.0, 2.9 + bookH - gH, 3.3 + lT - gH + rampD, 15.4 + tamperDims(p).SQ / 2 - gH);
     gFloor = Math.ceil(need * 10 - 1e-9) / 10 + val(p, 'baseExtra');
   }
   const BASE_H = gFloor - 8.0;
@@ -322,12 +326,13 @@ export function drawers(p: Params): Manifold | null {
 
 // ---------- ubijak ----------
 /** Oś ubijaka w lewym przednim narożniku (jak w v11). */
-const tamperAxis = (L: Lay) => ({ TZ_AX: L.Z_CH0 - 14.0, TX_AX: 4.2, T_Y0: 0.2 });
+const tamperAxis = (L: Lay, p: Params) => ({ TZ_AX: L.Z_CH0 - 14.0, TX_AX: 0.7 + tamperDims(p).SQ / 2, T_Y0: 0.2 });
 
 /** Ubijak (osobny wydruk) w złożeniu: rączka = wycinek obrysu z żebrami (równo z korpusem) + trzpień ø5 w tulei, magnes od +X. */
 export function tamper(p: Params): Manifold {
   const L = layout(p);
-  const { TZ_AX, TX_AX, T_Y0 } = tamperAxis(L);
+  const { TZ_AX, TX_AX, T_Y0 } = tamperAxis(L, p);
+  const { D: TAMP_PIN_D, Lt: TAMPER_L, SQ: TAMP_SQ } = tamperDims(p);
   const rp = TAMP_PIN_D / 2, PIN_Z = TZ_AX - 1.0;
   const z0 = TZ_AX - TAMP_SQ / 2, z1 = TZ_AX + TAMP_SQ / 2;
   const x1 = TX_AX + TAMP_SQ / 2, y1 = T_Y0 + TAMP_HANDLE_L;
@@ -358,7 +363,8 @@ export function korpus(p: Params): Manifold {
   const lx0 = gX1 + SEP;
   cut.push(bb(lx0, lx0 + L.lighterLen, yB0, yB0 + lW + CL, Z_TOP_ITEMS - lT - 0.4, Z_CH0 + EPS));
   // ubijak (lewy przód)
-  const { TZ_AX, TX_AX, T_Y0 } = tamperAxis(L);
+  const { TZ_AX, TX_AX, T_Y0 } = tamperAxis(L, p);
+  const { D: TAMP_PIN_D, Lt: TAMPER_L, SQ: TAMP_SQ } = tamperDims(p);
   const seatH = TAMP_SQ + 0.4;
   cut.push(bb(-1.5, TX_AX + TAMP_SQ / 2 + 0.2, -1.5, T_Y0 + TAMP_HANDLE_L + 0.2, TZ_AX - seatH / 2, TZ_AX + seatH / 2));
   const PIN_Z = TZ_AX - 1.0;
@@ -473,7 +479,7 @@ export function pudelkoMotions(p: Params): Motion[] {
   // 100 % = do magnesów (pozycja robocza); dalej można wyjąć element całkiem z pudełka (widać gniazda magnesów).
   const out: Motion[] = [
     { key: 'lidOpen', label: 'Pokrywa', group: 'Pudełko i pokrywa', pieces: ['pokrywa', 'napis'], move: [-park, 0, 0], max: (L.X + 15) / park },
-    { key: 'tamperOut', label: 'Ubijak', group: 'Pudełko i pokrywa', pieces: ['ubijak'], move: [0, -(TAMPER_L + 15), 0], max: 1 },
+    { key: 'tamperOut', label: 'Ubijak', group: 'Wnętrze › Ubijak', pieces: ['ubijak'], move: [0, -(tamperDims(p).Lt + 15), 0], max: 1 },
   ];
   const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
   D.bays.forEach(({ xa, xb }, i) =>
@@ -511,8 +517,8 @@ export function pudelkoZones(p: Params): Zone[] {
     { label: 'Gniazdo zapalniczki', group: 'Wnętrze › Zapalniczka', box: [[lx0 - pad, yB0 - SEP - pad, L.Z_TOP_ITEMS - L.lT - 5.4 - pad], [lx0 + L.lighterLen + pad, yB0 + L.lW + CL + pad, H + 1]], solid: lighter },
     { label: 'Szczelina na bibułki', group: 'Wnętrze › Bibułki', box: [[x0 - pad, WALL_Y - pad, L.BOOK_FLOOR - pad], [x0 + L.bookL + CL + pad, WALL_Y + L.A_Y + pad, H + 1]], solid: books },
   ];
-  const T = tamperAxis(L);
-  z.push({ label: 'Ubijak', group: 'Pudełko i pokrywa', motion: 'tamperOut', box: [[-2, -2, T.TZ_AX - 5], [T.TX_AX + TAMP_SQ / 2 + 2.6, T.T_Y0 + TAMPER_L + 1, T.TZ_AX + 5]] });
+  const T = tamperAxis(L, p), TD = tamperDims(p);
+  z.push({ label: 'Ubijak', group: 'Wnętrze › Ubijak', motion: 'tamperOut', box: [[-2, -2, T.TZ_AX - TD.SQ / 2 - 2], [T.TX_AX + TD.SQ / 2 + 2.6, T.T_Y0 + TD.Lt + 1, T.TZ_AX + TD.SQ / 2 + 2]] });
   const names = D.n === 1 ? ['Szuflada'] : ['Szuflada lewa', 'Szuflada prawa'];
   D.bays.forEach(({ xa, xb }, i) => z.push({ label: names[i], group: 'Szuflady', motion: i === 0 ? 'drOpen' : 'drOpen2', box: [[xa - pad, -3, -2], [xb + pad, D.yEnd + pad, D.c + pad]] }));
   return z;
@@ -598,7 +604,7 @@ export function pudelkoNotes(p: Params): Note[] {
     if (2 * slopeW > Math.min(L.X - 26.25, L.Y - 12.5) + E) out.push({ level: 'warn', text: 'Skos tacki jest za szeroki: tacka nie osiągnie pełnej głębokości.' });
   }
   // ubijak: tuleja i trzonek mają stałe położenie w Y
-  const needY = 0.2 + TAMPER_L + 0.5 + WALL_X;
+  const needY = 0.2 + tamperDims(p).Lt + 0.5 + WALL_X;
   if (L.Y < needY - E) out.push({ level: 'error', text: `Pudełko jest za płytkie (${fmt(L.Y)} mm) na gniazdo ubijaka (min. ${fmt(needY)} mm). Zwiększ młynek albo grubość bibułek.` });
   return out;
 }
@@ -623,6 +629,8 @@ const PARAMS: ParamDef[] = [
   select('rampSide', 'Skos dna zapalniczki', 'right', [['right', 'prawy'], ['left', 'lewy'], ['off', 'wyłączony']]),
   { key: 'rampLen', label: 'Skos: długość', type: 'number', def: DEF.rampLen, min: 10, max: 60, step: 1, unit: 'mm', show: (p) => p.rampSide !== 'off', hint: 'Dno opada liniowo na tej długości ku wybranemu końcowi. Wciśnięty koniec unosi drugi.' },
   { key: 'rampDepth', label: 'Skos: głębokość', type: 'number', def: DEF.rampDepth, min: 0.5, max: 5, step: 0.1, unit: 'mm', show: (p) => p.rampSide !== 'off' },
+  { key: 'tD', label: 'Ubijak: grubość', type: 'number', def: DEF.tD, min: 3, max: 6.5, step: 0.1, unit: 'mm', group: 'Wnętrze › Ubijak', hint: 'Średnica trzpienia. Tuleja w ściance i rączka dopasowują się same.' },
+  { key: 'tL', label: 'Ubijak: długość', type: 'number', def: DEF.tL, min: 25, max: 120, step: 0.5, unit: 'mm', hint: 'Cały ubijak razem z rączką (10 mm). Maksimum wynika z głębokości pudełka.' },
   { key: 'nDr', label: 'Szuflady: liczba', type: 'number', def: 2, min: 0, max: 2, step: 1, group: 'Szuflady', hint: '0 = bez szuflad (dno ma minimalną wysokość), 1 = jedna dowolna, 2 = dwie identyczne.' },
   { key: 'dW', label: 'Szuflada: szerokość', type: 'number', def: DEF.dW, min: 30, max: 140, step: 0.5, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, hint: 'Przy dwóch szufladach obie mają ten wymiar. Maksimum wynika z szerokości pudełka.' },
   { key: 'dH', label: 'Szuflada: wysokość', type: 'number', def: DEF.dH, min: 8, max: 30, step: 0.1, unit: 'mm', show: (p) => Number(p.nDr ?? 2) > 0, hint: 'Wyznacza też wysokość pudełka (H rośnie razem z nią). Z magnesami min. 11,3 mm, żeby magnes nie wystawał ze ścianki.' },
