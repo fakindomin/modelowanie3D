@@ -9,4 +9,6 @@ export default defineConfig(({ mode }) => ({
   plugins: mode === 'single' ? [react(), viteSingleFile()] : [react()],
   build: mode === 'single' ? { outDir: 'dist-single', assetsInlineLimit: Infinity } : {},
   optimizeDeps: { exclude: ['manifold-3d'] },
+  // Changes with every build: start-page pictures saved in the browser are redrawn after an update.
+  define: { __BUILD_ID__: JSON.stringify(Date.now().toString(36)) },
 }));

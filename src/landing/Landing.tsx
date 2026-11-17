@@ -4,7 +4,7 @@ import { WIZARD_GROUPS, WIZARDS } from '../wizards';
 import { Icon } from '../ui/Icon';
 import { CatIcon, MenuIcon, ReadyIcon, StateIcon, WizardIcon } from '../ui/KindIcons';
 import { mountDemo } from './demo';
-import { thumb, type ThumbKey } from './thumbs';
+import { thumb, thumbNow, type ThumbKey } from './thumbs';
 import { ITEM_TAGS, WIZARD_TAGS, matches } from '../searchTags';
 import './landing.css';
 
@@ -308,10 +308,16 @@ function KindBadge({ kind }: { kind: 'p' | 'w' }) {
 
 /** One tile: the model's picture (its icon until the picture is ready), the badge, the name and where it fits. */
 function Tile({ k, icon, label, kind, sub, onClick }: { k: ThumbKey; icon: string; label: string; kind: 'p' | 'w'; sub: string; onClick: () => void }) {
-  const [src, setSrc] = useState<string | null>(null);
+  const [src, setSrc] = useState<string | null>(() => thumbNow(k));
+  const [fresh, setFresh] = useState(false);
   useEffect(() => {
+    if (src) return;
     let live = true;
-    void thumb(k).then((u) => live && setSrc(u));
+    void thumb(k).then((u) => {
+      if (!live) return;
+      setFresh(true);
+      setSrc(u);
+    });
     return () => {
       live = false;
     };
@@ -320,7 +326,7 @@ function Tile({ k, icon, label, kind, sub, onClick }: { k: ThumbKey; icon: strin
   return (
     <button type="button" className={'lcard ' + kind} onClick={onClick}>
       <span className="thumb">
-        {src ? <img src={src} alt="" loading="lazy" /> : <Icon type={icon} hole={false} />}
+        {src ? <img src={src} alt="" className={fresh ? 'fresh' : undefined} /> : <Icon type={icon} hole={false} />}
         <KindBadge kind={kind} />
       </span>
       <h3>{label}</h3>

@@ -241,7 +241,8 @@
 /* Tiles: picture with a kind badge, then the name, then where it fits; the whole tile opens it */
 .landing .lcard { gap: 8px; padding: 14px 14px 18px; }
 .landing .lcard .thumb { position: relative; overflow: hidden; }
-.landing .lcard .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; animation: lfade .35s ease; }
+.landing .lcard .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.landing .lcard .thumb img.fresh { animation: lfade .35s ease; }
 .landing .lcard h3 { flex: none; margin-top: 4px; overflow-wrap: anywhere; }
 .landing .lcard .cats { color: var(--muted); font-size: 13px; line-height: 1.4; }
 .landing .lcard:hover h3 { color: var(--orange); }

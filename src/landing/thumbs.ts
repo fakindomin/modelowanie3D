@@ -1,7 +1,7 @@
 /**
  * Real pictures of the models for the start page's tiles: each model is built with the app's own
  * engine and photographed once, in the background and one at a time, so the page stays smooth.
- * Pictures are kept for the visit; until one is ready the tile shows the model's icon.
+ * Pictures are kept in memory and in the browser; until one is ready the tile shows the model's icon.
  */
 import * as THREE from 'three';
 import { initManifold } from '../geom/manifold';
@@ -19,22 +19,90 @@ let renderer: THREE.WebGLRenderer | null = null;
 const keyOf = (k: ThumbKey) => ('wizard' in k ? 'wiz:' + k.wizard : 'item:' + k.item.label);
 const idle = () => new Promise((r) => setTimeout(r, 16));
 
+/** Pictures ready now, so a tile opened again shows its picture at once. */
+const ready = new Map<string, string>();
+
+/*
+ * Pictures are also saved in the browser (IndexedDB), so a later visit shows them at once. They are
+ * tied to the build: after an update the models may have changed, so the old ones are dropped.
+ */
+declare const __BUILD_ID__: string;
+const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
+const DB = 'modelowanie3d-thumbs', STORE = 'thumbs';
+let dbp: Promise<IDBDatabase | null> | null = null;
+function db(): Promise<IDBDatabase | null> {
+  dbp ??= new Promise((res) => {
+    try {
+      const r = indexedDB.open(DB, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch {
+      res(null);
+    }
+  });
+  return dbp;
+}
+/** Loads this build's saved pictures into memory and clears ones from older builds. */
+const loaded: Promise<void> = (async () => {
+  const d = await db();
+  if (!d) return;
+  await new Promise<void>((res) => {
+    try {
+      const st = d.transaction(STORE, 'readwrite').objectStore(STORE);
+      const cur = st.openCursor();
+      cur.onsuccess = () => {
+        const c = cur.result;
+        if (!c) return res();
+        const k = String(c.key);
+        if (k.startsWith(BUILD + '|')) ready.set(k.slice(BUILD.length + 1), String(c.value));
+        else c.delete();
+        c.continue();
+      };
+      cur.onerror = () => res();
+    } catch {
+      res();
+    }
+  });
+})();
+async function save(key: string, url: string) {
+  const d = await db();
+  try {
+    d?.transaction(STORE, 'readwrite').objectStore(STORE).put(url, BUILD + '|' + key);
+  } catch {
+    /* storage full or blocked: the picture is just drawn again next time */
+  }
+}
+
+/** The picture if it is already at hand (no waiting), else null. */
+export const thumbNow = (k: ThumbKey) => ready.get(keyOf(k)) ?? null;
+
 /** The picture of a project or wizard (a data URL), or null when it can't be drawn. */
 export function thumb(k: ThumbKey): Promise<string | null> {
   const key = keyOf(k);
   let p = cache.get(key);
   if (!p) {
-    p = queue.then(async () => {
-      await initManifold();
-      await idle();
-      try {
-        return 'wizard' in k ? await wizardShot(k.wizard) : await itemShot(k.item);
-      } catch (err) {
-        console.warn('thumb', key, err);
-        return null;
-      }
+    p = loaded.then(() => {
+      const have = ready.get(key);
+      if (have) return have;
+      const job = queue.then(async () => {
+        await initManifold();
+        await idle();
+        try {
+          const url = 'wizard' in k ? await wizardShot(k.wizard) : await itemShot(k.item);
+          if (url) {
+            ready.set(key, url);
+            void save(key, url);
+          }
+          return url;
+        } catch (err) {
+          console.warn('thumb', key, err);
+          return null;
+        }
+      });
+      queue = job;
+      return job;
     });
-    queue = p;
     cache.set(key, p);
   }
   return p;
