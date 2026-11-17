@@ -164,7 +164,6 @@ function Start({ projects, wizards }: { projects: number; wizards: number }) {
   return (
     <section className="hero">
       <div className="wrap">
-        <span className="tape">Przedmioty do druku 3D na wymiar</span>
         <h1>
           Wybierz gotowy przedmiot, <em>ustaw wymiary</em> i drukuj.
         </h1>
@@ -176,12 +175,6 @@ function Start({ projects, wizards }: { projects: number; wizards: number }) {
         </a>
 
         <div className="cfg" ref={cfg} role="img" aria-label="Pokaz: zmiana wymiarów i opcji pudełka z pokrywką" inert>
-          <div className="cfg-head">
-            <span className="crumbs">
-              Projekty › Dom › <b>Pudełko z pokrywką</b>
-            </span>
-            <span className="play">▶ pokaz</span>
-          </div>
           <div className="cfg-body">
             <div className="view">
               <span className="caption">Chwyć wymiar i przeciągnij</span>
@@ -215,10 +208,6 @@ function Start({ projects, wizards }: { projects: number; wizards: number }) {
                 <button type="button" data-v="tex" aria-pressed="false">Faktura</button>
               </div>
             </div>
-          </div>
-          <div className="cfg-foot">
-            <span className="parts">2 części do druku</span>
-            <span className="btn primary">Pobierz STL / 3MF</span>
           </div>
           <div className="cursor" aria-hidden hidden>
             <span className="ring" />

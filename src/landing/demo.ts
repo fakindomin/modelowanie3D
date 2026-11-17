@@ -87,7 +87,6 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
     const ok = Math.max(W, D, H + lidH) <= bed;
     fit.className = 'fit ' + (ok ? 'ok' : 'bad');
     fit.textContent = ok ? `✓ mieści się na stole ${bed} mm` : 'za duże na stół';
-    $<HTMLElement>('.parts').textContent = '2 części do druku' + (st.lid === 'magnet' ? ' · dokup 8 magnesów' : '');
   }
 
   let run = 1;
