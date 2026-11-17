@@ -340,3 +340,4 @@
 @media (prefers-reduced-motion: reduce) { .landing .nav ul a:hover .kl, .landing .nav ul a:hover .kb { animation: none; } }
 .landing .view canvas.eng { animation: leng-in .25s ease-out; }
 @keyframes leng-in { from { opacity: 0; } to { opacity: 1; } }
+.landing .view svg.dims .dimdot { fill: #fff; stroke: var(--muted); stroke-width: 1.2; }

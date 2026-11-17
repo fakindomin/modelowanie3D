@@ -275,7 +275,6 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
       path.setAttribute('class', 'dim' + (on ? ' on' : ''));
       path.setAttribute('d', `M${e1}L${p1}M${e2}L${p2}M${p1}L${p2}`);
       over.appendChild(path);
-      const m: [number, number] = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
       const far = px(a.clone().add(b).multiplyScalar(0.5).add(off.clone().multiplyScalar(2.2)), w, h);
       const t = document.createElementNS(NS, 'text');
       t.setAttribute('class', 'dimtxt' + (on ? ' on' : ''));
@@ -284,15 +283,18 @@ export async function engineView(view: HTMLElement, plan: ShowState[]): Promise<
       t.setAttribute('y', (far[1] + 4).toFixed(1));
       t.textContent = label;
       over.appendChild(t);
-      handles[k] = m;
-      if (on) {
+      // A knob on each end that can move, as in the editor (height only on top); the cursor grabs the far one.
+      const ends: [number, number][] = k === 'H' ? [p2] : [p1, p2];
+      for (const e of ends) {
         const c = document.createElementNS(NS, 'circle');
-        c.setAttribute('class', 'knob');
-        c.setAttribute('cx', m[0].toFixed(1));
-        c.setAttribute('cy', m[1].toFixed(1));
-        c.setAttribute('r', '5');
+        const grab = e === p2;
+        c.setAttribute('class', on && grab ? 'knob' : 'dimdot');
+        c.setAttribute('cx', e[0].toFixed(1));
+        c.setAttribute('cy', e[1].toFixed(1));
+        c.setAttribute('r', on && grab ? '5.5' : '4');
         over.appendChild(c);
       }
+      handles[k] = p2;
     };
     line(new THREE.Vector3(min.x, min.y, 0), new THREE.Vector3(max.x, min.y, 0), 'W', st.W + ' mm', new THREE.Vector3(0, -o, 0));
     line(new THREE.Vector3(max.x, min.y, 0), new THREE.Vector3(max.x, max.y, 0), 'D', st.D + ' mm', new THREE.Vector3(o, 0, 0));
