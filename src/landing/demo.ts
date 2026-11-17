@@ -208,15 +208,20 @@ export function mountDemo(cfg: HTMLElement, bed = 256): () => void {
       cap.textContent = phone() ? 'Przesuń suwak' : 'Chwyć wymiar i przeciągnij';
     } else loop(run).catch(() => {});
   };
+  // Every stop of the script, so the engine can build them all before the show starts.
+  const stops: State[] = [{ ...st }];
+  for (const step of SEQ) {
+    const last = stops[stops.length - 1];
+    stops.push('k' in step ? { ...last, [step.k]: step.to } : 'lid' in step ? { ...last, lid: step.lid } : { ...last, [step.add]: !last[step.add] });
+  }
   // The show starts once the engine has drawn the real box; without WebGL it plays on the flat drawing.
-  engineView($<HTMLElement>('.view'), phone, () => {
-    svg.style.visibility = 'hidden';
-    go();
-  })
+  engineView($<HTMLElement>('.view'), stops)
     .then((v) => {
       if (stopped) return v.stop();
       eng = v;
       draw();
+      svg.style.visibility = 'hidden';
+      go();
     })
     .catch((e) => {
       console.warn('show engine', e);
