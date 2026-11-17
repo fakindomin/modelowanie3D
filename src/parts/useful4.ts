@@ -886,7 +886,54 @@ function hingedDoor(p: Params): Manifold {
   return m;
 }
 
+/**
+ * Connector for a rack of bought boards: a solid core with slotted arms (r, l, u, d in the XZ plane), stretched
+ * along Y. The boards end at the core; the arms hold them from both faces. Optional pilot holes for screws.
+ */
+export function jointCore(p: Params) {
+  const t = nv(p, 't', 18), w = nv(p, 'w', 3);
+  return (t + 2 * w) / 2;
+}
+
+function boardJoint(p: Params): Manifold {
+  const t = nv(p, 't', 18), cl = nv(p, 'cl', 0.3), w = nv(p, 'w', 3), s = nv(p, 's', 25), L = nv(p, 'L', 40);
+  const c0 = jointCore(p), half = t / 2 + w, slot = (t + cl) / 2;
+  const arms = String(p.arms ?? 'rlu');
+  const solids: Manifold[] = [box(-c0, -L / 2, -c0, c0, L / 2, c0)];
+  const cuts: Manifold[] = [];
+  const sd = p.holes ? nv(p, 'screwD', 3) : 0;
+  for (const a of arms) {
+    if (a === 'r' || a === 'l') {
+      const x0 = a === 'r' ? c0 - 0.01 : -c0 - s, x1 = a === 'r' ? c0 + s : -c0 + 0.01;
+      solids.push(box(x0, -L / 2, -half, x1, L / 2, half));
+      cuts.push(box(a === 'r' ? c0 : -c0 - s - 1, -L / 2 - 1, -slot, a === 'r' ? c0 + s + 1 : -c0, L / 2 + 1, slot));
+      if (sd) cuts.push(cyl(2 * half + 2, sd / 2).translate([(a === 'r' ? 1 : -1) * (c0 + s / 2), 0, -half - 1]));
+    } else {
+      const z0 = a === 'u' ? c0 - 0.01 : -c0 - s, z1 = a === 'u' ? c0 + s : -c0 + 0.01;
+      solids.push(box(-half, -L / 2, z0, half, L / 2, z1));
+      cuts.push(box(-slot, -L / 2 - 1, a === 'u' ? c0 : -c0 - s - 1, slot, L / 2 + 1, a === 'u' ? c0 + s + 1 : -c0));
+      if (sd) cuts.push(cylX(-half - 1, half + 1, sd / 2, 0, (a === 'u' ? 1 : -1) * (c0 + s / 2)));
+    }
+  }
+  return union(solids).subtract(union(cuts));
+}
+
 export const USEFUL4_DEFS: PartDef[] = [
+  {
+    type: 'boardJoint', label: 'Złączka do płyt (regał)', category: 'useful', hole: false,
+    description: 'Łączy płyty kupnego regału (sklejka, MDF, płyta meblowa): rdzeń z ramionami, w które wsuwasz płyty. Narożnik, trójnik albo krzyżak. Dwie na każdy węzeł: z przodu i z tyłu.',
+    params: [
+      select('arms', 'Kształt', 'rlu', [['ru', 'Narożnik (L)'], ['rlu', 'Trójnik (T)'], ['rlud', 'Krzyżak (+)']]),
+      n('t', 'Grubość płyty', 18, 6, 30, 0.5),
+      n('L', 'Długość wzdłuż płyty', 40, 20, 100),
+      bool('holes', 'Otwory na wkręty', true),
+      adv('s', 'Długość ramion', 25, 12, 50),
+      adv('w', 'Grubość ścianki', 3, 2, 6, 0.5),
+      adv('cl', 'Luz na płytę', 0.3, 0, 1, 0.05),
+      adv('screwD', 'Średnica wkrętu', 3, 2.5, 5, 0.5),
+    ],
+    build: boardJoint,
+  },
   {
     type: 'hingedDoor', label: 'Drzwiczki z zawiasem', category: 'useful', hole: false,
     description: 'Drzwiczki i listwa z zawiasem na całej długości, drukowane razem, od razu złożone. Oś: filament 1,75 mm. Listwę przykręcasz obok otworu, gniazda na magnesy trzymają drzwiczki zamknięte.',

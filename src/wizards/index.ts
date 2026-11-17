@@ -7,9 +7,10 @@ import { GEARBOX_WIZARD } from './gearbox';
 import { STACK_WIZARD } from './stack';
 import { HOLDERS_WIZARD } from './holders';
 import { DOOR_WIZARD } from './door';
+import { RACK_WIZARD } from './rack';
 import type { Wizard, WizardEntry } from './types';
 
-export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD, STACK_WIZARD, HOLDERS_WIZARD, DOOR_WIZARD].map((w) => [w.id, w]));
+export const WIZARDS: Record<string, Wizard> = Object.fromEntries([FRAME_WIZARD, ORGANIZER_WIZARD, BOX_WIZARD, CABINET_WIZARD, CASE_WIZARD, PANEL_WIZARD, JUNCTION_WIZARD, POT_WIZARD, STAND_WIZARD, DOME_WIZARD, GEARBOX_WIZARD, STACK_WIZARD, HOLDERS_WIZARD, DOOR_WIZARD, RACK_WIZARD].map((w) => [w.id, w]));
 const ready = (w: Wizard): WizardEntry => ({ id: w.id, label: w.label, desc: w.desc, ready: true });
 
 const soon = (id: string, label: string, desc: string): WizardEntry => ({ id, label, desc, ready: false });
@@ -22,7 +23,7 @@ export const WIZARD_GROUPS: { label: string; items: WizardEntry[] }[] = [
       ready(FRAME_WIZARD),
       soon('profileFrame', 'Rama z profili', 'Kwadratowe profile, łączniki z czopem, panele.'),
       ready(DOME_WIZARD),
-      soon('rack', 'Regał modułowy', 'Półki, przegrody, rozbudowa w górę i w bok.'),
+      ready(RACK_WIZARD),
     ],
   },
   {
