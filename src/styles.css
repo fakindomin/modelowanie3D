@@ -968,3 +968,34 @@ button > .sicon:only-child { display: block; margin: auto; }
 /* Nazwa modelu nad widokiem. */
 .model-title { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 17px; font-weight: 700; color: #e9e9e7; pointer-events: none; white-space: nowrap; max-width: 70%; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 6px #000c; }
 .model-title ~ .toast { top: 48px; }
+
+/* Górny pasek w jednym rzędzie: projekt po lewej, druk po prawej. */
+.toolbar { flex-wrap: nowrap; }
+.toolbar .caret { font-size: 10px; opacity: 0.7; margin-left: 2px; }
+.drop { position: relative; }
+.drop-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; min-width: 170px; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--army, #6b7530); box-shadow: 0 10px 28px #000a; display: flex; flex-direction: column; padding: 4px; }
+.toolbar .drop-pop button { border: 0; justify-content: flex-start; padding: 8px 10px; width: 100%; }
+.toolbar .printer-pick { border: 1px solid var(--line); padding: 1px 8px 1px 6px; gap: 4px; flex-wrap: nowrap; }
+.toolbar .printer-pick select { border: 0; background: transparent; }
+.toolbar .printer-pick .fit { padding: 2px 0 2px 8px; border: 0; border-left: 1px solid var(--line); border-radius: 0; }
+.toolbar .printer-pick .fit.bad { border: 0; border-left: 1px solid var(--line); }
+.export-fmt { display: flex; gap: 0; padding: 10px 12px 0; }
+.toolbar .export-fmt button { flex: 1; justify-content: center; border-radius: 0; }
+.toolbar .export-fmt button.on { border-color: var(--accent); color: var(--accent); background: rgba(242, 100, 25, 0.12); }
+
+/* Narzędzia widoku: pionowy pasek ikon przy lewej krawędzi widoku. */
+.view-tools { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: 5; display: flex; flex-direction: column; gap: 4px; background: rgba(26, 28, 25, 0.85); border: 1px solid var(--line); padding: 4px; }
+.view-tools button { position: relative; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer; padding: 0; }
+.view-tools button:hover { border-color: var(--line); background: var(--panel-2); }
+.view-tools button.on { border-color: var(--accent); color: var(--accent); }
+.view-tools .vt-tip { display: none; position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); width: 230px; text-align: left; font-size: 12px; line-height: 1.35; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); padding: 6px 9px; pointer-events: none; }
+.view-tools .vt-tip b { display: block; color: var(--text); font-size: 13px; margin-bottom: 2px; }
+.view-tools button:hover .vt-tip { display: block; }
+@media (max-width: 1280px) {
+  .toolbar .brand-name { display: none; }
+}
+@media (max-width: 1100px) {
+  .toolbar .printer-pick .fit { font-size: 0; }
+  .toolbar .printer-pick .fit svg { font-size: 12px; }
+  .toolbar .group.right > button:not(.primary) { padding-left: 6px; padding-right: 6px; }
+}
