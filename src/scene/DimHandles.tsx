@@ -355,7 +355,13 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
         const { p1, p2, out, ticks } = dimLine(lineBox, h.axis, side, off, geo);
         const mid = p1.clone().add(p2).multiplyScalar(0.5);
         const active = mine(hot) || mine(live?.i) || mine(edit) || (!live && h.dim.key === dimHover);
-        const value = mine(live?.i) ? live!.to : Number(part.params[h.dim.key]);
+        const param = Number(part.params[h.dim.key]);
+        // The line shows the length it measures. A size set by something else (the box's width follows the grinder's
+        // diameter) is named by its direction, and a typed length is turned into that parameter.
+        const len = Math.round((lineBox.max.getComponent(axis) - lineBox.min.getComponent(axis)) * 10) / 10;
+        const plain = Math.abs(len - param) <= Math.max(2, 0.05 * len);
+        const name = plain ? h.dim.label : AXIS_NAME[axis];
+        const value = !plain ? len : mine(live?.i) ? live!.to : param;
         const editing = own.find(([, i]) => i === edit);
         return (
           <group key={axis}>
@@ -378,17 +384,18 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
             <Html position={mid.clone().addScaledVector(out, off * 1.5)} center zIndexRange={[25, 0]} style={{ pointerEvents: editing ? 'auto' : 'none' }}>
               {editing ? (
                 <DimInput
-                  label={h.dim.label}
-                  value={Number(part.params[h.dim.key])}
-                  onDone={(v) => {
+                  label={name}
+                  value={plain ? param : len}
+                  onDone={(typed) => {
                     setEdit(null);
+                    const v = typed === null || plain ? typed : Math.round((param + (typed - len) / h.dim.per) * 100) / 100;
                     if (v !== null) useStore.getState().update(part.id, patchFor(part, editing[0], v));
                     if (v !== null && (v > h.dim.max || v < h.dim.min)) useStore.getState().notify(`${h.dim.label}: ${v > h.dim.max ? 'maks.' : 'min.'} ${fmt(v > h.dim.max ? h.dim.max : h.dim.min)} mm.`);
                   }}
                 />
               ) : (
                 <span className={active ? 'dim-tag on' : 'dim-tag'}>
-                  {active && <i>{h.dim.label} </i>}
+                  {active && <i>{name} </i>}
                   {fmt(value)} mm
                   {mine(live?.i) && live!.limit && <b className="dim-limit"> {live!.limit}</b>}
                 </span>
@@ -545,6 +552,8 @@ function FaceOutline({ box, axis, sign, strong }: { box: THREE.Box3; axis: 0 | 1
     </line>
   );
 }
+
+const AXIS_NAME = ['Szerokość', 'Głębokość', 'Wysokość'];
 
 function DimInput({ label, value, onDone }: { label: string; value: number; onDone: (v: number | null) => void }) {
   const [text, setText] = useState(String(value).replace('.', ','));

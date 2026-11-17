@@ -92,8 +92,8 @@ function PartMesh({ part, look, ghost }: { part: Part; look: Look; ghost: boolea
         const zone = !!segKey && (hov?.motion === segKey || picked?.motion === segKey);
         // In a model with named places only the pointed or clicked place is lit, never the whole piece or its set.
         const quiet = zoned;
-        const edge = heavy ? null : zone ? '#ff7a2e' : quiet ? null : look.selected ? '#ffffff' : look.snap ? '#8a9440' : hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
-        const tint = zone && heavy ? '#7a3a12' : quiet ? '#000000' : look.selected && heavy ? '#5a3c22' : hovered ? '#3e3a36' : '#000000';
+        const edge = heavy ? null : zone ? '#ffffff' : quiet ? null : look.selected ? '#ffffff' : look.snap ? '#8a9440' : hovered ? '#ff9a5c' : look.sibling ? '#c94f10' : null;
+        const tint = zone && heavy ? '#5a5a5a' : quiet ? '#000000' : look.selected && heavy ? '#5a3c22' : hovered ? '#3e3a36' : '#000000';
         const pose = sg.m ? motionPose(sg.m, shown?.[sg.m.key] ?? 0) : null;
         return (
           <mesh key={i} position={pose?.position ?? [0, 0, 0]} quaternion={pose?.quaternion} geometry={geometry} castShadow={!part.hole} receiveShadow renderOrder={part.hole ? 2 : 1} userData={{ pick: part.id, seg: segKey }}>
@@ -150,8 +150,8 @@ function ZoneShape({ part, label }: { part: Part; label: string }) {
   }
   return (
     <mesh geometry={geo} raycast={noRaycast} renderOrder={10}>
-      <meshBasicMaterial color="#ff7a2e" transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} />
-      <Edges threshold={25} color="#ff7a2e" lineWidth={2} renderOrder={11} />
+      <meshBasicMaterial color="#ffffff" transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} />
+      <Edges threshold={25} color="#ffffff" lineWidth={2} renderOrder={11} />
     </mesh>
   );
 }
@@ -169,7 +169,7 @@ function ZoneBox({ box }: { box: [Vec3, Vec3] }) {
   useEffect(() => () => geo.dispose(), [geo]);
   return (
     <lineSegments geometry={geo} raycast={noRaycast} renderOrder={10}>
-      <lineBasicMaterial color="#ff7a2e" depthTest={false} transparent opacity={0.9} />
+      <lineBasicMaterial color="#ffffff" depthTest={false} transparent opacity={0.9} />
     </lineSegments>
   );
 }
