@@ -275,3 +275,12 @@
 .landing .noresult { color: var(--muted); margin: 8px 0 20px; }
 /* Brand mark (nozzle + L filament in a hexagon), like the browser-tab icon. */
 .landing .llogo .disc.logomark { background: none; border-radius: 0; display: block; }
+
+/* Top right of the page: open the app (the main action) and the light/dark switch, icon only */
+.landing .ltop { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 14px max(16px, env(safe-area-inset-right, 0px)) 0; }
+.landing .ltop .app-go { padding: 12px 20px; font-size: 15px; }
+.landing .ltop .theme-toggle { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 0; border-color: var(--line); }
+.landing .nav .bottom { display: none; }
+@media (min-width: 980px) {
+  .landing .ltop { padding: 22px 32px 0; }
+}

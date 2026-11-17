@@ -101,40 +101,34 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
                 </a>
               </li>
             ))}
-            <li className="m-only">
-              <a href="#edytor" style={{ color: 'var(--orange)' }} onClick={(e) => (e.preventDefault(), onOpen({ kind: 'app' }))}>
-                Otwórz aplikację →
-              </a>
-            </li>
           </ul>
-          <div className="bottom">
-            <button className="btn primary btn-s nav-app" type="button" onClick={() => onOpen({ kind: 'app' })}>
-              Otwórz aplikację →
-            </button>
-            <button
-              type="button"
-              className={dark ? 'theme-toggle is-dark' : 'theme-toggle'}
-              aria-label={dark ? 'Przełącz na tryb jasny' : 'Przełącz na tryb ciemny'}
-              onClick={() => {
-                const t = dark ? 'light' : 'dark';
-                setTheme(t);
-                write(THEME_KEY, t);
-              }}
-            >
-              <svg className="i-moon" viewBox="0 0 24 24" aria-hidden>
-                <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z" />
-              </svg>
-              <svg className="i-sun" viewBox="0 0 24 24" aria-hidden>
-                <circle cx="12" cy="12" r="4.2" />
-                <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
-              </svg>
-              <span className="theme-label">{dark ? 'Tryb jasny' : 'Tryb ciemny'}</span>
-            </button>
-          </div>
         </div>
       </header>
 
       <main>
+        <div className="ltop">
+          <button className="btn primary app-go" type="button" onClick={() => onOpen({ kind: 'app' })}>
+            Otwórz aplikację →
+          </button>
+          <button
+            type="button"
+            className={dark ? 'theme-toggle is-dark' : 'theme-toggle'}
+            aria-label={dark ? 'Przełącz na tryb jasny' : 'Przełącz na tryb ciemny'}
+            onClick={() => {
+              const t = dark ? 'light' : 'dark';
+              setTheme(t);
+              write(THEME_KEY, t);
+            }}
+          >
+            <svg className="i-moon" viewBox="0 0 24 24" aria-hidden>
+              <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z" />
+            </svg>
+            <svg className="i-sun" viewBox="0 0 24 24" aria-hidden>
+              <circle cx="12" cy="12" r="4.2" />
+              <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+            </svg>
+          </button>
+        </div>
         {view === 'start' && <Start projects={projects.length} wizards={wizardCount} />}
         {view === 'projekty' && <Projects items={projects} onOpen={onOpen} />}
         {view === 'kreatory' && <Wizards onOpen={onOpen} />}
@@ -142,18 +136,6 @@ export function Landing({ onOpen }: { onOpen: (a: StartAction) => void }) {
         {view === 'sklep' && <Shop />}
         {view === 'faq' && <Faq />}
       </main>
-
-      <footer className="site-foot">
-        <div className="wrap">
-          <span>Modelowanie 3D</span>
-          <nav aria-label="Stopka">
-            <a href="https://sezonowe3d.pl" target="_blank" rel="noopener">
-              sezonowe3d.pl
-            </a>
-            <a href="#faq">Pytania</a>
-          </nav>
-        </div>
-      </footer>
     </div>
   );
 }
