@@ -193,9 +193,12 @@ function PartHandles({ part, onHold }: { part: Part; onHold: (on: boolean) => vo
   // With several elements in one piece (two drawers) the lines measure the one that is out.
   const segs = segments(part);
   let seg: (typeof segs)[number] | null = null;
-  for (const sg of segs) {
+  // The clicked drawer is measured even when the other one is further out.
+  const pick = useMotion((s) => (s.picked && s.picked.rig === rig ? s.picked.motion : null));
+  const chosen = segs.length > 1 && pick ? segs.find((sg) => sg.m?.key === pick) : undefined;
+  for (const sg of chosen ? [chosen] : segs) {
     const v = sg.m ? (row?.[sg.m.key] ?? 0) : 0;
-    if (sg.m && v > best) {
+    if (sg.m && (chosen || v > best)) {
       best = v;
       lm = motionPose(sg.m, v);
       seg = segs.length > 1 ? sg : null;
