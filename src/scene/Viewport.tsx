@@ -506,8 +506,9 @@ function Scene() {
     st.select(target);
     pickZone(zh);
     if (zh) focusGroup(zh.group);
-    // A picked moving element (lid, drawer) pressed again slides along its track with the pointer.
-    if (zh?.motion && was && was.rig === zh.rig && was.motion === zh.motion) {
+    // A moving element (lid, drawer) under the pointer slides along its track right away; on a touch screen
+    // (no hover) only once it is picked, so the view can still be turned over it.
+    if (zh?.motion && (e.nativeEvent.pointerType !== 'touch' || (was && was.rig === zh.rig && was.motion === zh.motion))) {
       const part = st.parts.find((p) => p.id === zh.part)!;
       const ms = motionsOf(part);
       const m = ms.find((q) => q.key === zh.motion && q.world) ?? ms.find((q) => q.key === zh.motion);

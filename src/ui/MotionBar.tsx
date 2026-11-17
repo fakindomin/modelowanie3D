@@ -89,7 +89,7 @@ export function ZoneTip() {
   return (
     <div className="zone-tip" style={{ left: h.x + 14, top: h.y + 16 }}>
       {h.label}
-      <small>{h.motion ? 'kliknij: zaznacz, potem przeciągnij' : 'kliknij: wymiary'}</small>
+      {!h.motion && <small>kliknij: wymiary</small>}
     </div>
   );
 }
