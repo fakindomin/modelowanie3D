@@ -162,7 +162,7 @@ function Toolbar() {
   return (
     <header className="toolbar">
       <a className="brand" href="#start" title="Strona startowa: gotowe projekty i kreatory">
-        <LogoMark className="logo" /> Modelowanie 3D
+        <LogoMark className="logo" /> <span className="brand-name">Modelowanie 3D</span>
       </a>
       <div className="tabs" role="tablist">
         {(['tech', 'fig'] as Tab[]).map((t) => (
@@ -177,33 +177,9 @@ function Toolbar() {
         <button onClick={st.redo} disabled={!st.future.length} title="Ponów (Ctrl+Y)" aria-label="Ponów"><ToolIcon id="redo" /></button>
       </div>
       <span className="sep" />
-      <div className="group">
-        <button onClick={act.fresh}><ToolIcon id="new" /> Nowy</button>
-        <button onClick={act.open} title="Otwiera zapisany projekt (.json)">
-          <ToolIcon id="open" /> Otwórz
-        </button>
-        <button onClick={act.save}><ToolIcon id="save" /> Zapisz</button>
-        {act.input}
-      </div>
-      <span className="sep" />
-      <PrinterPicker />
-      <span className="sep" />
-      <div className="group">
-        <button onClick={st.fit} title="Pokaż cały model (F)"><ToolIcon id="fit" /> Całość</button>
-        <button onClick={st.layoutOnBed} title="Ułóż na stole: obraca każdą bryłę tak, żeby potrzebowała jak najmniej podpór (przy remisie największą ścianką w dół), i rozkłada wszystkie obok siebie na stole drukarki">
-          <ToolIcon id="layout" /> Ułóż
-        </button>
-        <button className={st.measure ? 'toggle on' : 'toggle'} onClick={() => st.setMeasure(!st.measure)} title="Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)">
-          <ToolIcon id="measure" /> Wymiary
-        </button>
-        <button className={st.section ? 'toggle on' : 'toggle'} onClick={() => st.setSection(!st.section)} title="Przekrój: ucina przednią połowę zaznaczonej części pionową płaszczyzną przez jej środek, żeby zobaczyć wnętrze (np. pustą kulę czubka choinkowego). To tylko widok, wydruk i eksport się nie zmieniają.">
-          <ToolIcon id="section" /> Przekrój
-        </button>
-      </div>
+      <FileMenu act={act} />
       <div className="group right">
-        <button className={st.preview ? 'toggle on' : 'toggle'} onClick={() => st.setPreview(!st.preview)} title="Podgląd wydruku: wynik po wycięciu otworów i sklejeniu brył">
-          <ToolIcon id="preview" /> Podgląd
-        </button>
+        <PrinterPicker />
         {/* Model review (internal): opened with ?przeglad in the address. */}
         {REVIEW_ON && (
           <button className={review.open ? 'toggle on' : 'toggle'} onClick={() => review.setOpen(!review.open)} title="Przegląd: wszystkie elementy po kolei, każdy z 3MF do slicera i oceną OK / do zmiany z uwagą">
@@ -220,43 +196,104 @@ function Toolbar() {
   );
 }
 
-/** Eksport STL / 3MF: a menu with the parts to print (each can be left out), then the download. */
-function ExportMenu({ onGo }: { onGo: (fmt: 'stl' | '3mf') => void }) {
-  const [fmt, setFmt] = useState<'stl' | '3mf' | null>(null);
+/** Closes a drop-down on a click elsewhere or Esc. */
+function useDismiss(open: boolean, close: () => void) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!fmt) return;
+    if (!open) return;
     const out = (e: PointerEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setFmt(null);
+      if (box.current && !box.current.contains(e.target as Node)) close();
     };
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && setFmt(null);
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('pointerdown', out);
     window.addEventListener('keydown', key);
     return () => {
       window.removeEventListener('pointerdown', out);
       window.removeEventListener('keydown', key);
     };
-  }, [fmt]);
+  }, [open, close]);
+  return box;
+}
+
+/** „Plik ▾”: Nowy, Otwórz, Zapisz. */
+function FileMenu({ act }: { act: ReturnType<typeof useProjectActions> }) {
+  const [open, setOpen] = useState(false);
+  const box = useDismiss(open, () => setOpen(false));
+  const run = (f: () => void) => () => {
+    setOpen(false);
+    f();
+  };
+  return (
+    <div className="drop" ref={box}>
+      <button className={open ? 'toggle on' : 'toggle'} onClick={() => setOpen(!open)} aria-expanded={open}>
+        Plik <span className="caret">▾</span>
+      </button>
+      {open && (
+        <div className="drop-pop" role="menu">
+          <button role="menuitem" onClick={run(act.fresh)}><ToolIcon id="new" /> Nowy</button>
+          <button role="menuitem" onClick={run(act.open)} title="Otwiera zapisany projekt (.json)"><ToolIcon id="open" /> Otwórz</button>
+          <button role="menuitem" onClick={run(act.save)}><ToolIcon id="save" /> Zapisz</button>
+        </div>
+      )}
+      {act.input}
+    </div>
+  );
+}
+
+/** Tools for looking at the model, as a column of icons on the view's left edge (name on hover). */
+function ViewTools() {
+  const st = useStore();
+  const tools: { id: Parameters<typeof ToolIcon>[0]['id']; label: string; on?: boolean; go: () => void; tip: string }[] = [
+    { id: 'fit', label: 'Całość', go: st.fit, tip: 'Pokaż cały model (F)' },
+    { id: 'layout', label: 'Ułóż', go: st.layoutOnBed, tip: 'Obraca każdą bryłę tak, żeby potrzebowała jak najmniej podpór, i rozkłada je obok siebie na stole' },
+    { id: 'measure', label: 'Wymiary', on: st.measure, go: () => st.setMeasure(!st.measure), tip: 'Najedź na ściankę lub krawędź, żeby zobaczyć jej wymiary; kliknij dwa elementy, żeby zmierzyć odległość (W)' },
+    { id: 'section', label: 'Przekrój', on: st.section, go: () => st.setSection(!st.section), tip: 'Ucina przednią połowę zaznaczonej części, żeby zobaczyć wnętrze. Tylko widok, wydruk się nie zmienia.' },
+    { id: 'preview', label: 'Podgląd', on: st.preview, go: () => st.setPreview(!st.preview), tip: 'Podgląd wydruku: wynik po wycięciu otworów i sklejeniu brył' },
+  ];
+  return (
+    <div className="view-tools" onPointerDown={(e) => e.stopPropagation()}>
+      {tools.map((t) => (
+        <button key={t.id} className={t.on ? 'on' : ''} onClick={t.go} aria-label={t.label} aria-pressed={t.on}>
+          <ToolIcon id={t.id} size={18} />
+          <span className="vt-tip">
+            <b>{t.label}</b> {t.tip}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Eksport STL / 3MF: a menu with the parts to print (each can be left out), then the download. */
+function ExportMenu({ onGo }: { onGo: (fmt: 'stl' | '3mf') => void }) {
+  const [open, setOpen] = useState(false);
+  const [fmt, setFmt] = useState<'stl' | '3mf'>('stl');
+  const box = useDismiss(open, () => setOpen(false));
   const label = (f: 'stl' | '3mf') => (f === 'stl' ? 'STL' : '3MF');
   return (
     <div className="export-menu" ref={box}>
-      {(['stl', '3mf'] as const).map((f) => (
-        <button key={f} className="primary" onClick={() => setFmt(fmt === f ? null : f)}>
-          <ToolIcon id="export" /> Eksport {label(f)}
-        </button>
-      ))}
-      {fmt && (
-        <div className="export-pop" role="dialog" aria-label={`Eksport ${label(fmt)}`}>
+      <button className="primary" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <ToolIcon id="export" /> Eksport <span className="caret">▾</span>
+      </button>
+      {open && (
+        <div className="export-pop" role="dialog" aria-label="Eksport">
+          <div className="export-fmt" role="radiogroup" aria-label="Format pliku">
+            {(['stl', '3mf'] as const).map((f) => (
+              <button key={f} role="radio" aria-checked={fmt === f} className={fmt === f ? 'on' : ''} onClick={() => setFmt(f)}>
+                {label(f)}
+              </button>
+            ))}
+          </div>
           <Outliner />
           <div className="row end">
-            <button className="small" onClick={() => setFmt(null)}>
+            <button className="small" onClick={() => setOpen(false)}>
               Anuluj
             </button>
             <button
               className="primary"
               onClick={() => {
                 onGo(fmt);
-                setFmt(null);
+                setOpen(false);
               }}
             >
               Pobierz {label(fmt)}
@@ -423,6 +460,7 @@ export function App() {
       <main className="viewport">
         <Viewport />
         <ModelTitle />
+        <ViewTools />
         <Help />
         {toast && <div className="toast">{toast}</div>}
         <MeasurePanel />
